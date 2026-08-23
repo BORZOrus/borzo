@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Сотрудники и зарплаты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--line);margin-bottom:4px;overflow-x:auto}
+.tabs a{padding:10px 2px;font-weight:500;color:var(--ink2);white-space:nowrap;border-bottom:2px solid transparent;font-size:13px}
+.tabs a.on{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+.emp{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#c8d3ea,#9fb0d6);display:grid;place-items:center;font-size:10px;font-weight:700;color:#3a4a68;flex:0 0 30px}
+.bd{display:flex;align-items:flex-start;gap:12px;padding:9px 0;border-top:1px solid var(--line2)}
+.bd:first-child{border-top:0}
+.bd .dt2{color:var(--ink2);font-weight:600;font-size:12px;width:46px;flex:0 0 46px}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <div style="flex:1"></div>
+        <span class="btn"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>01.05.2025 – 31.05.2025</span>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+      </div>
+
+      <div class="tabs" id="st-tabs">
+        <a class="on">Сотрудники</a><a>Должности</a><a>График работы</a><a>Зарплаты</a><a>Премии и бонусы</a><a>Удержания</a><a>Отпуска и больничные</a><a>История изменений</a>
+      </div>
+
+      <!-- KPI -->
+      <div class="grid g5">
+        <div class="card kpi"><div class="top"><div><div class="lbl">Всего сотрудников</div><div class="val">23</div></div><div class="ic" style="margin-left:auto;background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="9" cy="8" r="3"/><path d="M3 19a6 6 0 0 1 12 0M16 11a3 3 0 0 0 0-6"/></svg></div></div><span class="delta up">+1 <span class="muted" style="font-weight:500">за месяц</span></span></div>
+        <div class="card kpi"><div class="top"><div><div class="lbl">Фонд оплаты труда</div><div class="val" style="font-size:21px">4 860 000 ₸</div></div><div class="ic" style="margin-left:auto;background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M16 12h.01"/></svg></div></div><span class="delta flat"><span class="muted" style="font-weight:500">за май 2025</span></span></div>
+        <div class="card kpi"><div class="top"><div><div class="lbl">Средняя зарплата</div><div class="val" style="font-size:21px">211 304 ₸</div></div><div class="ic" style="margin-left:auto;background:var(--amber-soft);color:var(--amber)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></div></div><span class="delta up">+4,2% <span class="muted" style="font-weight:500">к апрелю</span></span></div>
+        <div class="card kpi"><div class="top"><div><div class="lbl">Премии и бонусы</div><div class="val" style="font-size:21px">625 000 ₸</div></div><div class="ic" style="margin-left:auto;background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="4" y="9" width="16" height="11" rx="1"/><path d="M4 9h16M12 9v11M12 9s-4-6-6-3 3 3 6 3z"/></svg></div></div><span class="delta up" style="color:var(--ink3)">12,8% <span class="muted" style="font-weight:500">от ФОТ</span></span></div>
+        <div class="card kpi"><div class="top"><div><div class="lbl">Текущие вакансии</div><div class="val">2</div></div><div class="ic" style="margin-left:auto;background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></div></div><span class="delta flat"><span class="muted" style="font-weight:500">Открыто</span></span></div>
+      </div>
+
+      <!-- middle -->
+      <div class="grid" style="grid-template-columns:1.5fr 1.1fr">
+        <div class="card">
+          <div class="card-h"><span class="t">Сотрудники</span></div>
+          <div class="row" style="gap:8px;margin-bottom:12px">
+            <span class="search" style="flex:1;max-width:none"><svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;flex:0 0 15px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="st-search" placeholder="Поиск сотрудника..."></span>
+            <span class="btn">Все подразделения ▾</span><span class="btn">Все статусы ▾</span>
+            <button class="btn primary" id="st-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Добавить сотрудника</button>
+          </div>
+          <table>
+            <thead><tr><th>Сотрудник</th><th>Должность</th><th>Подразделение</th><th style="text-align:right">Оклад</th><th>Статус</th><th></th></tr></thead>
+            <tbody id="st-list"></tbody>
+          </table>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:10px" id="st-count">Показать всех сотрудников (23) ↓</a>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card">
+            <div class="card-h"><span class="t">Структура персонала</span><span class="badge b-gray" style="margin-left:auto">По подразделениям ▾</span></div>
+            <div class="row" style="gap:16px;align-items:center">
+              <div class="donut" style="width:130px;height:130px;background:conic-gradient(#8b5cf6 0 34.8%,#2f66f6 34.8% 60.9%,#1fa971 60.9% 73.9%,#f0a621 73.9% 82.6%,#f06fb0 82.6% 91.3%,#9aa0a8 91.3% 100%);flex:0 0 130px" data-l="23 чел."></div>
+              <div class="legend" style="flex:1">
+                <div class="li2"><span class="d" style="background:#8b5cf6"></span>Производство <b style="margin-left:auto">8 чел.</b> <span class="muted">(34,8%)</span></div>
+                <div class="li2"><span class="d" style="background:#2f66f6"></span>Отдел продаж <b style="margin-left:auto">6 чел.</b> <span class="muted">(26,1%)</span></div>
+                <div class="li2"><span class="d" style="background:#1fa971"></span>Склады <b style="margin-left:auto">3 чел.</b> <span class="muted">(13,0%)</span></div>
+                <div class="li2"><span class="d" style="background:#f0a621"></span>Снабжение <b style="margin-left:auto">2 чел.</b> <span class="muted">(8,7%)</span></div>
+                <div class="li2"><span class="d" style="background:#f06fb0"></span>Администрация <b style="margin-left:auto">2 чел.</b> <span class="muted">(8,7%)</span></div>
+                <div class="li2"><span class="d" style="background:#9aa0a8"></span>Бухгалтерия <b style="margin-left:auto">2 чел.</b> <span class="muted">(8,7%)</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><span class="t">Фонд оплаты труда</span><span class="badge b-gray" style="margin-left:auto">По месяцам ▾</span></div>
+            <div class="li2" style="margin-bottom:6px"><span class="d" style="background:#8b5cf6"></span>ФОТ (₸)</div>
+            <svg class="chart-svg" height="130" viewBox="0 0 340 130" preserveAspectRatio="none">
+              <line x1="0" y1="110" x2="340" y2="110" stroke="#eff1f4"/><line x1="0" y1="80" x2="340" y2="80" stroke="#eff1f4"/><line x1="0" y1="50" x2="340" y2="50" stroke="#eff1f4"/><line x1="0" y1="20" x2="340" y2="20" stroke="#eff1f4"/>
+              <polyline fill="none" stroke="#8b5cf6" stroke-width="2.4" points="14,64 76,54 142,46 208,42 274,38 330,34"/>
+              <circle cx="14" cy="64" r="3" fill="#8b5cf6"/><circle cx="76" cy="54" r="3" fill="#8b5cf6"/><circle cx="142" cy="46" r="3" fill="#8b5cf6"/><circle cx="208" cy="42" r="3" fill="#8b5cf6"/><circle cx="274" cy="38" r="3" fill="#8b5cf6"/><circle cx="330" cy="34" r="3" fill="#8b5cf6"/>
+            </svg>
+            <div class="row" style="margin-top:4px"><span class="muted" style="flex:1">Дек 2024</span><span class="muted" style="flex:1;text-align:center">Янв</span><span class="muted" style="flex:1;text-align:center">Фев</span><span class="muted" style="flex:1;text-align:center">Мар</span><span class="muted" style="flex:1;text-align:center">Апр</span><span class="muted" style="flex:1;text-align:right">Май</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- bottom -->
+      <div class="grid g4">
+        <div class="card">
+          <div class="card-h"><span class="t">Затраты на персонал</span></div>
+          <div class="muted" style="margin-bottom:10px">Структура ФОТ за выбранный период</div>
+          <div class="row" style="gap:14px;align-items:center">
+            <div class="donut" style="width:110px;height:110px;background:conic-gradient(#8b5cf6 0 76.5%,#2f66f6 76.5% 89.3%,#1fa971 89.3% 95.6%,#f0a621 95.6% 100%);flex:0 0 110px" data-l=""></div>
+            <div class="legend" style="flex:1">
+              <div class="li2"><span class="d" style="background:#8b5cf6"></span>Оклады <b style="margin-left:auto">76,5%</b></div>
+              <div class="li2"><span class="d" style="background:#2f66f6"></span>Премии <b style="margin-left:auto">12,8%</b></div>
+              <div class="li2"><span class="d" style="background:#1fa971"></span>Надбавки <b style="margin-left:auto">6,3%</b></div>
+              <div class="li2"><span class="d" style="background:#f0a621"></span>Прочие выплаты <b style="margin-left:auto">4,4%</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Вакансии</span></div>
+          <table>
+            <thead><tr><th>Должность</th><th>Подразделение</th><th style="text-align:right">Статус</th></tr></thead>
+            <tbody id="vac-list"></tbody>
+          </table>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:12px">Все вакансии →</a>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Дни рождения</span></div>
+          <div id="bd-list"></div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:10px">Все дни рождения →</a>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Ближайшие отпуска</span></div>
+          <div id="vac2-list"></div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:10px">Все отпуска →</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="layout.js"></script>
+<script src="store.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('staff','Сотрудники и зарплаты','Управление персоналом, должностями и оплатой труда');</script>
+<script src="staff.js"></script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Снабжение</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.step{display:flex;align-items:center;gap:9px;padding:6px 0;font-size:12.5px;font-weight:500}
+.step .c{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;flex:0 0 20px}
+.step.done .c{background:var(--green);color:#fff}
+.step.act .c{background:var(--amber);color:#fff}
+.step.wait{color:var(--ink3)} .step.wait .c{border:1.6px solid var(--line)}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <div style="flex:1"></div>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Фильтры</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 19a6 6 0 0 1 12 0M17 8a3 3 0 0 0 0 6M21 19a5 5 0 0 0-3-4.6"/></svg>Поставщики</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+        <button class="btn primary" id="sup-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Новая закупка</button>
+      </div>
+
+      <!-- KPI -->
+      <div class="grid g5">
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M3 5h2l2 11h11l2-8H7"/><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg></div><div><div class="lbl">Активных закупок</div><div class="val">12</div></div><svg class="spark" width="66" height="38" viewBox="0 0 66 38"><polyline fill="none" stroke="#1fa971" stroke-width="2" points="0,30 13,24 26,26 39,16 52,14 66,6"/></svg></div><span class="delta up">▲ +3 <span class="muted" style="font-weight:500">за неделю</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="3" y="7" width="11" height="9" rx="1"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.4"/><circle cx="17" cy="18" r="1.4"/></svg></div><div><div class="lbl">В пути</div><div class="val">7 <span class="muted" style="font-size:12px">поставок</span></div></div><svg class="spark" width="60" height="38" viewBox="0 0 60 38"><polyline fill="none" stroke="#2f66f6" stroke-width="2" points="0,26 12,28 24,18 36,20 48,10 60,8"/></svg></div><span class="delta up">▲ +2 <span class="muted" style="font-weight:500">к вчера</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg></div><div><div class="lbl">Ожидаемые затраты</div><div class="val" style="font-size:22px">4,8 млн ₸</div></div><svg class="spark" width="56" height="38" viewBox="0 0 56 38"><polyline fill="none" stroke="#8b5cf6" stroke-width="2" points="0,28 11,20 22,24 34,14 45,12 56,6"/></svg></div><span class="delta up">▲ +6% <span class="muted" style="font-weight:500">к плану</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></div><div><div class="lbl">Просрочка поставок</div><div class="val">2</div></div><svg class="spark" width="56" height="38" viewBox="0 0 56 38"><polyline fill="none" stroke="#e5484d" stroke-width="2" points="0,18 11,22 22,14 34,20 45,12 56,16"/></svg></div><span class="delta down">ниже нормы</span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="12" cy="12" r="8"/><path d="M8 12l3 3 5-6"/></svg></div><div><div class="lbl">Точность поставщиков</div><div class="val">93%</div></div><svg class="spark" width="56" height="38" viewBox="0 0 56 38"><polyline fill="none" stroke="#1fa971" stroke-width="2" points="0,24 11,20 22,22 34,12 45,14 56,8"/></svg></div><span class="delta up"><span class="muted" style="font-weight:500">по последнему месяцу</span></span></div>
+      </div>
+
+      <!-- middle -->
+      <div class="grid" style="grid-template-columns:1.5fr 1.2fr 1fr">
+        <!-- заявки на пополнение -->
+        <div class="card">
+          <div class="card-h"><span class="t">Заявки на пополнение</span></div>
+          <table>
+            <thead><tr><th>Материал</th><th>Остаток</th><th>Мин.</th><th>Расход/мес</th><th>Заказать</th><th>Приоритет</th><th>Ответств.</th></tr></thead>
+            <tbody id="replist"></tbody>
+          </table>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:10px">Открыть все заявки ›</a>
+        </div>
+
+        <!-- карточка закупки -->
+        <div class="card">
+          <div class="card-h"><span class="t">Карточка закупки</span></div>
+          <div class="row" style="gap:16px;align-items:flex-start">
+            <div style="flex:1">
+              <div class="stat" style="padding:4px 0"><span class="k">Поставщик</span><span class="v" id="sc-supplier" style="font-size:12px">China Locks Co.</span></div>
+              <div class="stat" style="padding:4px 0"><span class="k">№ заказа</span><span class="v" id="sc-po" style="font-size:12px">PO-2458</span></div>
+              <div class="stat" style="padding:4px 0"><span class="k">Категория</span><span class="v" id="sc-cat" style="font-size:12px">Фурнитура</span></div>
+              <div class="stat" style="padding:4px 0"><span class="k">Позиция</span><span class="v" id="sc-pos" style="font-size:12px">Замки трансформера</span></div>
+              <div class="stat" style="padding:4px 0"><span class="k">Количество</span><span class="v" id="sc-qty" style="font-size:12px">400 шт</span></div>
+              <div class="stat" style="padding:4px 0"><span class="k">Бюджет</span><span class="v" id="sc-budget" style="font-size:12px">680 000 ₸</span></div>
+              <div class="stat" style="padding:4px 0"><span class="k">Ожид. дата</span><span class="v" id="sc-eta" style="font-size:12px">2 июня 2025</span></div>
+              <div class="stat" style="padding:4px 0"><span class="k">Статус</span><span class="badge b-amber" id="sc-status">На таможне</span></div>
+              <div class="stat" style="padding:4px 0"><span class="k">Менеджер</span><span class="v" id="sc-manager" style="font-size:12px">Айдар</span></div>
+            </div>
+            <div style="flex:0 0 130px;padding-top:4px" id="sc-steps"></div>
+          </div>
+          <div class="muted" style="margin:6px 0 12px" id="sc-terms">Условия: 30% предоплата / 70% после отгрузки</div>
+          <div class="row" style="gap:6px;margin-bottom:14px">
+            <button class="btn primary" id="sc-open" style="padding:7px 10px;font-size:11.5px"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8M10 6H5v13h13v-5"/></svg>Открыть заказ</button>
+            <button class="btn" id="sc-contact" style="padding:7px 10px;font-size:11.5px"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>Связаться</button>
+            <button class="btn" id="sc-advance" style="padding:7px 10px;font-size:11.5px"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Продвинуть этап</button>
+          </div>
+          <div class="muted" style="font-weight:600;margin-bottom:6px">История по заказу</div>
+          <div class="row" style="gap:16px;align-items:flex-start">
+            <div class="tl" style="flex:1" id="sc-history"></div>
+          </div>
+          <div class="between" style="margin-top:6px"><span class="muted">Исполнение бюджета: <b id="sc-bud-lbl">68%</b></span></div>
+          <div class="meter"><i id="sc-bud-bar" style="width:68%;background:var(--amber)"></i></div>
+        </div>
+
+        <!-- AI агент -->
+        <div class="card">
+          <div class="card-h"><span class="t" style="color:var(--blue)">✦ AI-агент снабжения BORZO</span><span class="badge b-green" style="margin-left:auto">Онлайн</span></div>
+          <div class="muted" style="font-weight:600;margin-bottom:4px">Контроль сегодня</div>
+          <div class="aa"><span class="ok">✓</span>Проверил 12 активных закупок</div>
+          <div class="aa"><span class="ok">✓</span>Нашёл 4 позиции ниже точки дозаказа</div>
+          <div class="aa"><span class="ok">✓</span>Подготовил 3 заявки поставщикам</div>
+          <div class="aa"><span class="ok">✓</span>Напомнил о просроченных счетах</div>
+          <div class="quote"><div class="h">Рекомендация агента</div>Заказ на замки трансформера стоит дублировать сейчас. Остатка хватит только на 9 дней.</div>
+          <div class="att-card" style="margin-top:10px"><div class="h">⚠ Узкое место</div><div class="muted">Две поставки задерживаются. Порошковая краска может повлиять на покрасочный цех.</div></div>
+        </div>
+      </div>
+
+      <!-- payments strip -->
+      <div class="card">
+        <div class="row" style="gap:30px;align-items:center">
+          <span class="t" style="font-weight:600">Платежи поставщикам</span>
+          <div class="row" style="gap:8px"><span class="ava" style="background:var(--green-soft);color:var(--green)">✓</span><div><div class="muted">Оплачено в этом месяце</div><b style="font-size:15px">2,9 млн ₸</b></div></div>
+          <div class="row" style="gap:8px"><span class="ava" style="background:var(--amber-soft);color:var(--amber)">◷</span><div><div class="muted">Ожидает оплаты</div><b style="font-size:15px">1,1 млн ₸</b></div></div>
+          <div class="row" style="gap:8px"><span class="ava" style="background:var(--red-soft);color:var(--red)">⚠</span><div><div class="muted">Просрочено</div><b style="font-size:15px">180 тыс ₸</b></div></div>
+          <a style="margin-left:auto;color:var(--blue);font-weight:600;font-size:12px">Перейти к платежам ›</a>
+        </div>
+      </div>
+
+      <!-- bottom -->
+      <div class="grid g4">
+        <!-- A -->
+        <div class="card">
+          <div class="card-h"><span class="t">A. Поставщики и рейтинг</span></div>
+          <table>
+            <thead><tr><th>Поставщик</th><th>Категория</th><th>Надёжн.</th><th>Ср. срок</th><th>Статус</th></tr></thead>
+            <tbody id="suplist"></tbody>
+          </table>
+        </div>
+
+        <!-- B -->
+        <div class="card">
+          <div class="card-h"><span class="t">B. Поставки за 7 дней</span></div>
+          <div class="row" style="gap:14px;margin-bottom:10px"><span class="li2"><span class="d" style="background:#2f66f6"></span>План, шт</span><span class="li2"><span class="d" style="background:#1fa971"></span>Получено, шт</span></div>
+          <div class="row" style="align-items:flex-end;gap:8px;height:110px">
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:56px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:30px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:40px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:44px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:64px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:56px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:88px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:52px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:80px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:54px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:70px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:48px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:92px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:50px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+          </div>
+          <div class="row" style="margin-top:6px"><span class="muted" style="flex:1;text-align:center">16</span><span class="muted" style="flex:1;text-align:center">17</span><span class="muted" style="flex:1;text-align:center">18</span><span class="muted" style="flex:1;text-align:center">19</span><span class="muted" style="flex:1;text-align:center">20</span><span class="muted" style="flex:1;text-align:center">21</span><span class="muted" style="flex:1;text-align:center">22</span></div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:8px">Смотреть полный график ›</a>
+        </div>
+
+        <!-- C -->
+        <div class="card">
+          <div class="card-h"><span class="t">C. Структура закупок</span></div>
+          <div class="row" style="gap:16px;align-items:center">
+            <div class="donut" style="width:110px;height:110px;background:conic-gradient(#2f66f6 0 28%,#1fa971 28% 52%,#8b5cf6 52% 70%,#f0a621 70% 86%,#39c0c8 86% 100%);flex:0 0 110px" data-l="4,8 млн ₸" style="font-size:11px"></div>
+            <div class="legend" style="flex:1">
+              <div class="li2"><span class="d" style="background:#2f66f6"></span>Фурнитура <b style="margin-left:auto">28%</b></div>
+              <div class="li2"><span class="d" style="background:#1fa971"></span>Металл <b style="margin-left:auto">24%</b></div>
+              <div class="li2"><span class="d" style="background:#8b5cf6"></span>Краска <b style="margin-left:auto">18%</b></div>
+              <div class="li2"><span class="d" style="background:#f0a621"></span>Упаковка <b style="margin-left:auto">16%</b></div>
+              <div class="li2"><span class="d" style="background:#39c0c8"></span>МДФ / ПВХ <b style="margin-left:auto">14%</b></div>
+            </div>
+          </div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:12px">Смотреть детали ›</a>
+        </div>
+
+        <!-- D -->
+        <div class="card">
+          <div class="card-h"><span class="t">D. Материалы под риском</span></div>
+          <table>
+            <thead><tr><th>Материал</th><th style="text-align:right">Статус</th></tr></thead>
+            <tbody id="risklist"></tbody>
+          </table>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:12px">Перейти к складам ›</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="layout.js"></script>
+<script src="store.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('supply','Снабжение','Поставщики, закупки, поставки и контроль пополнения BORZO');</script>
+<script src="supply.js"></script>
+</body>
+</html>

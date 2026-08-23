@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · SMM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--line);margin-bottom:4px;overflow-x:auto}
+.tabs a{padding:10px 2px;font-weight:500;color:var(--ink2);white-space:nowrap;border-bottom:2px solid transparent;font-size:13px}
+.tabs a.on{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+.thmb{border-radius:8px;background:linear-gradient(135deg,#e7e2d8,#d6ccbb);flex:0 0 auto;position:relative}
+.thmb.sm{width:44px;height:36px}
+.g6{grid-template-columns:repeat(6,1fr)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal .dh{text-align:center;font-size:11px;color:var(--ink3);font-weight:600;margin-bottom:2px}
+.cal .dh b{display:block;color:var(--ink);font-size:14px}
+.chip{background:var(--line2);border-radius:6px;padding:4px 5px;font-size:10px;font-weight:600;margin-bottom:4px;color:var(--ink2)}
+.chip.g{background:var(--green-soft);color:var(--green)}
+.chip.v{background:var(--violet-soft);color:var(--violet)}
+.tk{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line2)}
+.tk:first-child{border-top:0}
+.tk .box{width:17px;height:17px;border:1.6px solid var(--line);border-radius:5px;flex:0 0 17px}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <div style="flex:1"></div>
+        <span class="btn"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>01.05.2025 – 31.05.2025</span>
+        <button class="btn primary" id="smm-schedule"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Запланировать пост</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+      </div>
+
+      <div class="tabs" id="smm-tabs">
+        <a class="on">Обзор</a><a>Контент</a><a>Публикации</a><a>Реклама</a><a>Аудитория</a><a>Аналитика</a><a>Задачи</a><a>Бренд и дизайн</a><a>Настройки</a>
+      </div>
+
+      <!-- KPI 6 -->
+      <div class="grid g6">
+        <div class="card kpi"><div class="top"><div><div class="lbl">Подписчики</div><div class="val" style="font-size:22px">18 762</div></div><div class="ic" style="margin-left:auto;background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="9" cy="8" r="3"/><path d="M3 19a6 6 0 0 1 12 0M16 11a3 3 0 0 0 0-6"/></svg></div></div><span class="delta up">+412 · +2,2%</span></div>
+        <div class="card kpi"><div class="top"><div><div class="lbl">Охват</div><div class="val" style="font-size:22px">356 420</div></div><div class="ic" style="margin-left:auto;background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.5"/></svg></div></div><span class="delta up">+28,4%</span></div>
+        <div class="card kpi"><div class="top"><div><div class="lbl">Вовлечённость</div><div class="val" style="font-size:22px">12,6%</div></div><div class="ic" style="margin-left:auto;background:var(--amber-soft);color:var(--amber)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg></div></div><span class="delta up">+1,8 п.п.</span></div>
+        <div class="card kpi"><div class="top"><div><div class="lbl">Клики по ссылкам</div><div class="val" style="font-size:22px">4 892</div></div><div class="ic" style="margin-left:auto;background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M5 3l14 8-6 2-2 6z"/></svg></div></div><span class="delta up">+31,6%</span></div>
+        <div class="card kpi"><div class="top"><div><div class="lbl">Сообщения</div><div class="val" style="font-size:22px">327</div></div><div class="ic" style="margin-left:auto;background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 5h16v11H8l-4 4z"/></svg></div></div><span class="delta up">+18,1%</span></div>
+        <div class="card kpi"><div class="top"><div><div class="lbl">Расходы на рекламу</div><div class="val" style="font-size:19px">412 350 ₸</div></div><div class="ic" style="margin-left:auto;background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M16 12h.01"/></svg></div></div><span class="delta up">−5,3%</span></div>
+      </div>
+
+      <!-- row 2: 4 cards -->
+      <div class="grid" style="grid-template-columns:1.4fr 1fr 1fr 1.1fr">
+        <div class="card">
+          <div class="card-h"><span class="t">Динамика охвата</span><span class="badge b-gray" style="margin-left:auto">По дням ▾</span></div>
+          <svg class="chart-svg" height="150" viewBox="0 0 320 150" preserveAspectRatio="none">
+            <defs><linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8b5cf6" stop-opacity="0.28"/><stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/></linearGradient></defs>
+            <line x1="0" y1="120" x2="320" y2="120" stroke="#eff1f4"/><line x1="0" y1="80" x2="320" y2="80" stroke="#eff1f4"/><line x1="0" y1="40" x2="320" y2="40" stroke="#eff1f4"/>
+            <path d="M10,108 L58,86 L106,80 L154,76 L202,74 L250,54 L310,18 L310,130 L10,130 Z" fill="url(#ar)"/>
+            <polyline fill="none" stroke="#8b5cf6" stroke-width="2.4" points="10,108 58,86 106,80 154,76 202,74 250,54 310,18"/>
+          </svg>
+          <div class="row" style="margin-top:4px"><span class="muted" style="flex:1">1 мая</span><span class="muted" style="flex:1;text-align:center">8 мая</span><span class="muted" style="flex:1;text-align:center">15 мая</span><span class="muted" style="flex:1;text-align:center">22 мая</span><span class="muted" style="flex:1;text-align:right">29 мая</span></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="t">Охват по каналам</span></div>
+          <div class="row" style="gap:12px;align-items:center">
+            <div class="donut" style="width:104px;height:104px;background:conic-gradient(#8b5cf6 0 52.1%,#1b1b1b 52.1% 75.8%,#2f66f6 75.8% 88.2%,#39c0c8 88.2% 96%,#e5484d 96% 100%);flex:0 0 104px" data-l="356 420" style="font-size:10px"></div>
+            <div class="legend" style="flex:1;font-size:11px">
+              <div class="li2"><span class="d" style="background:#8b5cf6"></span>Instagram <b style="margin-left:auto">52,1%</b></div>
+              <div class="li2"><span class="d" style="background:#1b1b1b"></span>TikTok <b style="margin-left:auto">23,7%</b></div>
+              <div class="li2"><span class="d" style="background:#2f66f6"></span>Telegram <b style="margin-left:auto">12,4%</b></div>
+              <div class="li2"><span class="d" style="background:#39c0c8"></span>VK <b style="margin-left:auto">7,8%</b></div>
+              <div class="li2"><span class="d" style="background:#e5484d"></span>YouTube <b style="margin-left:auto">4,0%</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="t">Типы контента по вовлечённости</span></div>
+          <div class="row" style="gap:12px;align-items:center">
+            <div class="donut" style="width:104px;height:104px;background:conic-gradient(#8b5cf6 0 41.8%,#1fa971 41.8% 69.1%,#f0a621 69.1% 84.7%,#2f66f6 84.7% 94.9%,#9aa0a8 94.9% 100%);flex:0 0 104px" data-l=""></div>
+            <div class="legend" style="flex:1;font-size:11px">
+              <div class="li2"><span class="d" style="background:#8b5cf6"></span>Reels / Видео <b style="margin-left:auto">41,8%</b></div>
+              <div class="li2"><span class="d" style="background:#1fa971"></span>Фото <b style="margin-left:auto">27,3%</b></div>
+              <div class="li2"><span class="d" style="background:#f0a621"></span>Карусель <b style="margin-left:auto">15,6%</b></div>
+              <div class="li2"><span class="d" style="background:#2f66f6"></span>Stories <b style="margin-left:auto">10,2%</b></div>
+              <div class="li2"><span class="d" style="background:#9aa0a8"></span>Текст <b style="margin-left:auto">5,1%</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="t">Лучшие публикации</span><span class="badge b-gray" style="margin-left:auto">По вовлечённости ▾</span></div>
+          <div class="li"><span class="thmb sm"></span><div style="flex:1"><div class="main-t">Стол-трансформер LUX 3.5 м</div><div class="sub-t">12 мая, Reels</div></div><div style="text-align:right"><b>2 486</b><div class="muted">ER 14,2%</div></div></div>
+          <div class="li"><span class="thmb sm"></span><div style="flex:1"><div class="main-t">Как проходит производство</div><div class="sub-t">6 мая, Reels</div></div><div style="text-align:right"><b>1 982</b><div class="muted">ER 12,8%</div></div></div>
+          <div class="li"><span class="thmb sm"></span><div style="flex:1"><div class="main-t">GEOMETRY с подсветкой</div><div class="sub-t">18 мая, Фото</div></div><div style="text-align:right"><b>1 765</b><div class="muted">ER 11,9%</div></div></div>
+          <div class="li"><span class="thmb sm"></span><div style="flex:1"><div class="main-t">Отзывы наших клиентов</div><div class="sub-t">3 мая, Карусель</div></div><div style="text-align:right"><b>1 543</b><div class="muted">ER 10,6%</div></div></div>
+          <div class="li"><span class="thmb sm"></span><div style="flex:1"><div class="main-t">Доставка и сборка стола</div><div class="sub-t">22 мая, Reels</div></div><div style="text-align:right"><b>1 321</b><div class="muted">ER 9,7%</div></div></div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:8px">Смотреть все публикации →</a>
+        </div>
+      </div>
+
+      <!-- row 3 -->
+      <div class="grid" style="grid-template-columns:1.15fr 1.4fr 1.4fr">
+        <div class="card">
+          <div class="card-h"><span class="t">Календарь контента</span><span class="badge b-gray" style="margin-left:auto">Сегодня ‹ ›</span></div>
+          <div class="cal">
+            <div><div class="dh">Пн<b>26</b></div><div class="thmb" style="height:34px;margin-bottom:4px"></div><div class="chip g">16:00 Stories</div></div>
+            <div><div class="dh">Вт<b>27</b></div><div class="chip">11:00 Карусель</div></div>
+            <div><div class="dh">Ср<b>28</b></div><div class="chip">10:00 Reels</div><div class="chip g">15:00 Stories</div></div>
+            <div><div class="dh">Чт<b>29</b></div><div class="chip">11:00 Фото</div></div>
+            <div><div class="dh">Пт<b>30</b></div><div class="thmb" style="height:34px;margin-bottom:4px"></div><div class="chip g">16:00 Stories</div></div>
+            <div><div class="dh">Сб<b>31</b></div><div class="chip v">12:00 Reels</div></div>
+            <div><div class="dh">Вс<b>1</b></div></div>
+          </div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:12px">Открыть календарь →</a>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Последние публикации</span></div>
+          <table>
+            <thead><tr><th>Публикация</th><th>Канал</th><th>Дата</th><th style="text-align:right">Охват</th><th style="text-align:right">ER</th><th>Статус</th></tr></thead>
+            <tbody id="smm-posts"></tbody>
+          </table>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:10px">Все публикации →</a>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Рекламные кампании</span><span class="badge b-gray" style="margin-left:auto">По расходам ▾</span></div>
+          <table>
+            <thead><tr><th>Кампания</th><th>Канал</th><th style="text-align:right">Расходы</th><th style="text-align:right">Результат</th><th style="text-align:right">CPA</th></tr></thead>
+            <tbody id="smm-ads"></tbody>
+          </table>
+          <div class="between" style="margin-top:10px"><a style="color:var(--blue);font-weight:600;font-size:12px">Все кампании →</a><button class="btn primary" id="smm-add-ad" style="padding:7px 12px;font-size:11.5px"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Создать кампанию</button></div>
+        </div>
+      </div>
+
+      <!-- row 4 -->
+      <div class="grid" style="grid-template-columns:1.15fr 1.2fr 1.6fr">
+        <div class="card">
+          <div class="card-h"><span class="t">Задачи</span><a style="margin-left:auto;color:var(--blue);font-weight:600;font-size:12px">Все задачи →</a></div>
+          <div id="smm-tasks"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Рост аудитории</span><span class="badge b-gray" style="margin-left:auto">По дням ▾</span></div>
+          <div class="row" style="gap:14px;margin-bottom:6px"><span class="li2"><span class="d" style="background:#8b5cf6"></span>Instagram</span><span class="li2"><span class="d" style="background:#1b1b1b"></span>TikTok</span><span class="li2"><span class="d" style="background:#2f66f6"></span>Telegram</span></div>
+          <svg class="chart-svg" height="130" viewBox="0 0 320 130" preserveAspectRatio="none">
+            <line x1="0" y1="110" x2="320" y2="110" stroke="#eff1f4"/><line x1="0" y1="75" x2="320" y2="75" stroke="#eff1f4"/><line x1="0" y1="40" x2="320" y2="40" stroke="#eff1f4"/>
+            <polyline fill="none" stroke="#8b5cf6" stroke-width="2.2" points="10,74 68,64 126,54 184,44 242,30 310,14"/>
+            <polyline fill="none" stroke="#1b1b1b" stroke-width="2.2" points="10,96 68,90 126,82 184,72 242,60 310,48"/>
+            <polyline fill="none" stroke="#2f66f6" stroke-width="2.2" points="10,110 68,106 126,100 184,94 242,88 310,80"/>
+          </svg>
+          <div class="row" style="margin-top:4px"><span class="muted" style="flex:1">1 мая</span><span class="muted" style="flex:1;text-align:center">8 мая</span><span class="muted" style="flex:1;text-align:center">15 мая</span><span class="muted" style="flex:1;text-align:center">22 мая</span><span class="muted" style="flex:1;text-align:right">29 мая</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Недавние креативы</span><a style="margin-left:auto;color:var(--blue);font-weight:600;font-size:12px">Все креативы →</a></div>
+          <div class="grid" style="grid-template-columns:repeat(5,1fr);gap:10px">
+            <div><div class="thmb" style="height:90px"></div><div class="muted" style="text-align:center;margin-top:6px">31.05.2025</div></div>
+            <div><div class="thmb" style="height:90px"></div><div class="muted" style="text-align:center;margin-top:6px">30.05.2025</div></div>
+            <div><div class="thmb" style="height:90px"></div><div class="muted" style="text-align:center;margin-top:6px">29.05.2025</div></div>
+            <div><div class="thmb" style="height:90px;background:linear-gradient(135deg,#cdd7ea,#aab8d6)"></div><div class="muted" style="text-align:center;margin-top:6px">28.05.2025</div></div>
+            <div><div class="thmb" style="height:90px"></div><div class="muted" style="text-align:center;margin-top:6px">27.05.2025</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="layout.js"></script>
+<script src="store.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('smm','SMM','Управление социальными сетями и маркетингом');</script>
+<script src="smm.js"></script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Клиенты и сервис</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <div class="search" style="max-width:none;flex:1"><svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;flex:0 0 15px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="cl-search" placeholder="Поиск клиентов, телефонов, заказов..."></div>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Фильтры</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+        <button class="btn primary" id="cl-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Новое обращение</button>
+        <button class="btn" id="cl-add-client"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Клиент</button>
+      </div>
+
+      <!-- KPI -->
+      <div class="grid g5">
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="9" cy="8" r="3"/><path d="M3 19a6 6 0 0 1 12 0"/><path d="M16 11a3 3 0 0 0 0-6"/></svg></div><div><div class="lbl">Клиентов в базе</div><div class="val">218</div></div><svg class="spark" width="70" height="38" viewBox="0 0 70 38"><polyline fill="none" stroke="#1fa971" stroke-width="2" points="0,30 14,24 28,26 42,16 56,14 70,6"/></svg></div><span class="delta up">↑ +8% <span class="muted" style="font-weight:500">к прошлому месяцу</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 12a8 8 0 0 1 13-6M20 6v4h-4"/><path d="M20 12a8 8 0 0 1-13 6M4 18v-4h4"/></svg></div><div><div class="lbl">Повторные продажи</div><div class="val">34 <span class="muted" style="font-size:12px">за 90 дней</span></div></div><svg class="spark" width="66" height="38" viewBox="0 0 66 38"><polyline fill="none" stroke="#2f66f6" stroke-width="2" points="0,28 13,30 26,18 39,22 52,12 66,8"/></svg></div><span class="delta up">↑ +12% <span class="muted" style="font-weight:500">к прошлому периоду</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--amber-soft);color:var(--amber)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h4"/></svg></div><div><div class="lbl">Открытые обращения</div><div class="val">12</div></div><svg class="spark" width="70" height="38" viewBox="0 0 70 38"><polyline fill="none" stroke="#f0a621" stroke-width="2" points="0,20 14,26 28,16 42,22 56,12 70,10"/></svg></div><span class="delta up">↑ +2 <span class="muted" style="font-weight:500">к вчера</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg></div><div><div class="lbl">Средняя оценка сервиса</div><div class="val">4,8 / 5</div></div><svg class="spark" width="60" height="38" viewBox="0 0 60 38"><polyline fill="none" stroke="#8b5cf6" stroke-width="2" points="0,24 12,20 24,22 36,14 48,16 60,10"/></svg></div><span class="delta up">↑ +0,2 <span class="muted" style="font-weight:500">к прошлому месяцу</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div><div><div class="lbl">Гарантийные случаи</div><div class="val">7 <span class="muted" style="font-size:12px">за месяц</span></div></div></div><div class="row" style="margin-top:10px;gap:8px"><div class="meter" style="flex:1"><i style="width:78%;background:var(--green)"></i></div><span class="muted">78% обработано</span></div></div>
+      </div>
+
+      <!-- middle -->
+      <div class="grid" style="grid-template-columns:1.5fr 1fr 1fr">
+        <!-- база клиентов -->
+        <div class="card">
+          <div class="card-h"><span class="t">База клиентов</span><span class="dots" style="margin-left:auto">⋮</span></div>
+          <table>
+            <thead><tr><th>Клиент</th><th>Город</th><th>Последняя покупка</th><th>Изделие</th><th>Сегмент</th><th>Статус</th><th>LTV</th><th>Контакт</th></tr></thead>
+            <tbody id="clientlist">
+              <tr style="background:var(--blue-soft)"><td style="font-weight:600">ТОО Comfort House</td><td>Алматы</td><td class="muted">12 мая 2025</td><td>GEOMETRY 3,5 м</td><td>B2B</td><td><span class="badge b-green">Активный</span></td><td style="font-weight:600">720 000 ₸</td><td class="muted">2 дня назад</td></tr>
+              <tr><td style="font-weight:600">Жанара</td><td>Астана</td><td class="muted">3 мая 2025</td><td>LUX 3,0 м</td><td>Розница</td><td><span class="badge b-amber">Ожидает отзыв</span></td><td style="font-weight:600">380 000 ₸</td><td class="muted">вчера</td></tr>
+              <tr><td style="font-weight:600">ИП Светлана</td><td>Караганда</td><td class="muted">25 апреля 2025</td><td>LUX 4,0 м</td><td>Дилер</td><td><span class="badge b-violet">VIP</span></td><td style="font-weight:600">1 240 000 ₸</td><td class="muted">5 дней назад</td></tr>
+              <tr><td style="font-weight:600">Family House</td><td>Шымкент</td><td class="muted">18 мая 2025</td><td>GEOMETRY 3,5 м</td><td>Розница</td><td><span class="badge b-gray">Доставка завершена</span></td><td style="font-weight:600">350 000 ₸</td><td class="muted">сегодня</td></tr>
+              <tr><td style="font-weight:600">Асем</td><td>Алматы</td><td class="muted">8 мая 2025</td><td>GEOMETRY 3,0 м</td><td>Розница</td><td><span class="badge b-amber">Ожидает отзыв</span></td><td style="font-weight:600">290 000 ₸</td><td class="muted">3 дня назад</td></tr>
+              <tr><td style="font-weight:600">Дизайн Люкс</td><td>Астана</td><td class="muted">28 апреля 2025</td><td>Консоль LUX</td><td>Дизайнер</td><td><span class="badge b-green">Активный</span></td><td style="font-weight:600">460 000 ₸</td><td class="muted">неделю назад</td></tr>
+              <tr><td style="font-weight:600">Mega Home</td><td>Актобе</td><td class="muted">5 мая 2025</td><td>LUX 3,5 м</td><td>B2B</td><td><span class="badge b-red">Гарантийный кейс</span></td><td style="font-weight:600">540 000 ₸</td><td class="muted">2 дня назад</td></tr>
+            </tbody>
+          </table>
+          <div class="between" style="margin-top:12px"><span class="muted">Показано 1–7 из 218 клиентов</span><span class="badge b-gray">‹ 1 2 3 … 32 ›</span></div>
+        </div>
+
+        <!-- карточка клиента -->
+        <div class="card">
+          <div class="card-h"><span class="t" id="cc-name">ТОО Comfort House</span><span style="margin-left:auto;color:var(--amber)">★</span></div>
+          <div class="row" style="gap:6px;margin-bottom:12px">
+            <button class="btn" style="padding:7px 9px;font-size:11.5px"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>Позвонить</button>
+            <button class="btn" style="padding:7px 9px;font-size:11.5px;color:var(--green)"><svg viewBox="0 0 24 24" style="stroke:#1fa971"><path d="M4 20l1.5-4A8 8 0 1 1 9 19z"/></svg>WhatsApp</button>
+            <button class="btn" style="padding:7px 9px;font-size:11.5px"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Заявка</button>
+          </div>
+          <div class="between" style="margin-bottom:12px"><div><div class="muted">Телефон</div><div style="font-weight:600;font-size:12px">+7 701 123 45 67</div></div><div style="text-align:center"><div class="muted">Город</div><div id="cc-city" style="font-weight:600;font-size:12px">Алматы</div></div><div style="text-align:right"><div class="muted">Сегмент</div><div id="cc-seg" style="font-weight:600;font-size:12px">B2B</div></div></div>
+          <div class="between" style="margin-bottom:12px"><span class="muted">Рейтинг клиента</span><span style="color:var(--amber);font-weight:600">5.0 ★★★★★</span></div>
+          <div class="between" style="margin-bottom:6px"><div><div class="muted">Общий LTV</div><div id="cc-ltv" style="font-weight:700;font-size:14px">720 000 ₸</div></div><div style="text-align:right"><div class="muted">Первая покупка</div><div style="font-weight:600;font-size:12px">14 марта 2025</div></div></div>
+          <div class="between" style="margin-bottom:12px"><div><div class="muted">Менеджер</div><div style="font-weight:600;font-size:12px">Арина</div></div><div style="text-align:right"><div class="muted">Ответственный сервис</div><div style="font-weight:600;font-size:12px">Нурбек</div></div></div>
+          <div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px">
+            <div class="muted" style="font-weight:600;margin-bottom:8px">Покупки клиента</div>
+            <div class="between" style="padding:5px 0"><span>GEOMETRY 3,5 м, белый / золото</span><b>360 000 ₸</b></div>
+            <div class="between" style="padding:5px 0"><span>Консоль LUX</span><b>180 000 ₸</b></div>
+            <div class="between" style="padding:5px 0"><span>Банкетка</span><b>180 000 ₸</b></div>
+            <a style="color:var(--blue);font-weight:600;font-size:12px">Смотреть все заказы (3)</a>
+          </div>
+          <div class="muted">Лояльность / вероятность повторной покупки</div>
+          <div class="row" style="gap:8px;margin-top:4px"><div class="meter" style="flex:1"><i style="width:82%;background:var(--green)"></i></div><b style="font-size:12px">82%</b></div>
+        </div>
+
+        <!-- AI агент -->
+        <div class="card">
+          <div class="card-h"><span class="t" style="color:var(--blue)">✦ AI-агент сервиса BORZO</span><span class="badge b-green" style="margin-left:auto">Онлайн</span></div>
+          <div class="muted" style="font-weight:600;margin-bottom:4px">Автодействия за сегодня</div>
+          <div class="aa"><span class="ok">✓</span>Отправил 8 запросов на отзыв</div>
+          <div class="aa"><span class="ok">✓</span>Напомнил о доставке 5 клиентам</div>
+          <div class="aa"><span class="ok">✓</span>Собрал 3 гарантийных обращения</div>
+          <div class="aa"><span class="ok">✓</span>Выявил 2 клиента на повторную продажу</div>
+          <div class="quote"><div class="h">Рекомендация агента</div>ТОО Comfort House подходит для допродажи комплекта из консоли и банкетки. Высокая вероятность повторной покупки.</div>
+          <div class="quote"><div class="h">Скрипт менеджеру</div>Клиент доволен покупкой и оставил 5★ отзыв. Предложите комплект из консоли и банкетки со скидкой 10%. Уточните стиль интерьера и сроки, предложите варианты в наличии.</div>
+        </div>
+      </div>
+
+      <!-- bottom -->
+      <div class="grid" style="grid-template-columns:1.5fr 1fr 1fr">
+        <!-- сервисные обращения -->
+        <div class="card">
+          <div class="card-h"><span class="t">Сервисные обращения</span></div>
+          <table>
+            <thead><tr><th>№</th><th>Клиент</th><th>Тип</th><th>Изделие</th><th>Приоритет</th><th>Ответств.</th><th>SLA / срок</th><th>Статус</th></tr></thead>
+            <tbody id="srlist">
+              <tr><td style="color:var(--blue);font-weight:600">SR-1042</td><td>Жанара</td><td>Регулировка механизма</td><td>LUX 3,0 м</td><td><span style="color:var(--amber)">● Средний</span></td><td>Нурбек</td><td class="muted">Сегодня 18:00</td><td><span class="badge b-blue">В работе</span></td></tr>
+              <tr><td style="color:var(--blue);font-weight:600">SR-1043</td><td>Family House</td><td>Царапина на столешнице</td><td>GEOMETRY 3,5 м</td><td><span style="color:var(--red)">● Высокий</span></td><td>Ермек</td><td><span style="color:var(--red);font-weight:600">Просрочено</span></td><td><span class="badge b-amber">Требует выезда</span></td></tr>
+              <tr><td style="color:var(--blue);font-weight:600">SR-1044</td><td>ИП Светлана</td><td>Замена замка</td><td>LUX 4,0 м</td><td><span style="color:var(--red)">● Высокий</span></td><td>Нурбек</td><td class="muted">Завтра</td><td><span class="badge b-amber">Ожидает деталь</span></td></tr>
+              <tr><td style="color:var(--blue);font-weight:600">SR-1045</td><td>Асем</td><td>Запрос инструкции</td><td>GEOMETRY 3,0 м</td><td><span class="muted">● Низкий</span></td><td>✦ AI-агент</td><td class="muted">Сегодня</td><td><span class="badge b-green">Закрыто</span></td></tr>
+              <tr><td style="color:var(--blue);font-weight:600">SR-1046</td><td>Дизайн Люкс</td><td>Консультация по уходу</td><td>Консоль LUX</td><td><span class="muted">● Низкий</span></td><td>✦ AI-агент</td><td class="muted">Сегодня</td><td><span class="badge b-green">Закрыто</span></td></tr>
+            </tbody>
+          </table>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:10px">Смотреть все обращения →</a>
+        </div>
+
+        <!-- повторные продажи и сегменты -->
+        <div class="card">
+          <div class="card-h"><span class="t">Повторные продажи и сегменты</span></div>
+          <div class="row" style="gap:16px;align-items:flex-start">
+            <div class="donut" style="--p:46;width:110px;height:110px;background:conic-gradient(#2f66f6 0 46%,#1fa971 46% 70%,#8b5cf6 70% 88%,#f0a621 88% 100%);flex:0 0 110px" data-l="218"></div>
+            <div class="legend" style="flex:1">
+              <div class="li2"><span class="d" style="background:#2f66f6"></span>Розница <b style="margin-left:auto">46%</b></div>
+              <div class="li2"><span class="d" style="background:#1fa971"></span>B2B <b style="margin-left:auto">24%</b></div>
+              <div class="li2"><span class="d" style="background:#8b5cf6"></span>Дилеры <b style="margin-left:auto">18%</b></div>
+              <div class="li2"><span class="d" style="background:#f0a621"></span>Дизайнеры <b style="margin-left:auto">12%</b></div>
+            </div>
+          </div>
+          <div class="muted" style="font-weight:600;margin:14px 0 6px">Потенциал повторных продаж</div>
+          <div class="list">
+            <div class="li"><span class="ava" style="background:var(--green-soft);color:var(--green)">◨</span><div style="flex:1"><div class="main-t">14 клиентов</div><div class="sub-t">можно предложить консоль</div></div></div>
+            <div class="li"><span class="ava" style="background:var(--blue-soft);color:var(--blue)">◨</span><div style="flex:1"><div class="main-t">9 клиентов</div><div class="sub-t">можно предложить банкетку</div></div></div>
+            <div class="li"><span class="ava" style="background:var(--violet-soft);color:var(--violet)">◨</span><div style="flex:1"><div class="main-t">6 клиентов</div><div class="sub-t">можно предложить второй стол</div></div></div>
+            <div class="li"><span class="ava" style="background:var(--amber-soft);color:var(--amber)">◨</span><div style="flex:1"><div class="main-t">5 клиентов</div><div class="sub-t">запросить отзыв / кейс</div></div></div>
+          </div>
+        </div>
+
+        <!-- гарантия и качество -->
+        <div class="card">
+          <div class="card-h"><span class="t">Гарантия и качество</span></div>
+          <div class="between" style="margin-bottom:16px">
+            <div><div class="muted">Активных гарантий</div><div style="font-size:20px;font-weight:700">187</div></div>
+            <div style="text-align:center"><div class="muted">Новых за месяц</div><div style="font-size:20px;font-weight:700">7</div></div>
+            <div style="text-align:right"><div class="muted">Ср. время закрытия</div><div style="font-size:20px;font-weight:700">1,8 дня</div></div>
+          </div>
+          <div class="muted" style="font-weight:600;margin-bottom:10px">Проблемы по типам</div>
+          <div class="row" style="align-items:flex-end;gap:16px;height:120px;padding:0 6px">
+            <div style="flex:1;text-align:center"><div style="font-weight:700;font-size:12px;margin-bottom:4px">18</div><div style="height:58px;background:var(--blue);border-radius:6px 6px 0 0"></div><div class="muted" style="margin-top:6px">Замок</div></div>
+            <div style="flex:1;text-align:center"><div style="font-weight:700;font-size:12px;margin-bottom:4px">31</div><div style="height:100px;background:var(--blue);border-radius:6px 6px 0 0"></div><div class="muted" style="margin-top:6px">Механизм</div></div>
+            <div style="flex:1;text-align:center"><div style="font-weight:700;font-size:12px;margin-bottom:4px">22</div><div style="height:71px;background:var(--blue);border-radius:6px 6px 0 0"></div><div class="muted" style="margin-top:6px">Царапины</div></div>
+            <div style="flex:1;text-align:center"><div style="font-weight:700;font-size:12px;margin-bottom:4px">16</div><div style="height:52px;background:var(--blue);border-radius:6px 6px 0 0"></div><div class="muted" style="margin-top:6px">Доставка</div></div>
+          </div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:12px">Перейти в раздел гарантий →</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="store.js"></script>
+<script src="layout.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('clients','Клиенты и сервис','База клиентов, гарантия, обращения и повторные продажи');</script>
+<script src="clients.js"></script>
+</body>
+</html>

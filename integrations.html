@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Интеграции</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.int-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.int-ico{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:13px;flex:0 0 40px}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="row" style="gap:8px;margin-bottom:2px"><a href="settings.html" style="color:var(--blue);font-weight:600;font-size:12px">← Настройки</a></div>
+      <div style="font-weight:700;font-size:16px">Интеграции и API-ключи</div>
+      <div class="muted" style="margin-bottom:6px">Вставьте ключи сервисов, чтобы подтянуть данные в BORZO. Ключи хранятся локально в этом браузере. 🔴 Реальное подключение — после запуска сервера.</div>
+      <div class="grid g4" id="grid"></div>
+    </div>
+  </div>
+</div>
+<script src="store.js"></script>
+<script src="layout.js"></script>
+<script src="ui.js"></script>
+<script>
+BORZO.mount('settings','Интеграции','Подключение внешних сервисов');
+function render(){
+  var grid=document.getElementById('grid');
+  grid.innerHTML = DB.all('integrations').map(function(it){
+    var on = it.status==='on';
+    var fields = it.fields.map(function(f){
+      var v = (it.values&&it.values[f.k])||'';
+      var masked = v ? '••••••••'+v.slice(-4) : '';
+      return '<div class="field"><label>'+f.label+'</label><input data-id="'+it.id+'" data-k="'+f.k+'" type="'+f.type+'" value="" placeholder="'+(masked||'вставьте ключ')+'"></div>';
+    }).join('');
+    var help = it.guide ? '<button class="btn" data-help="'+it.id+'" style="width:100%;justify-content:center;font-size:12px;margin:2px 0 10px">❓ Как получить ключ (how to get the key)</button>' : '';
+    return '<div class="card"><div class="int-head"><span class="int-ico" style="background:'+it.color+'">'+it.icon+'</span>'+
+      '<div style="flex:1"><div style="font-weight:700">'+it.name+'</div><span class="int-status '+(on?'int-on':'int-off')+'">'+(on?'● подключено':'○ не подключено')+'</span></div></div>'+
+      '<div class="muted" style="margin-bottom:12px">'+it.desc+'</div>'+fields+help+
+      '<div class="modal-actions" style="margin-top:6px"><button class="btn" data-test="'+it.id+'">Проверить</button><button class="btn primary" data-save="'+it.id+'">Сохранить</button></div></div>';
+  }).join('');
+
+  grid.querySelectorAll('[data-help]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var it=DB.find('integrations',b.getAttribute('data-help'));
+      var steps=(it.guide||[]).map(function(g,i){
+        return '<div style="margin-bottom:11px"><div style="font-weight:600"><span style="color:var(--blue)">'+(i+1)+'.</span> '+g.ru+'</div>'+
+          '<div class="muted" style="font-size:12px;margin-top:1px">🇬🇧 '+g.en+'</div></div>';
+      }).join('');
+      UI.info({title:'Как подключить «'+it.name+'» (how to connect)', html:
+        '<div style="margin-bottom:8px">Пошагово. Русский сверху, English ниже (step by step, Russian on top, English below):</div>'+steps+
+        '<div class="muted" style="font-size:12px;margin-top:6px">🔴 После ввода ключа и запуска сервера подключение станет активным (after entering the key and launching the server the connection becomes active).</div>'});
+    });
+  });
+
+  grid.querySelectorAll('[data-save]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var id=b.getAttribute('data-save'), vals={};
+      grid.querySelectorAll('[data-id="'+id+'"]').forEach(function(i){ if(i.value.trim()) vals[i.getAttribute('data-k')]=i.value.trim(); });
+      if(!Object.keys(vals).length){ UI.toast('Введите ключ','err'); return; }
+      DB.saveIntegration(id, vals);
+      UI.toast('Ключ сохранён — '+DB.find('integrations',id).name,'ok');
+      render();
+    });
+  });
+  grid.querySelectorAll('[data-test]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var it=DB.find('integrations',b.getAttribute('data-test'));
+      if(it.status==='on') UI.toast('Проверка подключения будет доступна после запуска сервера','');
+      else UI.toast('Сначала сохраните ключ','err');
+    });
+  });
+}
+render();
+</script>
+</body>
+</html>
