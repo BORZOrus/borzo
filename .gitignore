@@ -1,0 +1,6 @@
+.media/
+*.zip
+node_modules/
+.DS_Store
+*.log
+app/_*.png

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Отчёты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.tpl{display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid var(--line2)}
+.tpl:first-child{border-top:0}
+.tpl .fico{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:0 0 30px}
+.dl{width:26px;height:26px;border-radius:7px;background:var(--line2);display:grid;place-items:center;color:var(--ink2);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <div style="flex:1"></div>
+        <span class="btn"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>01.05.2025 – 31.05.2025</span>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+      </div>
+
+      <!-- KPI 6 -->
+      <div class="grid" style="grid-template-columns:repeat(6,1fr)">
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg></div><div><div class="lbl">Всего отчётов</div><div class="val" style="font-size:22px">48</div></div></div><span class="delta up">+8 <span class="muted" style="font-weight:500">к апрелю</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 15V3M8 11l4 4 4-4M5 20h14"/></svg></div><div><div class="lbl">Выгружено файлов</div><div class="val" style="font-size:22px">124</div></div></div><span class="delta up">+15 <span class="muted" style="font-weight:500">к апрелю</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="5" y="7" width="14" height="12" rx="2"/><path d="M12 3v4M9 12h.01M15 12h.01"/></svg></div><div><div class="lbl">Автоматические</div><div class="val" style="font-size:22px">32</div></div></div><span class="delta up" style="color:var(--blue)">66% <span class="muted" style="font-weight:500">от всех</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--amber-soft);color:var(--amber)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="12" cy="8" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></div><div><div class="lbl">Отчёты вручную</div><div class="val" style="font-size:22px">16</div></div></div><span class="delta up" style="color:var(--amber)">34% <span class="muted" style="font-weight:500">от всех</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></div><div><div class="lbl">Ошибки в отчётах</div><div class="val" style="font-size:22px">2</div></div></div><span class="delta up">−3 <span class="muted" style="font-weight:500">к апрелю</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></div><div><div class="lbl">Экономия времени</div><div class="val" style="font-size:22px">26 ч.</div></div></div><span class="delta flat"><span class="muted" style="font-weight:500">в этом месяце</span></span></div>
+      </div>
+
+      <!-- row 2 -->
+      <div class="grid" style="grid-template-columns:1.5fr 1.1fr 1.1fr">
+        <div class="card">
+          <div class="card-h"><span class="t">Динамика создания отчётов</span><span class="badge b-gray" style="margin-left:auto">По месяцам ▾</span></div>
+          <div class="row" style="gap:14px;margin-bottom:8px"><span class="li2"><span class="d" style="background:#8b5cf6"></span>Всего</span><span class="li2"><span class="d" style="background:#2f66f6"></span>Автоматические</span><span class="li2"><span class="d" style="background:#f0a621"></span>Ручные</span></div>
+          <svg class="chart-svg" height="160" viewBox="0 0 340 160" preserveAspectRatio="none">
+            <line x1="0" y1="140" x2="340" y2="140" stroke="#eff1f4"/><line x1="0" y1="100" x2="340" y2="100" stroke="#eff1f4"/><line x1="0" y1="60" x2="340" y2="60" stroke="#eff1f4"/><line x1="0" y1="20" x2="340" y2="20" stroke="#eff1f4"/>
+            <polyline fill="none" stroke="#8b5cf6" stroke-width="2.4" points="12,72 76,50 142,44 208,36 274,26 330,14"/>
+            <polyline fill="none" stroke="#2f66f6" stroke-width="2.4" points="12,100 76,86 142,80 208,72 274,60 330,50"/>
+            <polyline fill="none" stroke="#f0a621" stroke-width="2.4" points="12,130 76,124 142,122 208,116 274,110 330,106"/>
+          </svg>
+          <div class="row" style="margin-top:4px"><span class="muted" style="flex:1">Дек 2024</span><span class="muted" style="flex:1;text-align:center">Янв</span><span class="muted" style="flex:1;text-align:center">Фев</span><span class="muted" style="flex:1;text-align:center">Мар</span><span class="muted" style="flex:1;text-align:center">Апр</span><span class="muted" style="flex:1;text-align:right">Май</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Отчёты по направлениям</span></div>
+          <div class="row" style="gap:14px;align-items:center">
+            <div class="donut" style="width:120px;height:120px;background:conic-gradient(#8b5cf6 0 35%,#2f66f6 35% 60%,#1fa971 60% 75%,#f0a621 75% 85%,#e5484d 85% 93%,#9aa0a8 93% 100%);flex:0 0 120px" data-l=""></div>
+            <div class="legend" style="flex:1;font-size:11.5px">
+              <div class="li2"><span class="d" style="background:#8b5cf6"></span>Продажи <b style="margin-left:auto">35%</b></div>
+              <div class="li2"><span class="d" style="background:#2f66f6"></span>Финансы <b style="margin-left:auto">25%</b></div>
+              <div class="li2"><span class="d" style="background:#1fa971"></span>Склад и запасы <b style="margin-left:auto">15%</b></div>
+              <div class="li2"><span class="d" style="background:#f0a621"></span>Производство <b style="margin-left:auto">10%</b></div>
+              <div class="li2"><span class="d" style="background:#e5484d"></span>Снабжение <b style="margin-left:auto">8%</b></div>
+              <div class="li2"><span class="d" style="background:#9aa0a8"></span>Прочее <b style="margin-left:auto">7%</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Статус отчётов</span></div>
+          <div class="row" style="gap:12px;align-items:center">
+            <div style="flex:1">
+              <div class="stat" style="padding:6px 0"><span class="row" style="gap:8px"><span style="color:var(--green)">●</span>Готовы</span><span><b>38</b> <span class="muted">79%</span></span></div>
+              <div class="stat" style="padding:6px 0"><span class="row" style="gap:8px"><span style="color:var(--amber)">●</span>В процессе</span><span><b>6</b> <span class="muted">13%</span></span></div>
+              <div class="stat" style="padding:6px 0"><span class="row" style="gap:8px"><span style="color:var(--red)">●</span>С ошибками</span><span><b>2</b> <span class="muted">4%</span></span></div>
+              <div class="stat" style="padding:6px 0"><span class="row" style="gap:8px"><span style="color:var(--ink3)">●</span>Черновики</span><span><b>2</b> <span class="muted">4%</span></span></div>
+            </div>
+            <div class="donut" style="width:110px;height:110px;background:conic-gradient(#1fa971 0 79%,#f0a621 79% 92%,#e5484d 92% 96%,#c9ccd3 96% 100%);flex:0 0 110px" data-l="48 всего" style="font-size:12px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- row 3 -->
+      <div class="grid" style="grid-template-columns:1.5fr 1fr">
+        <div class="card">
+          <div class="card-h"><span class="t">Последние отчёты</span></div>
+          <table>
+            <thead><tr><th>Название отчёта</th><th>Тип</th><th>Период</th><th>Создан</th><th>Статус</th><th>Файл</th><th></th></tr></thead>
+            <tbody id="replist"></tbody>
+          </table>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:10px">Показать все отчёты →</a>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px;flex:1">
+          <div class="card">
+            <div class="card-h"><span class="t">Популярные отчёты</span><span class="badge b-gray" style="margin-left:auto">За месяц ▾</span></div>
+            <table>
+              <thead><tr><th>Отчёт</th><th style="text-align:right">Запусков</th><th style="text-align:right">Выгрузок</th></tr></thead>
+              <tbody id="poplist"></tbody>
+            </table>
+            <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:8px">Все популярные отчёты →</a>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><span class="t">Шаблоны отчётов</span><span class="badge b-gray" style="margin-left:auto">Все шаблоны ▾</span></div>
+            <div id="tpllist"></div>
+            <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:10px">Все шаблоны отчётов →</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- row 4 activity -->
+      <div class="card">
+        <div class="card-h"><span class="t">Активность по отчётам</span></div>
+        <div class="grid g5">
+          <div><div class="muted">Создано отчётов</div><div style="font-size:22px;font-weight:700">48</div><span class="delta up">+8 к апрелю</span></div>
+          <div><div class="muted">Выгружено файлов</div><div style="font-size:22px;font-weight:700">124</div><span class="delta up">+15 к апрелю</span></div>
+          <div><div class="muted">Просмотров отчётов</div><div style="font-size:22px;font-weight:700">342</div><span class="delta up">+26 к апрелю</span></div>
+          <div><div class="muted">Ср. время создания</div><div style="font-size:22px;font-weight:700">6 мин</div><span class="delta up">−2 мин к апрелю</span></div>
+          <div><div class="muted">Экономия времени</div><div style="font-size:22px;font-weight:700">26 ч.</div><span class="delta up">+4 ч. к апрелю</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="layout.js"></script>
+<script src="store.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('reports','Отчёты','Список отчётов и выгруженные файлы');</script>
+<script src="reports.js"></script>
+</body>
+</html>

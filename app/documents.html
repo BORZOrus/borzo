@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Документы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.fico{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;font-size:8px;font-weight:800;color:#fff;flex:0 0 26px}
+.qa{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 10px;text-align:center;font-size:11.5px;font-weight:600;color:var(--ink2)}
+.qa svg{width:22px;height:22px;stroke:var(--blue);fill:none;stroke-width:1.7;margin-bottom:8px}
+.ctl{display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid var(--line2)}
+.ctl:first-child{border-top:0}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <div style="flex:1"></div>
+        <span class="btn"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>01.05.2025 – 31.05.2025</span>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+      </div>
+
+      <!-- KPI -->
+      <div class="grid g5">
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg></div><div><div class="lbl">Всего документов</div><div class="val">1 248</div></div></div><span class="delta up">+132 <span class="muted" style="font-weight:500">за период</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg></div><div><div class="lbl">Входящие</div><div class="val">286</div></div></div><span class="delta up">+28 <span class="muted" style="font-weight:500">за период</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M3 11l18-8-8 18-2-8z"/></svg></div><div><div class="lbl">Исходящие</div><div class="val">512</div></div></div><span class="delta up">+46 <span class="muted" style="font-weight:500">за период</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 18c3-1 4-8 7-8s2 5 4 5 3-3 5-3"/></svg></div><div><div class="lbl">Требуют подписи ⓘ</div><div class="val">18</div></div></div><span class="delta down">−4 <span class="muted" style="font-weight:500">за период</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--amber-soft);color:var(--amber)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></div><div><div class="lbl">Срок истекает</div><div class="val">32</div></div></div><span class="delta flat"><span class="muted" style="font-weight:500">последние 7 дней</span></span></div>
+      </div>
+
+      <div class="board" style="align-items:flex-start">
+        <!-- последние документы -->
+        <div class="card" style="flex:1;min-width:0">
+          <div class="card-h"><span class="t">Последние документы</span>
+            <span style="margin-left:auto" class="row"><span class="search" style="max-width:230px;margin-right:8px"><input id="doc-search" placeholder="Поиск по документам..."></span><span class="btn"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Фильтры</span></span></div>
+          <div class="row" style="gap:6px;margin-bottom:12px" id="doc-filters">
+            <span class="badge b-violet" data-filter="all" style="cursor:pointer">Все документы</span><span class="badge b-gray" data-filter="in" style="cursor:pointer">Входящие</span><span class="badge b-gray" data-filter="out" style="cursor:pointer">Исходящие</span><span class="badge b-gray" data-filter="inner" style="cursor:pointer">Внутренние</span>
+          </div>
+          <table>
+            <thead><tr><th>Название документа</th><th>Тип</th><th>Контрагент</th><th>Дата</th><th>Статус</th><th style="text-align:right">Размер</th></tr></thead>
+            <tbody id="doclist"></tbody>
+          </table>
+          <div class="between" style="margin-top:12px"><span class="muted" id="doc-count">Показано 1–10 из 1 248 документов</span><span class="badge b-gray" id="doc-count-badge">‹ 1 2 3 … 125 ›</span></div>
+        </div>
+
+        <!-- right rail -->
+        <div class="side-col" style="flex:0 0 300px">
+          <div class="card" style="padding:16px">
+            <div class="card-h"><span class="t">Хранилище документов</span></div>
+            <div class="row" style="gap:14px;align-items:center">
+              <div class="donut" style="width:110px;height:110px;background:conic-gradient(#8b5cf6 0 45%,#2f66f6 45% 65%,#1fa971 65% 80%,#f0a621 80% 90%,#9aa0a8 90% 100%);flex:0 0 110px" data-l=""></div>
+              <div class="legend" style="flex:1;font-size:11.5px">
+                <div class="li2"><span class="d" style="background:#8b5cf6"></span>Договоры <b style="margin-left:auto">45%</b> <span class="muted">(562)</span></div>
+                <div class="li2"><span class="d" style="background:#2f66f6"></span>Счета и акты <b style="margin-left:auto">20%</b> <span class="muted">(250)</span></div>
+                <div class="li2"><span class="d" style="background:#1fa971"></span>Спецификации <b style="margin-left:auto">15%</b> <span class="muted">(187)</span></div>
+                <div class="li2"><span class="d" style="background:#f0a621"></span>КП и предложения <b style="margin-left:auto">10%</b> <span class="muted">(125)</span></div>
+                <div class="li2"><span class="d" style="background:#9aa0a8"></span>Прочие <b style="margin-left:auto">10%</b> <span class="muted">(124)</span></div>
+              </div>
+            </div>
+            <div class="between" style="margin:14px 0 4px"><span class="muted">Использовано: 4.8 ГБ из 10 ГБ</span><b style="font-size:12px">48%</b></div>
+            <div class="meter"><i style="width:48%;background:var(--blue)"></i></div>
+          </div>
+
+          <div class="card" style="padding:16px">
+            <div class="card-h"><span class="t">Документы на контроле</span></div>
+            <div id="ctrllist"></div>
+          </div>
+
+          <div class="card" style="padding:16px">
+            <div class="card-h"><span class="t">Быстрые действия</span></div>
+            <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+              <div class="qa" id="qa-upload" style="cursor:pointer"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Загрузить документ</div>
+              <div class="qa" id="qa-create" style="cursor:pointer"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Создать документ</div>
+              <div class="qa" id="qa-folder" style="cursor:pointer"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>Создать папку</div>
+              <div class="qa" id="qa-tpl" style="cursor:pointer"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg>Шаблоны</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="layout.js"></script>
+<script src="store.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('documents','Документы','Управление документами и шаблонами');</script>
+<script src="documents.js"></script>
+</body>
+</html>

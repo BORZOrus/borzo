@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Аналитика</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.toggle{width:38px;height:21px;border-radius:12px;background:var(--blue);position:relative;flex:0 0 38px}
+.toggle::after{content:"";position:absolute;top:2px;right:2px;width:17px;height:17px;border-radius:50%;background:#fff}
+.pf-row{display:grid;grid-template-columns:1.1fr auto auto 90px;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line2)}
+.pf-row:first-child{border-top:0}
+.rank{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line2)}
+.rank:first-child{border-top:0}
+.rank .n{width:20px;color:var(--ink3);font-weight:700}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <div style="flex:1"></div>
+        <span class="btn"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>01.05.2025 – 31.05.2025 ▾</span>
+        <span class="row" style="gap:8px;font-weight:600;font-size:12.5px"><span>Сравнить с апрелем</span><span class="toggle"></span></span>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Фильтры</button>
+      </div>
+
+      <!-- TOP: KPI + charts (left) | AI rail (right) -->
+      <div class="board">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+          <div class="grid g5">
+            <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 20V10M10 20V4M16 20v-7M20 20H4"/></svg></div></div><div class="lbl" style="margin-top:8px">Выручка за месяц</div><div class="val" style="font-size:21px">16 300 000 ₸</div><span class="delta up">+18,7% <span class="muted" style="font-weight:500">к апрелю</span></span><svg class="chart-svg" height="26" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline fill="none" stroke="#8b5cf6" stroke-width="2" points="0,22 40,18 80,16 120,12 160,8 200,3"/></svg></div>
+            <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 18L10 12l4 4 6-8"/><path d="M20 8h-4M20 8v4"/></svg></div></div><div class="lbl" style="margin-top:8px">Валовая прибыль</div><div class="val" style="font-size:21px">6 724 000 ₸</div><span class="delta up">+16,2% <span class="muted" style="font-weight:500">к апрелю</span></span><svg class="chart-svg" height="26" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline fill="none" stroke="#1fa971" stroke-width="2" points="0,20 40,16 80,18 120,10 160,9 200,4"/></svg></div>
+            <div class="card kpi"><div class="top"><div class="ic" style="background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l8 4.5v9L12 21 4 16.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5"/></svg></div></div><div class="lbl" style="margin-top:8px">Столов произведено</div><div class="val" style="font-size:21px">628 шт.</div><span class="delta up">+12,4% <span class="muted" style="font-weight:500">к апрелю</span></span><svg class="chart-svg" height="26" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline fill="none" stroke="#2f66f6" stroke-width="2" points="0,22 40,20 80,14 120,15 160,8 200,6"/></svg></div>
+            <div class="card kpi"><div class="top"><div class="ic" style="background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg></div></div><div class="lbl" style="margin-top:8px">Конверсия лидов</div><div class="val" style="font-size:21px">21,6%</div><span class="delta down">−1,3 п.п. <span class="muted" style="font-weight:500">к апрелю</span></span><svg class="chart-svg" height="26" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline fill="none" stroke="#e5484d" stroke-width="2" points="0,8 40,10 80,7 120,14 160,12 200,16"/></svg></div>
+            <div class="card kpi"><div class="top"><div class="ic" style="background:var(--amber-soft);color:var(--amber)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg></div></div><div class="lbl" style="margin-top:8px">Средний чек</div><div class="val" style="font-size:21px">1 245 000 ₸</div><span class="delta up">+6,8% <span class="muted" style="font-weight:500">к апрелю</span></span><svg class="chart-svg" height="26" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline fill="none" stroke="#f0a621" stroke-width="2" points="0,20 40,18 80,14 120,15 160,9 200,6"/></svg></div>
+          </div>
+
+          <div class="grid" style="grid-template-columns:1.5fr 1.15fr 1.1fr">
+            <!-- Сводка по месяцам -->
+            <div class="card">
+              <div class="card-h"><span class="t">Сводка по месяцам</span><span class="badge b-gray" style="margin-left:auto">6 месяцев ▾</span></div>
+              <div class="row" style="gap:14px;flex-wrap:wrap;margin-bottom:8px"><span class="li2"><span class="d" style="background:#8b5cf6"></span>Выручка, ₸</span><span class="li2"><span class="d" style="background:#1fa971"></span>Прибыль, ₸</span><span class="li2"><span class="d" style="background:#2f66f6"></span>Заказы, шт.</span><span class="li2"><span class="d" style="background:#f0a621"></span>Лиды, шт.</span></div>
+              <svg class="chart-svg" height="150" viewBox="0 0 340 150" preserveAspectRatio="none">
+                <line x1="0" y1="130" x2="340" y2="130" stroke="#eff1f4"/><line x1="0" y1="90" x2="340" y2="90" stroke="#eff1f4"/><line x1="0" y1="50" x2="340" y2="50" stroke="#eff1f4"/><line x1="0" y1="12" x2="340" y2="12" stroke="#eff1f4"/>
+                <polyline fill="none" stroke="#8b5cf6" stroke-width="2.4" points="10,70 76,58 142,48 208,40 274,30 330,16"/>
+                <polyline fill="none" stroke="#f0a621" stroke-width="2.4" points="10,96 76,82 142,74 208,64 274,52 330,34"/>
+                <polyline fill="none" stroke="#1fa971" stroke-width="2.4" points="10,116 76,110 142,102 208,96 274,86 330,76"/>
+                <polyline fill="none" stroke="#2f66f6" stroke-width="2.4" points="10,128 76,124 142,118 208,110 274,100 330,90"/>
+              </svg>
+              <div class="row" style="margin-top:4px"><span class="muted" style="flex:1">Дек 24</span><span class="muted" style="flex:1;text-align:center">Янв</span><span class="muted" style="flex:1;text-align:center">Фев</span><span class="muted" style="flex:1;text-align:center">Мар</span><span class="muted" style="flex:1;text-align:center">Апр</span><span class="muted" style="flex:1;text-align:right">Май</span></div>
+            </div>
+
+            <!-- План/факт -->
+            <div class="card">
+              <div class="card-h"><span class="t">План / факт по метрикам</span></div>
+              <div class="row" style="gap:14px;margin-bottom:6px"><span class="li2"><span class="d" style="background:#c9ccd3"></span>План</span><span class="li2"><span class="d" style="background:#8b5cf6"></span>Факт</span><span class="muted" style="margin-left:auto">% выполн.</span></div>
+              <div class="pf-row"><span>Выручка</span><span class="muted" style="font-size:11px">16,0 млн</span><b style="font-size:11px">16,3 млн</b><span class="row" style="gap:5px"><div class="meter" style="flex:1"><i style="width:100%;background:var(--green)"></i></div><b style="font-size:11px">102%</b></span></div>
+              <div class="pf-row"><span>Производство</span><span class="muted" style="font-size:11px">600 шт</span><b style="font-size:11px">628 шт</b><span class="row" style="gap:5px"><div class="meter" style="flex:1"><i style="width:100%;background:var(--green)"></i></div><b style="font-size:11px">105%</b></span></div>
+              <div class="pf-row"><span>Маржа</span><span class="muted" style="font-size:11px">36%</span><b style="font-size:11px">41,2%</b><span class="row" style="gap:5px"><div class="meter" style="flex:1"><i style="width:100%;background:var(--green)"></i></div><b style="font-size:11px">114%</b></span></div>
+              <div class="pf-row"><span>Отгрузки</span><span class="muted" style="font-size:11px">580 шт</span><b style="font-size:11px">615 шт</b><span class="row" style="gap:5px"><div class="meter" style="flex:1"><i style="width:100%;background:var(--green)"></i></div><b style="font-size:11px">106%</b></span></div>
+            </div>
+
+            <!-- Воронка -->
+            <div class="card">
+              <div class="card-h"><span class="t">Воронка продаж</span></div>
+              <table>
+                <thead><tr><th>Этап</th><th style="text-align:right">Кол-во</th><th style="text-align:right">Конверсия</th></tr></thead>
+                <tbody>
+                  <tr><td style="font-weight:600">Лид</td><td style="text-align:right">1 248</td><td style="text-align:right">100%</td></tr>
+                  <tr><td style="font-weight:600">Квалификация</td><td style="text-align:right">742</td><td style="text-align:right">59,5%</td></tr>
+                  <tr><td style="font-weight:600">Замер</td><td style="text-align:right">421</td><td style="text-align:right">33,7%</td></tr>
+                  <tr><td style="font-weight:600">Счёт / договор</td><td style="text-align:right">231</td><td style="text-align:right">18,5%</td></tr>
+                  <tr><td style="font-weight:600">Оплата</td><td style="text-align:right">176</td><td style="text-align:right">14,1%</td></tr>
+                </tbody>
+              </table>
+              <div class="funnel" style="margin-top:8px"><i style="width:100%;background:#8b5cf6"></i><i style="width:78%;background:#8b5cf6;opacity:.85"></i><i style="width:55%;background:#8b5cf6;opacity:.7"></i><i style="width:36%;background:#8b5cf6;opacity:.55"></i><i style="width:24%;background:#8b5cf6;opacity:.4"></i></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI rail -->
+        <div class="side-col" style="flex:0 0 240px">
+          <div class="card" style="padding:16px">
+            <div class="card-h" style="margin-bottom:10px"><span class="t" style="font-size:13px;color:var(--blue)">✦ AI-аналитик BORZO</span></div>
+            <span class="badge b-green" style="margin-bottom:12px;display:inline-block">● Онлайн</span>
+            <div class="muted" style="font-weight:600;margin-bottom:4px">Сегодня AI-аналитик:</div>
+            <div class="aa"><span class="ok" style="background:var(--blue-soft);color:var(--blue)">▣</span>Собрал сводку по продажам и производству</div>
+            <div class="aa"><span class="ok" style="background:var(--blue-soft);color:var(--blue)">◷</span>Нашёл 3 отклонения от плана</div>
+            <div class="aa"><span class="ok" style="background:var(--blue-soft);color:var(--blue)">▤</span>Зафиксировал снижение конверсии в замер</div>
+            <div class="aa"><span class="ok" style="background:var(--blue-soft);color:var(--blue)">▦</span>Подготовил прогноз до конца месяца</div>
+            <div class="quote" style="margin-top:12px"><div class="h">Рекомендация AI</div>Усилить замеры в Алматы и ускорить дозаказ замков — это даст +8–10% к выполнению плана.<br><a style="color:var(--blue);font-weight:600;display:inline-block;margin-top:8px">Смотреть детали →</a></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- middle 5 cards -->
+      <div class="grid g5">
+        <div class="card">
+          <div class="card-h"><span class="t">Производственная эффективность</span></div>
+          <div class="wh-row"><div class="between"><span>Металлоцех</span><b>92%</b></div><div class="meter"><i style="width:92%;background:var(--violet)"></i></div></div>
+          <div class="wh-row"><div class="between"><span>Малярка</span><b>87%</b></div><div class="meter"><i style="width:87%;background:var(--blue)"></i></div></div>
+          <div class="wh-row"><div class="between"><span>Сборка</span><b>94%</b></div><div class="meter"><i style="width:94%;background:var(--green)"></i></div></div>
+          <div class="between" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+            <div><div class="muted">Ср. время цикла</div><b style="font-size:15px">2,7 дня</b><div class="delta up" style="font-size:10px">−0,3 дня к апрелю</div></div>
+            <div style="text-align:right"><div class="muted">OEE</div><b style="font-size:15px">87%</b><div class="delta up" style="font-size:10px">+3 п.п. к апрелю</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Аналитика складов</span></div>
+          <div class="between" style="margin-bottom:10px"><span class="muted">Оборачиваемость</span><span style="text-align:right"><b style="font-size:15px">4,3 оборота</b><div class="delta up" style="font-size:10px">+0,6 к апрелю</div></span></div>
+          <div class="between" style="margin-bottom:12px"><span class="muted">Критические дефициты</span><b style="color:var(--red)">5 позиций ⚠</b></div>
+          <div class="muted" style="font-weight:600;margin-bottom:6px">Топ дорогих групп запасов</div>
+          <div class="rank"><span class="n">1</span><span style="flex:1">Столешницы HPL</span><b>5 240 000 ₸</b></div>
+          <div class="rank"><span class="n">2</span><span style="flex:1">Металлокаркас</span><b>3 890 000 ₸</b></div>
+          <div class="rank"><span class="n">3</span><span style="flex:1">Механизмы</span><b>2 710 000 ₸</b></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Финансовая структура</span></div>
+          <div class="row" style="gap:12px;align-items:center">
+            <div class="donut" style="width:96px;height:96px;background:conic-gradient(#2f66f6 0 47%,#8b5cf6 47% 69%,#f0a621 69% 77%,#1fa971 77% 84%,#39c0c8 84% 90%,#c9ccd3 90% 100%);flex:0 0 96px" data-l=""></div>
+            <div class="legend" style="flex:1;font-size:11px">
+              <div class="li2"><span class="d" style="background:#2f66f6"></span>Материалы <b style="margin-left:auto">47%</b></div>
+              <div class="li2"><span class="d" style="background:#8b5cf6"></span>ФОТ <b style="margin-left:auto">22%</b></div>
+              <div class="li2"><span class="d" style="background:#f0a621"></span>Реклама <b style="margin-left:auto">8%</b></div>
+              <div class="li2"><span class="d" style="background:#1fa971"></span>Аренда <b style="margin-left:auto">7%</b></div>
+              <div class="li2"><span class="d" style="background:#39c0c8"></span>Логистика <b style="margin-left:auto">6%</b></div>
+              <div class="li2"><span class="d" style="background:#c9ccd3"></span>Прочее <b style="margin-left:auto">10%</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">География продаж</span></div>
+          <div class="rank"><span class="n">1</span><span style="flex:1">Астана</span><span style="text-align:right"><b>6 120 000 ₸</b><div class="muted">37,6%</div></span></div>
+          <div class="rank"><span class="n">2</span><span style="flex:1">Алматы</span><span style="text-align:right"><b>4 980 000 ₸</b><div class="muted">30,6%</div></span></div>
+          <div class="rank"><span class="n">3</span><span style="flex:1">Шымкент</span><span style="text-align:right"><b>1 980 000 ₸</b><div class="muted">12,1%</div></span></div>
+          <div class="rank"><span class="n">4</span><span style="flex:1">Караганда</span><span style="text-align:right"><b>1 460 000 ₸</b><div class="muted">9,0%</div></span></div>
+          <div class="rank"><span class="n">5</span><span style="flex:1">Актобе</span><span style="text-align:right"><b>760 000 ₸</b><div class="muted">4,7%</div></span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Каналы лидов</span></div>
+          <div class="row" style="gap:12px;align-items:center">
+            <div class="donut" style="width:96px;height:96px;background:conic-gradient(#8b5cf6 0 34%,#1fa971 34% 62%,#2f66f6 62% 82%,#f0a621 82% 92%,#e5484d 92% 100%);flex:0 0 96px" data-l=""></div>
+            <div class="legend" style="flex:1;font-size:11px">
+              <div class="li2"><span class="d" style="background:#8b5cf6"></span>Instagram <b style="margin-left:auto">34%</b></div>
+              <div class="li2"><span class="d" style="background:#1fa971"></span>WhatsApp <b style="margin-left:auto">28%</b></div>
+              <div class="li2"><span class="d" style="background:#2f66f6"></span>Сайт <b style="margin-left:auto">20%</b></div>
+              <div class="li2"><span class="d" style="background:#f0a621"></span>Kaspi <b style="margin-left:auto">10%</b></div>
+              <div class="li2"><span class="d" style="background:#e5484d"></span>Дилеры <b style="margin-left:auto">8%</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- bottom row -->
+      <div class="grid" style="grid-template-columns:1fr 1fr 2fr">
+        <div class="card">
+          <div class="card-h"><span class="t">Топ модели</span></div>
+          <table>
+            <thead><tr><th>#</th><th>Модель</th><th style="text-align:right">Продано</th><th style="text-align:right">Выручка, ₸</th></tr></thead>
+            <tbody>
+              <tr><td class="muted">1</td><td style="font-weight:600">LUX 3,0</td><td style="text-align:right">128</td><td style="text-align:right">3 820 000</td></tr>
+              <tr><td class="muted">2</td><td style="font-weight:600">LUX 3,5</td><td style="text-align:right">104</td><td style="text-align:right">3 210 000</td></tr>
+              <tr><td class="muted">3</td><td style="font-weight:600">GEOMETRY 3,5</td><td style="text-align:right">83</td><td style="text-align:right">2 560 000</td></tr>
+              <tr><td class="muted">4</td><td style="font-weight:600">GEOMETRY 4,0</td><td style="text-align:right">69</td><td style="text-align:right">2 140 000</td></tr>
+              <tr><td class="muted">5</td><td style="font-weight:600">Консоль LUX</td><td style="text-align:right">54</td><td style="text-align:right">1 320 000</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Узкие места</span></div>
+          <div class="att-card" style="margin-bottom:10px"><div class="h">⚠ Нехватка сварщиков</div><div class="muted">Задержки в сборке на 2–3 дня.</div></div>
+          <div class="att-card" style="margin-bottom:10px"><div class="h">⚠ Замки ниже дозаказа</div><div class="muted">Риск остановки производства через 5 дней.</div></div>
+          <div class="att-card"><div class="h">⚠ Кассовый разрыв</div><div class="muted">−1,2 млн ₸ к 10 июня при текущем графике оплат.</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Ключевые отклонения</span></div>
+          <table>
+            <thead><tr><th>Метрика</th><th>План</th><th>Факт</th><th>Отклонение</th><th>Комментарий</th></tr></thead>
+            <tbody>
+              <tr><td style="font-weight:600">Выручка</td><td>16 000 000 ₸</td><td>16 300 000 ₸</td><td style="color:var(--green);font-weight:600">+300 000 ₸ (+1,9%)</td><td class="muted">Перевыполнение за счёт Алматы и Астаны</td></tr>
+              <tr><td style="font-weight:600">Конверсия лидов</td><td>22,9%</td><td>21,6%</td><td style="color:var(--red);font-weight:600">−1,3 п.п.</td><td class="muted">Снижение на этапе замера</td></tr>
+              <tr><td style="font-weight:600">Производство, шт</td><td>600</td><td>628</td><td style="color:var(--green);font-weight:600">+28 шт (+4,7%)</td><td class="muted">Доп. смены в сборке</td></tr>
+              <tr><td style="font-weight:600">Средний чек</td><td>1 165 000 ₸</td><td>1 245 000 ₸</td><td style="color:var(--green);font-weight:600">+80 000 ₸ (+6,9%)</td><td class="muted">Рост за счёт LUX 3,0 и 3,5</td></tr>
+              <tr><td style="font-weight:600">Маржа</td><td>36%</td><td>41,2%</td><td style="color:var(--green);font-weight:600">+5,2 п.п.</td><td class="muted">Оптимизация закупочных цен</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="layout.js"></script>
+<script>BORZO.mount('analytics','Аналитика','Сводная бизнес-аналитика и KPI BORZO');</script>
+</body>
+</html>

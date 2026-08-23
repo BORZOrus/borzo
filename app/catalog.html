@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Каталог</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <div class="search" style="max-width:none;flex:1"><svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;flex:0 0 15px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="cat-search" placeholder="Поиск по моделям, SKU, категориям..."></div>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Фильтры</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></svg>Импорт</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+        <button class="btn primary" id="cat-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Новый товар</button>
+      </div>
+
+      <!-- KPI -->
+      <div class="grid g5">
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l8 4.5v9L12 21 4 16.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5"/></svg></div><div><div class="lbl">Активные модели</div><div class="val">18</div></div><svg class="spark" width="70" height="38" viewBox="0 0 70 38"><polyline fill="none" stroke="#1fa971" stroke-width="2" points="0,30 14,22 28,26 42,16 56,14 70,6"/></svg></div><span class="delta up">↑ +12% <span class="muted" style="font-weight:500">к прошлому месяцу</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 4h8l8 8-8 8-8-8z"/><circle cx="8" cy="8" r="1.4"/></svg></div><div><div class="lbl">Варианты / SKU</div><div class="val">42</div></div><svg class="spark" width="70" height="38" viewBox="0 0 70 38"><polyline fill="none" stroke="#2f66f6" stroke-width="2" points="0,28 14,26 28,18 42,20 56,12 70,8"/></svg></div><span class="delta up">↑ +9% <span class="muted" style="font-weight:500">к прошлому месяцу</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--amber-soft);color:var(--amber)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="8" cy="8" r="2"/><circle cx="16" cy="16" r="2"/><path d="M6 18L18 6"/></svg></div><div><div class="lbl">Средняя маржа</div><div class="val">36%</div></div><svg class="spark" width="70" height="38" viewBox="0 0 70 38"><polyline fill="none" stroke="#f0a621" stroke-width="2" points="0,24 14,26 28,18 42,22 56,14 70,10"/></svg></div><span class="delta up">↑ +2 п.п. <span class="muted" style="font-weight:500">к прошлому месяцу</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg></div><div><div class="lbl">Хиты продаж</div><div class="val" style="font-size:18px">GEOMETRY 3,5 м</div></div><svg class="spark" width="56" height="38" viewBox="0 0 56 38"><polyline fill="none" stroke="#8b5cf6" stroke-width="2" points="0,26 11,20 22,22 34,12 45,14 56,6"/></svg></div><span class="delta up">↑ №1 модель</span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 12a8 8 0 0 1 13-6M20 6v4h-4"/><path d="M20 12a8 8 0 0 1-13 6M4 18v-4h4"/></svg></div><div><div class="lbl">Карточки требуют обновления</div><div class="val">3</div></div><svg class="spark" width="56" height="38" viewBox="0 0 56 38"><polyline fill="none" stroke="#e5484d" stroke-width="2" points="0,20 11,24 22,16 34,22 45,12 56,10"/></svg></div><span class="delta up">↑ +1 <span class="muted" style="font-weight:500">к прошлому месяцу</span></span></div>
+      </div>
+
+      <!-- middle -->
+      <div class="grid" style="grid-template-columns:1.5fr 1fr 1fr">
+        <!-- каталог изделий -->
+        <div class="card">
+          <div class="card-h"><span class="t">Каталог изделий</span></div>
+          <table>
+            <thead><tr><th>Товар</th><th>Категория</th><th>Размер</th><th>Цвета</th><th>Цена</th><th>Себест.</th><th>Маржа</th><th>Статус</th><th>Обновл.</th></tr></thead>
+            <tbody id="catalist">
+              <tr><td style="color:var(--blue);font-weight:600">▭ LUX 3,5 м</td><td>Стол-трансформер</td><td>350 см</td><td class="muted">Белый, Кремовый мрамор</td><td style="font-weight:600">319 000 ₸</td><td>197 000 ₸</td><td>38%</td><td><span class="badge b-green">Активен</span></td><td class="muted">сегодня</td></tr>
+              <tr><td style="color:var(--blue);font-weight:600">▭ LUX 2,5 м</td><td>Стол-трансформер</td><td>250 см</td><td class="muted">Белый, Кремовый мрамор</td><td style="font-weight:600">236 000 ₸</td><td>144 000 ₸</td><td>39%</td><td><span class="badge b-green">Активен</span></td><td class="muted">вчера</td></tr>
+              <tr><td style="color:var(--blue);font-weight:600">▭ LUX 4,0 м</td><td>Стол-трансформер</td><td>400 см</td><td class="muted">Белый, Кремовый мрамор</td><td style="font-weight:600">344 000 ₸</td><td>209 000 ₸</td><td>39%</td><td><span class="badge b-green">Активен</span></td><td class="muted">2 дня назад</td></tr>
+              <tr style="background:var(--blue-soft)"><td style="color:var(--blue);font-weight:600">▭ GEOMETRY 3,5 м</td><td>Стол-трансформер</td><td>350 см</td><td class="muted">Белый, Кремовый мрамор</td><td style="font-weight:600">256 000 ₸</td><td>160 000 ₸</td><td>37%</td><td><span class="badge b-violet">Хит</span></td><td class="muted">сегодня</td></tr>
+              <tr><td style="color:var(--blue);font-weight:600">▭ GEOMETRY 2,5 м</td><td>Стол-трансформер</td><td>250 см</td><td class="muted">Белый, Кремовый мрамор</td><td style="font-weight:600">206 000 ₸</td><td>123 000 ₸</td><td>40%</td><td><span class="badge b-green">Активен</span></td><td class="muted">вчера</td></tr>
+              <tr><td style="color:var(--blue);font-weight:600">▭ Каскад LUX</td><td>Консоль</td><td>120×45 см</td><td class="muted">Белый, Кремовый</td><td style="font-weight:600">109 000 ₸</td><td>58 000 ₸</td><td>47%</td><td><span class="badge b-green">Активен</span></td><td class="muted">3 дня назад</td></tr>
+            </tbody>
+          </table>
+          <div class="between" style="margin-top:12px"><span class="muted">Показано 1–6 из 18 товаров</span><span class="row" style="gap:8px"><span class="badge b-gray">‹ 1 2 3 ›</span><span class="badge b-gray">10 на страницу ▾</span></span></div>
+        </div>
+
+        <!-- карточка товара -->
+        <div class="card">
+          <div class="card-h"><span class="t">Карточка товара</span><span style="margin-left:auto;color:var(--ink3)">☆ ⋮</span></div>
+          <div id="pc-name" style="font-size:17px;font-weight:700;margin-bottom:10px">GEOMETRY 3,5 м</div>
+          <div style="background:linear-gradient(180deg,#f3f5f9,#e8ecf3);border-radius:12px;padding:20px;display:grid;place-items:center;margin-bottom:12px">
+            <svg width="200" height="80" viewBox="0 0 200 80"><ellipse cx="100" cy="24" rx="92" ry="15" fill="#f4efe6" stroke="#e3d9c5"/><ellipse cx="100" cy="21" rx="92" ry="15" fill="#fbf8f2" stroke="#e3d9c5"/><rect x="52" y="30" width="10" height="40" fill="#d4af37"/><rect x="138" y="30" width="10" height="40" fill="#d4af37"/><rect x="44" y="70" width="26" height="5" rx="2" fill="#c79f2f"/><rect x="130" y="70" width="26" height="5" rx="2" fill="#c79f2f"/></svg>
+          </div>
+          <div class="row" style="gap:6px;margin-bottom:14px">
+            <button class="btn primary" style="padding:7px 10px;font-size:11.5px"><svg viewBox="0 0 24 24"><path d="M4 20h4L18 10l-4-4L4 16z"/></svg>Редактировать</button>
+            <button class="btn" style="padding:7px 10px;font-size:11.5px"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V4h12"/></svg>Дублировать</button>
+            <button class="btn" style="padding:7px 10px;font-size:11.5px"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8M10 6H5v13h13v-5"/></svg>На сайте</button>
+          </div>
+          <div class="stat" style="padding:5px 0"><span class="k">SKU</span><span class="v" id="pc-sku" style="font-size:12px">BKZ-GEO-35</span></div>
+          <div class="stat" style="padding:5px 0"><span class="k">Категория</span><span class="v" id="pc-cat" style="font-size:12px">Стол-трансформер</span></div>
+          <div class="stat" style="padding:5px 0"><span class="k">Размер</span><span class="v" id="pc-size" style="font-size:12px">350 × 100 см</span></div>
+          <div class="stat" style="padding:5px 0"><span class="k">Цена</span><span class="v" id="pc-price" style="font-size:12px">256 000 ₸</span></div>
+          <div class="stat" style="padding:5px 0"><span class="k">Себестоимость</span><span class="v" id="pc-cost" style="font-size:12px">160 000 ₸</span></div>
+          <div class="stat" style="padding:5px 0"><span class="k">Маржа</span><span class="v" id="pc-margin" style="font-size:12px;color:var(--blue)">37%</span></div>
+          <div class="stat" style="padding:5px 0"><span class="k">Статус</span><span class="badge b-violet" id="pc-status">Хит продаж</span></div>
+          <div class="stat" style="padding:5px 0"><span class="k">Обновлено</span><span class="muted">сегодня в 09:17</span></div>
+          <div class="muted" style="font-weight:600;margin:12px 0 8px">Варианты цветов</div>
+          <div class="row" style="gap:14px;margin-bottom:12px">
+            <span class="row" style="gap:6px"><span style="width:22px;height:22px;border-radius:50%;background:#fbf8f2;border:1px solid var(--line)"></span><span style="font-size:11.5px">Белый мрамор</span></span>
+            <span class="row" style="gap:6px"><span style="width:22px;height:22px;border-radius:50%;background:#e8dcc0;border:1px solid var(--line)"></span><span style="font-size:11.5px">Кремовый мрамор</span></span>
+            <span class="row" style="gap:6px"><span style="width:22px;height:22px;border-radius:50%;background:#1b1b1b"></span><span style="font-size:11.5px">Чёрный</span></span>
+          </div>
+          <div class="muted" style="font-weight:600;margin-bottom:8px">Комплектация / материалы</div>
+          <div class="row" style="gap:6px;flex-wrap:wrap">
+            <span class="badge b-gray">Камень LUX</span><span class="badge b-gray">Металл</span><span class="badge b-gray">МДФ</span><span class="badge b-gray">Фурнитура</span><span class="badge b-gray">Покрытие премиум</span>
+          </div>
+        </div>
+
+        <!-- AI агент -->
+        <div class="card">
+          <div class="card-h"><span class="t" style="color:var(--blue)">✦ AI-агент каталога BORZO</span><span class="badge b-green" style="margin-left:auto">Онлайн</span></div>
+          <div class="muted" style="font-weight:600;margin-bottom:4px">Аналитика сегодня</div>
+          <div class="aa"><span class="ok">✓</span>Проверил актуальность 18 цен</div>
+          <div class="aa"><span class="ok">✓</span>Нашёл 3 запроса без полного контента</div>
+          <div class="aa"><span class="ok">✓</span>Обновил SEO-описания 6 товаров</div>
+          <div class="aa"><span class="ok">✓</span>Подготовил рекомендации по комплектации</div>
+          <div class="quote"><div class="h">Рекомендация агента</div>Для GEOMETRY 3,5 м добавить в карточку видео механизма и блок «2+ ложки раскладывания». Это повысит конверсию.</div>
+          <div class="quote"><div class="h">Что ещё улучшить</div>У 6 моделей в смарт-тумбах не хватает фотографий и видео. Для них создайте и добавьте блок из состава интерьера.</div>
+        </div>
+      </div>
+
+      <!-- bottom -->
+      <div class="grid" style="grid-template-columns:1fr 1fr 1.2fr">
+        <!-- категории и структура -->
+        <div class="card">
+          <div class="card-h"><span class="t">Категории и структура</span></div>
+          <div class="row" style="gap:16px;align-items:flex-start">
+            <div class="donut" style="width:120px;height:120px;background:conic-gradient(#2f66f6 0 50%,#1fa971 50% 68%,#f0a621 68% 80%,#8b5cf6 80% 90%,#c9ccd3 90% 100%);flex:0 0 120px" data-l="18"></div>
+            <div style="flex:1">
+              <div class="legend">
+                <div class="li2"><span class="d" style="background:#2f66f6"></span>Столы-трансформеры <b style="margin-left:auto">50%</b></div>
+                <div class="li2"><span class="d" style="background:#1fa971"></span>Консоли <b style="margin-left:auto">18%</b></div>
+                <div class="li2"><span class="d" style="background:#f0a621"></span>Буфеты <b style="margin-left:auto">12%</b></div>
+                <div class="li2"><span class="d" style="background:#8b5cf6"></span>Тумбы <b style="margin-left:auto">10%</b></div>
+                <div class="li2"><span class="d" style="background:#c9ccd3"></span>Прочее <b style="margin-left:auto">10%</b></div>
+              </div>
+            </div>
+          </div>
+          <div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:14px">
+            <div class="muted" style="font-weight:600;margin-bottom:8px">Потенциал допродаж</div>
+            <div class="aa" style="padding:5px 0"><span class="ava">1</span>Камень → добавить чёрный цвет и мрамор</div>
+            <div class="aa" style="padding:5px 0"><span class="ava">2</span>Фурнитура → добавить доводчики</div>
+            <div class="aa" style="padding:5px 0"><span class="ava">3</span>Консоли → добавить подстолья</div>
+            <div class="aa" style="padding:5px 0"><span class="ava">4</span>Тумбы → добавить вставки камень</div>
+            <div class="aa" style="padding:5px 0"><span class="ava">5</span>Товары → добавить фото</div>
+          </div>
+        </div>
+
+        <!-- материалы и комплектация -->
+        <div class="card">
+          <div class="card-h"><span class="t">Материалы и комплектация</span><span class="badge b-red" style="margin-left:auto">⚠ Низкие запасы у 2 позиций</span></div>
+          <table>
+            <thead><tr><th>Материал / компонент</th><th>В наличии</th><th>Остаток</th><th>Статус</th></tr></thead>
+            <tbody>
+              <tr><td style="font-weight:600">МДФ ЛДСП</td><td>8 изделий</td><td><span style="color:var(--red);font-weight:600">мало</span></td><td><span class="badge b-amber">Нужно</span></td></tr>
+              <tr><td style="font-weight:600">Металл, основание</td><td>5 изделий</td><td class="muted">норма</td><td><span class="badge b-green">Норма</span></td></tr>
+              <tr><td style="font-weight:600">Камень LUX, белый</td><td>6 изделий</td><td><span style="color:var(--red);font-weight:600">мало</span></td><td><span class="badge b-amber">Нужно</span></td></tr>
+              <tr><td style="font-weight:600">Премиальная фурнитура</td><td>3 изделия</td><td class="muted">норма</td><td><span class="badge b-green">Норма</span></td></tr>
+              <tr><td style="font-weight:600">LED-подсветка</td><td>4 изделия</td><td class="muted">норма</td><td><span class="badge b-green">Норма</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- цены и маржинальность -->
+        <div class="card">
+          <div class="card-h"><span class="t">Цены и маржинальность</span></div>
+          <div class="between" style="margin-bottom:16px">
+            <div><div class="muted">Средняя цена</div><div style="font-size:19px;font-weight:700">298 000 ₸</div></div>
+            <div style="text-align:center"><div class="muted">Средняя маржа</div><div style="font-size:19px;font-weight:700">36%</div></div>
+            <div style="text-align:right"><div class="muted">Обновлено за неделю</div><div style="font-size:19px;font-weight:700">7 карточек</div></div>
+          </div>
+          <div class="row" style="gap:14px;margin-bottom:8px"><span class="li2"><span class="d" style="background:#2f66f6"></span>Цена, тыс. ₸</span><span class="li2"><span class="d" style="background:#1fa971"></span>Маржа, %</span></div>
+          <div class="row" style="align-items:flex-end;gap:14px;height:130px;padding:0 4px">
+            <div style="flex:1;display:flex;align-items:flex-end;gap:3px;justify-content:center;height:100%"><div style="width:14px;height:88px;background:var(--blue);border-radius:4px 4px 0 0"></div><div style="width:14px;height:72px;background:var(--green);border-radius:4px 4px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:3px;justify-content:center;height:100%"><div style="width:14px;height:66px;background:var(--blue);border-radius:4px 4px 0 0"></div><div style="width:14px;height:74px;background:var(--green);border-radius:4px 4px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:3px;justify-content:center;height:100%"><div style="width:14px;height:95px;background:var(--blue);border-radius:4px 4px 0 0"></div><div style="width:14px;height:74px;background:var(--green);border-radius:4px 4px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:3px;justify-content:center;height:100%"><div style="width:14px;height:70px;background:var(--blue);border-radius:4px 4px 0 0"></div><div style="width:14px;height:70px;background:var(--green);border-radius:4px 4px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:3px;justify-content:center;height:100%"><div style="width:14px;height:57px;background:var(--blue);border-radius:4px 4px 0 0"></div><div style="width:14px;height:76px;background:var(--green);border-radius:4px 4px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:3px;justify-content:center;height:100%"><div style="width:14px;height:88px;background:var(--blue);border-radius:4px 4px 0 0"></div><div style="width:14px;height:66px;background:var(--green);border-radius:4px 4px 0 0"></div></div>
+          </div>
+          <div class="row" style="margin-top:6px"><span class="muted" style="flex:1;text-align:center">LUX 3,5</span><span class="muted" style="flex:1;text-align:center">LUX 2,5</span><span class="muted" style="flex:1;text-align:center">LUX 4,0</span><span class="muted" style="flex:1;text-align:center">GEO 3,5</span><span class="muted" style="flex:1;text-align:center">GEO 2,5</span><span class="muted" style="flex:1;text-align:center">GEO 4,0</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="store.js"></script>
+<script src="layout.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('catalog','Каталог','Модели, комплектации, цены и материалы BORZO');</script>
+<script src="catalog.js"></script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Производство</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <div style="flex:1"></div>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Фильтры</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Смена</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+        <button class="btn primary" id="prod-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Запустить заказ</button>
+      </div>
+
+      <!-- KPI -->
+      <div class="grid g5">
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l8 4.5v9L12 21 4 16.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5"/></svg></div><div><div class="lbl">Заказов в производстве</div><div class="val">17</div></div><svg class="spark" width="66" height="38" viewBox="0 0 66 38"><polyline fill="none" stroke="#1fa971" stroke-width="2" points="0,30 13,24 26,26 39,16 52,14 66,6"/></svg></div><span class="delta up">↑ +13% <span class="muted" style="font-weight:500">к прошлой неделе</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M9 3h6v3H9zM9 11h6M9 15h4"/></svg></div><div><div class="lbl">План на сегодня</div><div class="val">4 <span class="muted" style="font-size:12px">стола</span></div></div><svg class="spark" width="66" height="38" viewBox="0 0 66 38"><polyline fill="none" stroke="#2f66f6" stroke-width="2" points="0,26 13,28 26,18 39,20 52,10 66,8"/></svg></div><span class="delta up">↑ +1 стол <span class="muted" style="font-weight:500">к вчера</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 20V10M10 20V4M16 20v-7M20 20H4"/></svg></div><div><div class="lbl">Выпущено за месяц</div><div class="val">62 <span class="muted" style="font-size:12px">из 100</span></div></div><svg class="spark" width="60" height="38" viewBox="0 0 60 38"><polyline fill="none" stroke="#8b5cf6" stroke-width="2" points="0,28 12,20 24,24 36,14 48,12 60,6"/></svg></div><span class="delta up">↑ +12% <span class="muted" style="font-weight:500">к прошлому месяцу</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--amber-soft);color:var(--amber)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></div><div><div class="lbl">Средний цикл</div><div class="val">5,8 <span class="muted" style="font-size:12px">дня</span></div></div><svg class="spark" width="60" height="38" viewBox="0 0 60 38"><polyline fill="none" stroke="#f0a621" stroke-width="2" points="0,14 12,18 24,12 36,20 48,16 60,22"/></svg></div><span class="delta up">↓ 0,6 дня <span class="muted" style="font-weight:500">к прошлому месяцу</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></div><div><div class="lbl">Просроченные этапы</div><div class="val">3</div></div><svg class="spark" width="60" height="38" viewBox="0 0 60 38"><polyline fill="none" stroke="#e5484d" stroke-width="2" points="0,22 12,24 24,16 36,22 48,12 60,8"/></svg></div><span class="delta down">↑ +1 <span class="muted" style="font-weight:500">к вчера</span></span></div>
+      </div>
+
+      <!-- board -->
+      <div class="board">
+        <div class="kanban" id="kanban"></div>
+        <div style="display:none">
+          <div>
+            <div class="kcol-h"><div><div class="t">Металлоцех</div><div class="c">4 заказа</div></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1260</div><div class="dt">GEOMETRY 3,0 м</div><div class="spec">Астана</div><div class="between"><span class="muted">срок 31 мая</span><span class="badge b-green">Средний</span></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1261</div><div class="dt">LUX 2,5 м</div><div class="spec">Шымкент</div><div class="between"><span class="muted">срок 1 июня</span><span class="badge b-blue">Низкий</span></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1262</div><div class="dt">GEOMETRY 3,5 м</div><div class="spec">Атырау</div><div class="between"><span class="muted">срок 2 июня</span><span class="badge b-amber">Высокий</span></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1263</div><div class="dt">LUX 4,0 м</div><div class="spec">Алматы</div><div class="between"><span class="muted">срок 2 июня</span><span class="badge b-green">Средний</span></div></div>
+          </div>
+          <div>
+            <div class="kcol-h"><div><div class="t">Вакуум / МДФ</div><div class="c">3 заказа</div></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1257</div><div class="dt">LUX 4,0 м</div><div class="spec">Караганда</div><div class="between"><span class="muted">срок 30 мая</span><span class="badge b-amber">Высокий</span></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1259</div><div class="dt">GEOMETRY 3,2 м</div><div class="spec">Павлодар</div><div class="between"><span class="muted">срок 31 мая</span><span class="badge b-green">Средний</span></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1264</div><div class="dt">LUX 2,0 м</div><div class="spec">Тараз</div><div class="between"><span class="muted">срок 1 июня</span><span class="badge b-blue">Низкий</span></div></div>
+          </div>
+          <div>
+            <div class="kcol-h"><div><div class="t">Малярка</div><div class="c">3 заказа</div></div></div>
+            <div class="deal" style="border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1256</div><div class="dt">GEOMETRY 3,5 м</div><div class="spec">Алматы</div><div class="between"><span class="muted">срок 29 мая</span><span class="badge b-amber">Высокий</span></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1265</div><div class="dt">LUX 3,0 м</div><div class="spec">Астана</div><div class="between"><span class="muted">срок 30 мая</span><span class="badge b-green">Средний</span></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1264</div><div class="dt">GEOMETRY 2,8 м</div><div class="spec">Усть-Каменогорск</div><div class="between"><span class="muted">срок 31 мая</span><span class="badge b-blue">Низкий</span></div></div>
+          </div>
+          <div>
+            <div class="kcol-h"><div><div class="t">Сборка</div><div class="c">2 заказа</div></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1258</div><div class="dt">GEOMETRY 3,5 м</div><div class="spec">Астана</div><div class="between"><span class="muted">срок 31 мая</span><span class="badge b-green">Средний</span></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1267</div><div class="dt">LUX 2,5 м</div><div class="spec">Алматы</div><div class="between"><span class="muted">срок 1 июня</span><span class="badge b-amber">Высокий</span></div></div>
+          </div>
+          <div>
+            <div class="kcol-h"><div><div class="t">Готово к отгрузке</div><div class="c">2 заказа</div></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1255</div><div class="dt">GEOMETRY 2,5</div><div class="spec">Шымкент</div><div class="between"><span class="muted">срок 28 мая</span><span class="badge b-green">Средний</span></div></div>
+            <div class="deal"><div class="sub-t" style="color:var(--ink3);font-size:11px;margin-bottom:2px">Заказ #1254</div><div class="dt">LUX 3,5 м</div><div class="spec">Караганда</div><div class="between"><span class="muted">срок 29 мая</span><span class="badge b-green">Средний</span></div></div>
+            <div class="morelink">Показать все заказы</div>
+          </div>
+        </div>
+
+        <div class="side-col" style="flex:0 0 260px">
+          <div class="card" style="padding:16px">
+            <div class="card-h" style="margin-bottom:12px"><span class="t" style="font-size:13px">Карточка заказа</span></div>
+            <div class="row" style="gap:6px;margin-bottom:14px">
+              <button class="btn" style="padding:6px 8px;font-size:11px"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8M10 6H5v13h13v-5"/></svg>Открыть заказ</button>
+              <button class="btn" style="padding:6px 8px;font-size:11px"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 19a6 6 0 0 1 12 0M17 8h4M19 6v4"/></svg>Назначить</button>
+            </div>
+            <div class="stat" style="padding:5px 0"><span class="k">Заказ</span><span class="v" id="oc-no" style="font-size:12px">#1256</span></div>
+            <div class="stat" style="padding:5px 0"><span class="k">Клиент</span><span class="v" style="font-size:12px">ТОО Comfort House</span></div>
+            <div class="stat" style="padding:5px 0"><span class="k">Изделие</span><span class="v" id="oc-model" style="font-size:12px">GEOMETRY 3,5 м</span></div>
+            <div class="stat" style="padding:5px 0"><span class="k">Цвет</span><span class="v" style="font-size:12px">Белый / золото</span></div>
+            <div class="stat" style="padding:5px 0"><span class="k">Город</span><span class="v" id="oc-city" style="font-size:12px">Алматы</span></div>
+            <div class="stat" style="padding:5px 0"><span class="k">Срок готовности</span><span class="v" id="oc-due" style="font-size:12px">29 мая 2025</span></div>
+            <div class="stat" style="padding:5px 0"><span class="k">Текущий этап</span><span class="badge b-violet" id="oc-stage">● Малярка</span></div>
+            <div class="stat" style="padding:5px 0"><span class="k">Ответственный</span><span class="v" style="font-size:12px">Нурбек</span></div>
+            <div class="stat" style="padding:5px 0"><span class="k">Приоритет</span><span class="badge b-amber" id="oc-pri">Высокий</span></div>
+            <div class="between" style="margin:12px 0 4px"><span class="muted" style="font-weight:600">Готовность заказа</span><b style="font-size:13px">68%</b></div>
+            <div class="meter"><i style="width:68%;background:var(--blue)"></i></div>
+            <div class="muted" style="font-weight:600;margin:14px 0 4px">История этапов</div>
+            <div class="tl">
+              <div class="it"><span class="ic" style="background:var(--green-soft);color:var(--green)">●</span><span class="tt">Запущен в работу</span><span class="dd">19 мая 09:15</span></div>
+              <div class="it"><span class="ic" style="background:var(--green-soft);color:var(--green)">●</span><span class="tt">Металлоцех завершён</span><span class="dd">20 мая 11:40</span></div>
+              <div class="it"><span class="ic" style="background:var(--green-soft);color:var(--green)">●</span><span class="tt">Вакуум завершён</span><span class="dd">21 мая 14:25</span></div>
+              <div class="it"><span class="ic" style="background:var(--violet-soft);color:var(--violet)">●</span><span class="tt">Передан в малярку</span><span class="dd">22 мая 08:10</span></div>
+            </div>
+          </div>
+
+          <div class="card" style="padding:16px">
+            <div class="card-h" style="margin-bottom:12px"><span class="t" style="font-size:13px;color:var(--blue)">✦ AI-агент производства</span><span class="badge b-green" style="margin-left:auto">Онлайн</span></div>
+            <div class="muted" style="font-weight:600;margin-bottom:4px">Контроль сегодня</div>
+            <div class="aa"><span class="ok">✓</span>Проверил загрузку 4 участков</div>
+            <div class="aa"><span class="ok">✓</span>Выявил 3 просроченных этапа</div>
+            <div class="aa"><span class="ok">✓</span>Напомнил мастерам по 5 заказам</div>
+            <div class="aa"><span class="ok">✓</span>Собрал сводку по мощности смены</div>
+            <div class="quote"><div class="h">Рекомендация агента</div>Перераспределите заказ #1266 из Малярки на завтра — это снизит перегрузку участка на 18% и ускорит выпуск.</div>
+            <div class="att-card" style="margin-top:10px"><div class="h">⚠ Узкое место</div><div class="muted">Дефицит маляров — занятость 125%.</div><div class="muted">Очередь в Малярка: 3 заказа (в среднем +1,3 дня к срокам).</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- bottom -->
+      <div class="grid g4">
+        <!-- A -->
+        <div class="card">
+          <div class="card-h"><span class="t">A. Загрузка участков</span></div>
+          <div class="wh-row"><div class="between"><span>Металлоцех</span><b>78%</b></div><div class="meter"><i style="width:78%;background:var(--green)"></i></div></div>
+          <div class="wh-row"><div class="between"><span>Вакуум / МДФ</span><b>65%</b></div><div class="meter"><i style="width:65%;background:var(--blue)"></i></div></div>
+          <div class="wh-row"><div class="between"><span>Малярка</span><b style="color:var(--red)">125% <span class="badge b-red">Перегрузка</span></b></div><div class="meter"><i style="width:100%;background:var(--red)"></i></div></div>
+          <div class="wh-row"><div class="between"><span>Сборка</span><b>72%</b></div><div class="meter"><i style="width:72%;background:var(--amber)"></i></div></div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:8px">Перейти к детализации</a>
+        </div>
+
+        <!-- B -->
+        <div class="card">
+          <div class="card-h"><span class="t">B. План / факт по дням</span></div>
+          <div class="row" style="gap:14px;margin-bottom:10px"><span class="li2"><span class="d" style="background:#2f66f6"></span>План (шт)</span><span class="li2"><span class="d" style="background:#1fa971"></span>Факт (шт)</span></div>
+          <div class="row" style="align-items:flex-end;gap:10px;height:110px">
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:10px;height:38px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:10px;height:34px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:10px;height:44px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:10px;height:44px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:10px;height:44px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:10px;height:40px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:10px;height:82px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:10px;height:66px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:10px;height:88px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:10px;height:56px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:10px;height:74px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:10px;height:62px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:10px;height:96px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:10px;height:62px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+          </div>
+          <div class="row" style="margin-top:6px"><span class="muted" style="flex:1;text-align:center">16</span><span class="muted" style="flex:1;text-align:center">17</span><span class="muted" style="flex:1;text-align:center">18</span><span class="muted" style="flex:1;text-align:center">19</span><span class="muted" style="flex:1;text-align:center">20</span><span class="muted" style="flex:1;text-align:center">21</span><span class="muted" style="flex:1;text-align:center">22</span></div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:8px">Смотреть полный график</a>
+        </div>
+
+        <!-- C -->
+        <div class="card">
+          <div class="card-h"><span class="t">C. Сотрудники на смене</span></div>
+          <div class="stat"><span class="row" style="gap:8px"><span class="muted">👷</span>Сварщики</span><span><b style="color:var(--red)">2</b><span class="muted"> / 4</span></span></div>
+          <div class="stat"><span class="row" style="gap:8px"><span class="muted">🎨</span>Маляры</span><span><b style="color:var(--green)">2</b><span class="muted"> / 2</span></span></div>
+          <div class="stat"><span class="row" style="gap:8px"><span class="muted">🔧</span>Сборщики</span><span><b style="color:var(--amber)">3</b><span class="muted"> / 4</span></span></div>
+          <div class="stat"><span class="row" style="gap:8px"><span class="muted">📦</span>Упаковка</span><span><b style="color:var(--red)">1</b><span class="muted"> / 2</span></span></div>
+          <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:12px;text-align:center"><b style="font-size:14px;color:var(--blue)">На смене: 8 из 12</b></div>
+        </div>
+
+        <!-- D -->
+        <div class="card">
+          <div class="card-h"><span class="t">D. Материалы под риск</span></div>
+          <table>
+            <thead><tr><th>Материал</th><th style="text-align:right">Статус</th></tr></thead>
+            <tbody>
+              <tr><td style="font-weight:600">Замки трансформера</td><td style="text-align:right"><span class="badge b-red">Ниже точки</span></td></tr>
+              <tr><td style="font-weight:600">Порошковая краска</td><td style="text-align:right"><span class="badge b-amber">В пути</span></td></tr>
+              <tr><td style="font-weight:600">МДФ ПВХ</td><td style="text-align:right"><span class="badge b-green">Норма</span></td></tr>
+              <tr><td style="font-weight:600">Металл листовой</td><td style="text-align:right"><span class="badge b-green">Норма</span></td></tr>
+            </tbody>
+          </table>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:12px">Перейти к снабжению</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="store.js"></script>
+<script src="layout.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('production','Производство','План, этапы, загрузка цехов и контроль заказов BORZO');</script>
+<script src="production.js"></script>
+</body>
+</html>

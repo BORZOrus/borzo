@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Обзор</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <!-- KPI ряд -->
+      <div class="grid g4">
+        <div class="card kpi">
+          <div class="top">
+            <div class="ic" style="background:var(--blue-soft);color:var(--blue)">
+              <svg viewBox="0 0 24 24" width="22" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="4" y="7" width="16" height="13" rx="2"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg></div>
+            <div><div class="lbl">Выручка за месяц</div><div class="val">21,4 млн ₸</div></div>
+            <svg class="spark" width="90" height="42" viewBox="0 0 90 42"><polyline fill="none" stroke="#2f66f6" stroke-width="2" points="0,34 12,30 24,32 36,22 48,24 60,14 72,10 90,4"/></svg>
+          </div>
+          <span class="delta up">↑ +12% <span class="muted" style="font-weight:500">к прошлому месяцу</span></span>
+        </div>
+        <div class="card kpi">
+          <div class="top">
+            <div class="ic" style="background:var(--green-soft);color:var(--green)">
+              <svg viewBox="0 0 24 24" width="22" style="stroke:currentColor;fill:none;stroke-width:1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg></div>
+            <div><div class="lbl">Прибыль за месяц</div><div class="val">3,8 млн ₸</div></div>
+            <svg class="spark" width="90" height="42" viewBox="0 0 90 42"><polyline fill="none" stroke="#1fa971" stroke-width="2" points="0,30 15,28 30,20 45,24 60,16 75,10 90,6"/></svg>
+          </div>
+          <span class="delta up">↑ +8% <span class="muted" style="font-weight:500">к прошлому месяцу</span></span>
+        </div>
+        <div class="card kpi">
+          <div class="top">
+            <div class="ic" style="background:var(--violet-soft);color:var(--violet)">
+              <svg viewBox="0 0 24 24" width="22" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l8 4.5v9L12 21 4 16.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg></div>
+            <div><div class="lbl">Заказы в работе</div><div class="val" id="ov-orders">64</div></div>
+            <svg class="spark" width="90" height="42" viewBox="0 0 90 42"><polyline fill="none" stroke="#8b5cf6" stroke-width="2" points="0,28 15,32 30,22 45,26 60,18 75,20 90,8"/></svg>
+          </div>
+          <span class="delta up">↑ +15% <span class="muted" style="font-weight:500">к прошлой неделе</span></span>
+        </div>
+        <div class="card kpi">
+          <div class="top">
+            <div class="ic" style="background:var(--amber-soft);color:var(--amber)">
+              <svg viewBox="0 0 24 24" width="22" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="9" cy="8" r="3"/><path d="M3 19a6 6 0 0 1 12 0"/><path d="M16 11a3 3 0 0 0 0-6"/></svg></div>
+            <div><div class="lbl">Смены сегодня</div><div class="val">2 из 3</div></div>
+            <div class="donut spark" style="--p:66" data-l="66%"></div>
+          </div>
+          <span class="delta flat">• норма</span>
+        </div>
+      </div>
+
+      <!-- Ряд 2 -->
+      <div class="grid g4">
+        <!-- Продажи -->
+        <div class="card">
+          <div class="card-h"><span class="ico">🛒</span><span class="t">Продажи</span><span class="dots">⋮</span></div>
+          <div class="row" style="align-items:flex-start;gap:18px">
+            <div class="funnel" style="flex:0 0 120px">
+              <i style="width:120px"></i><i style="width:96px;opacity:.85"></i><i style="width:70px;opacity:.7"></i><i style="width:44px;opacity:.55"></i>
+            </div>
+            <div style="flex:1">
+              <div class="muted">Новые заявки сегодня</div><div style="font-size:20px;font-weight:700" id="ov-leads">18</div>
+              <div class="muted" style="margin-top:8px">В работе</div><div style="font-size:20px;font-weight:700" id="ov-deals">64</div>
+              <div class="muted" style="margin-top:8px">Сумма</div><div style="font-size:17px;font-weight:700" id="ov-deals-sum">21,4 млн ₸</div>
+              <div class="muted" style="margin-top:8px">Конверсия</div><div class="row"><span style="font-size:17px;font-weight:700">7,2%</span><span class="delta up">↑ +1,1 п.п.</span></div>
+            </div>
+          </div>
+          <div class="updated">Обновлено 10:30</div>
+        </div>
+
+        <!-- Производство -->
+        <div class="card">
+          <div class="card-h"><span class="ico">⚙️</span><span class="t">Производство</span><span class="dots">⋮</span></div>
+          <div class="row" style="gap:26px">
+            <div><div class="muted">Столов в работе</div><div class="row"><span style="font-size:22px;font-weight:700" id="ov-prod">17</span><span class="delta up">↑ +2</span></div></div>
+            <div><div class="muted">План</div><div style="font-size:22px;font-weight:700">4 <span class="muted" style="font-size:12px">в день</span></div></div>
+          </div>
+          <div class="muted" style="margin-top:12px">Мощность за месяц</div>
+          <div class="row" style="margin:2px 0 8px"><span style="font-size:19px;font-weight:700">62 из 100</span></div>
+          <div class="meter"><i style="width:62%;background:var(--blue)"></i></div>
+          <svg class="chart-svg" height="70" viewBox="0 0 300 70" preserveAspectRatio="none" style="margin-top:8px">
+            <polyline fill="none" stroke="#2f66f6" stroke-width="2" points="0,55 40,50 80,48 120,40 160,42 200,30 240,24 300,14"/>
+          </svg>
+          <div class="updated">Обновлено 10:30</div>
+        </div>
+
+        <!-- Склады -->
+        <div class="card">
+          <div class="card-h"><span class="ico">📦</span><span class="t">Склады</span><span class="badge b-red" id="ov-wh-badge" style="margin-left:6px">⚠ Замки ниже точки дозаказа</span><span class="dots">⋮</span></div>
+          <div id="ov-wh"></div>
+          <div class="updated">Обновлено 10:20</div>
+        </div>
+
+        <!-- Снабжение -->
+        <div class="card">
+          <div class="card-h"><span class="ico">🚚</span><span class="t">Снабжение</span><span class="badge b-amber" style="margin-left:auto">Застряло на таможне</span></div>
+          <div class="row" style="gap:26px;margin-bottom:12px">
+            <div><div class="muted">Заказы в пути</div><div style="font-size:22px;font-weight:700" id="ov-supply-cnt">6</div></div>
+            <div><div class="muted">Всего закупок</div><div style="font-size:22px;font-weight:700" id="ov-supply-total">3</div></div>
+          </div>
+          <div class="list" id="ov-supply-list"></div>
+          <div class="updated">Обновлено 10:25</div>
+        </div>
+      </div>
+
+      <!-- Ряд 3 -->
+      <div class="grid g4">
+        <!-- Отгрузки -->
+        <div class="card">
+          <div class="card-h"><span class="ico">📮</span><span class="t">Отгрузки</span>
+            <span style="margin-left:auto;display:flex;gap:4px"><span class="badge b-blue">Сегодня</span><span class="badge b-gray">На неделе</span></span></div>
+          <div class="list" id="ov-ship-list"></div>
+          <div class="updated">Обновлено 10:20</div>
+        </div>
+
+        <!-- Финансы -->
+        <div class="card">
+          <div class="card-h"><span class="ico">💳</span><span class="t">Финансы</span><span class="dots">⋮</span></div>
+          <div class="stat"><span class="k">Касса</span><span class="v">2,6 млн ₸</span></div>
+          <div class="stat"><span class="k">Приход за месяц</span><span class="row"><span class="v">28,7 млн ₸</span><span class="delta up">↑ +9%</span></span></div>
+          <div class="stat"><span class="k">Расход за месяц</span><span class="row"><span class="v">24,1 млн ₸</span><span class="delta down">↗ +6%</span></span></div>
+          <div class="stat"><span class="k">Дебиторка</span><span class="v" id="ov-fin-ar">12,3 млн ₸</span></div>
+          <div class="stat"><span class="k" style="color:var(--red);font-weight:600">Кассовый разрыв</span><span class="row"><span class="v" style="color:var(--red)">−1,2 млн ₸</span><span class="badge b-red">⚠ риск</span></span></div>
+          <svg class="chart-svg" height="60" viewBox="0 0 300 60" style="margin-top:8px">
+            <g fill="#1fa971">
+              <rect x="6" y="20" width="8" height="20"/><rect x="20" y="14" width="8" height="26"/><rect x="34" y="24" width="8" height="16"/><rect x="48" y="10" width="8" height="30"/><rect x="62" y="18" width="8" height="22"/>
+            </g>
+            <g fill="#e5484d"><rect x="90" y="40" width="8" height="14"/><rect x="104" y="40" width="8" height="10"/><rect x="118" y="40" width="8" height="16"/></g>
+            <g fill="#1fa971"><rect x="150" y="22" width="8" height="18"/><rect x="164" y="16" width="8" height="24"/><rect x="178" y="26" width="8" height="14"/></g>
+            <g fill="#e5484d"><rect x="210" y="40" width="8" height="12"/><rect x="224" y="40" width="8" height="8"/></g>
+            <g fill="#1fa971"><rect x="250" y="20" width="8" height="20"/><rect x="264" y="12" width="8" height="28"/><rect x="278" y="24" width="8" height="16"/></g>
+          </svg>
+          <div class="updated">Обновлено 10:30</div>
+        </div>
+
+        <!-- Команда и зарплаты -->
+        <div class="card">
+          <div class="card-h"><span class="ico">👥</span><span class="t">Команда и зарплаты</span><span class="dots">⋮</span></div>
+          <div class="row" style="align-items:center;gap:16px">
+            <div style="flex:1">
+              <div class="stat"><span class="k">На смене</span><span class="row"><span class="v" id="ov-team">11 из 23</span><span class="badge b-green">норма</span></span></div>
+              <div class="stat"><span class="k">ФОТ начислено</span><span class="v">4,2 млн ₸</span></div>
+              <div class="stat"><span class="k">Выплачено</span><span class="v">3,1 млн ₸</span></div>
+              <div class="stat"><span class="k">Остаток</span><span class="v">1,1 млн ₸</span></div>
+            </div>
+            <div class="donut" style="--p:73;flex:0 0 96px" data-l="73%"></div>
+          </div>
+          <div class="muted" style="text-align:right;margin-top:4px">выплачено</div>
+          <div class="updated">Обновлено 10:30</div>
+        </div>
+
+        <!-- Маркетинг -->
+        <div class="card">
+          <div class="card-h"><span class="ico">📣</span><span class="t">Маркетинг</span><span class="dots">⋮</span></div>
+          <div class="stat"><span class="k">Лиды за неделю</span><span class="row"><span class="v">137</span><span class="delta up">↑ +18%</span></span></div>
+          <div class="stat"><span class="k">Стоимость лида</span><span class="row"><span class="v">2 850 ₸</span><span class="delta up">↓ −6%</span></span></div>
+          <div class="stat"><span class="k">ROI</span><span class="row"><span class="v">268%</span><span class="delta up">↑ +22 п.п.</span></span></div>
+          <svg class="chart-svg" height="80" viewBox="0 0 300 80" preserveAspectRatio="none" style="margin-top:8px">
+            <polyline fill="none" stroke="#2f66f6" stroke-width="2" points="0,64 40,58 80,60 120,44 160,48 200,30 240,26 300,20"/>
+            <text x="2" y="12" font-size="9" fill="#8b9099">300%</text><text x="2" y="46" font-size="9" fill="#8b9099">150%</text><text x="2" y="76" font-size="9" fill="#8b9099">0%</text>
+          </svg>
+          <div class="updated">Обновлено 10:25</div>
+        </div>
+      </div>
+
+      <!-- Ряд 4 -->
+      <div class="grid" style="grid-template-columns:1fr 1.35fr">
+        <!-- СММ -->
+        <div class="card">
+          <div class="card-h"><span class="ico">📱</span><span class="t">СММ и контент</span><span class="dots">⋮</span></div>
+          <div class="row" style="align-items:flex-start;gap:26px">
+            <div>
+              <div class="soc"><div class="ic" style="background:linear-gradient(135deg,#f58529,#dd2a7b,#8134af)">◎</div>
+                <div><div class="muted">Охваты</div><div style="font-size:19px;font-weight:700">24,7K</div></div>
+                <div><div class="muted">Публикации</div><div class="row"><span style="font-size:19px;font-weight:700">18</span><span class="delta up">↑ +16%</span></div></div></div>
+              <div class="soc"><div class="ic" style="background:#ff0000">▶</div>
+                <div><div class="muted">YouTube</div><div style="font-size:19px;font-weight:700">35,2K</div></div>
+                <div><div class="muted">Публикации</div><div class="row"><span style="font-size:19px;font-weight:700">6</span><span class="delta up">↑ +23%</span></div></div></div>
+            </div>
+            <div style="flex:1">
+              <div class="muted" style="font-weight:600;margin-bottom:6px">Задачи агентов</div>
+              <div id="ov-smm-tasks"></div>
+            </div>
+          </div>
+          <div class="updated">Обновлено 10:20</div>
+        </div>
+
+        <!-- Внимание -->
+        <div class="card attention">
+          <div class="card-h"><span style="color:var(--red)">⚠</span><span class="t">Внимание <span class="badge b-red" id="ov-att-count">10</span></span></div>
+          <div style="color:var(--red);font-weight:700;margin-bottom:10px">Узкие места</div>
+          <div class="grid" style="grid-template-columns:repeat(3,1fr)" id="ov-att-cards"></div>
+          <div class="updated">Обновлено 10:30</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="layout.js"></script>
+<script src="store.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('overview','Обзор','Единая система управления BORZO');</script>
+<script src="overview.js"></script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Склады</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="toolbar">
+        <input id="wh-search" placeholder="Поиск материала…" style="flex:1;max-width:280px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;background:var(--bg-el)">
+        <div style="flex:1"></div>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Фильтры</button>
+        <button class="btn" id="wh-inv"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg>Инвентаризация</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M5 20h14"/></svg>Экспорт</button>
+        <button class="btn primary" id="wh-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Приход на склад</button>
+      </div>
+
+      <!-- KPI -->
+      <div class="grid g5">
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l8 4.5v9L12 21 4 16.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5"/></svg></div><div><div class="lbl">Всего позиций</div><div class="val">248</div></div><svg class="spark" width="66" height="38" viewBox="0 0 66 38"><polyline fill="none" stroke="#1fa971" stroke-width="2" points="0,30 13,24 26,26 39,16 52,14 66,6"/></svg></div><span class="delta up">▲ +12 <span class="muted" style="font-weight:500">за неделю</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--blue-soft);color:var(--blue)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/></svg></div><div><div class="lbl">Складской остаток</div><div class="val" style="font-size:22px">18,6 млн ₸</div></div><svg class="spark" width="56" height="38" viewBox="0 0 56 38"><polyline fill="none" stroke="#2f66f6" stroke-width="2" points="0,26 11,28 22,18 34,20 45,10 56,8"/></svg></div><span class="delta up">▲ +4% <span class="muted" style="font-weight:500">к прошлой неделе</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--red-soft);color:var(--red)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></div><div><div class="lbl">Критических позиций</div><div class="val">5</div></div><svg class="spark" width="56" height="38" viewBox="0 0 56 38"><polyline fill="none" stroke="#e5484d" stroke-width="2" points="0,20 11,24 22,14 34,22 45,12 56,10"/></svg></div><span class="delta flat"><span class="muted" style="font-weight:500">замки и фурнитура</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--violet-soft);color:var(--violet)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg></div><div><div class="lbl">Оборот за месяц</div><div class="val" style="font-size:20px">62 <span class="muted" style="font-size:12px">движения</span></div></div><svg class="spark" width="52" height="38" viewBox="0 0 52 38"><polyline fill="none" stroke="#8b5cf6" stroke-width="2" points="0,24 10,20 21,22 32,12 42,14 52,6"/></svg></div><span class="delta flat"><span class="muted" style="font-weight:500">приход / расход</span></span></div>
+        <div class="card kpi"><div class="top"><div class="ic" style="background:var(--green-soft);color:var(--green)"><svg viewBox="0 0 24 24" width="20" style="stroke:currentColor;fill:none;stroke-width:1.8"><circle cx="12" cy="12" r="8"/><path d="M8 12l3 3 5-6"/></svg></div><div><div class="lbl">Точность учёта</div><div class="val">98,2%</div></div><svg class="spark" width="52" height="38" viewBox="0 0 52 38"><polyline fill="none" stroke="#1fa971" stroke-width="2" points="0,22 10,18 21,20 32,12 42,14 52,8"/></svg></div><span class="delta flat"><span class="muted" style="font-weight:500">по последней сверке</span></span></div>
+      </div>
+
+      <!-- middle -->
+      <div class="board">
+        <div class="card" style="flex:1;min-width:0">
+          <div class="card-h"><span class="t">Остатки по складам</span></div>
+          <table>
+            <thead><tr><th>Склад</th><th>Позиций</th><th>Заполненность</th><th style="text-align:right">Стоимость</th><th>Статус</th></tr></thead>
+            <tbody id="whlist"></tbody>
+          </table>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:10px">Открыть все склады ›</a>
+        </div>
+
+        <div class="side-col" style="flex:0 0 300px">
+          <div class="card" style="padding:16px">
+            <div class="card-h"><span class="ava" style="background:var(--line2);width:30px;height:30px">⚙</span><span class="t" id="mc-name">Замки трансформера</span></div>
+            <div class="row" style="gap:6px;margin-bottom:14px">
+              <button class="btn" id="mc-edit" style="padding:6px 9px;font-size:11px"><svg viewBox="0 0 24 24"><path d="M4 20h4L18 10l-4-4L4 16z"/></svg>Редактировать</button>
+              <button class="btn" id="mc-move" style="padding:6px 9px;font-size:11px"><svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>Переместить</button>
+            </div>
+            <button class="btn primary" id="mc-order" style="width:100%;justify-content:center;margin-bottom:14px;font-size:12px"><svg viewBox="0 0 24 24"><path d="M3 5h2l2 11h11l2-8H7"/></svg>Создать заказ</button>
+            <div class="row" style="gap:20px">
+              <div style="flex:1">
+                <div class="stat" style="padding:4px 0"><span class="k">SKU</span><span class="v" id="mc-sku" style="font-size:12px">LOCK-TR-01</span></div>
+                <div class="stat" style="padding:4px 0"><span class="k">Категория</span><span class="v" id="mc-cat" style="font-size:12px">Фурнитура</span></div>
+                <div class="stat" style="padding:4px 0"><span class="k">Ед. изм.</span><span class="v" id="mc-unit" style="font-size:12px">шт</span></div>
+                <div class="stat" style="padding:4px 0"><span class="k">Остаток</span><span class="v" id="mc-stock" style="font-size:12px">420 шт</span></div>
+                <div class="stat" style="padding:4px 0"><span class="k">Мин. остаток</span><span class="v" id="mc-min" style="font-size:12px">600 шт</span></div>
+              </div>
+            </div>
+            <div class="stat" style="padding:4px 0"><span class="k">Поставщик</span><span class="v" id="mc-sup" style="font-size:12px">China Locks Co.</span></div>
+            <div class="stat" style="padding:4px 0"><span class="k">Локация</span><span class="v" id="mc-loc" style="font-size:12px">Основной склад / A-12</span></div>
+            <div class="stat" style="padding:4px 0"><span class="k">Статус</span><span class="v" id="mc-status" style="font-size:12px;color:var(--red);font-weight:600">Ниже точки дозаказа</span></div>
+            <div class="stat" style="padding:4px 0"><span class="k">Последний приход</span><span class="v" id="mc-lastin" style="font-size:12px">21 мая 2025</span></div>
+            <div class="stat" style="padding:4px 0"><span class="k">Расход / мес</span><span class="v" id="mc-use" style="font-size:12px">180 шт</span></div>
+            <div class="between" style="margin:12px 0 4px"><span class="muted" style="font-weight:600">Запас до дозаказа</span><b id="mc-exh-lbl" style="color:var(--red);font-size:12px">70% исчерпано</b></div>
+            <div class="meter"><i id="mc-exh-bar" style="width:70%;background:var(--red)"></i></div>
+            <div class="muted" style="font-weight:600;margin:12px 0 6px">Движение</div>
+            <div class="tl" id="mc-move"></div>
+          </div>
+
+          <div class="card" style="padding:16px">
+            <div class="card-h"><span class="t" style="color:var(--blue)">✦ AI-агент склада BORZO</span><span class="badge b-green" style="margin-left:auto">Онлайн</span></div>
+            <div class="muted" style="font-weight:600;margin-bottom:4px">Контроль сегодня</div>
+            <div class="aa"><span class="ok">✓</span>Проверил 248 позиций</div>
+            <div class="aa"><span class="ok">✓</span>Нашёл 5 критических остатков</div>
+            <div class="aa"><span class="ok">✓</span>Собрал заявки на пополнение для снабжения</div>
+            <div class="aa"><span class="ok">✓</span>Обнаружил пересорт в упаковке</div>
+            <div class="quote"><div class="h">Рекомендация агента</div>По замкам трансформера оформить дозаказ сегодня. При текущем расходе запаса хватит на 9 дней.</div>
+            <div class="att-card" style="margin-top:10px"><div class="h">⚠ Узкое место</div><div class="muted">Упаковка перегружена: занятость 88%, пересорт по 2 позициям.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- bottom -->
+      <div class="grid g4">
+        <div class="card">
+          <div class="card-h"><span class="t">A. Критические остатки</span></div>
+          <table>
+            <thead><tr><th>Материал</th><th>Остаток</th><th style="text-align:right">Статус</th></tr></thead>
+            <tbody id="critlist"></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">B. Движение за 7 дней</span></div>
+          <div class="row" style="gap:14px;margin-bottom:10px"><span class="li2"><span class="d" style="background:#2f66f6"></span>Приход</span><span class="li2"><span class="d" style="background:#1fa971"></span>Расход</span></div>
+          <div class="row" style="align-items:flex-end;gap:8px;height:110px">
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:44px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:40px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:38px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:44px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:78px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:60px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:96px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:72px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:70px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:64px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:84px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:58px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+            <div style="flex:1;display:flex;align-items:flex-end;gap:2px;justify-content:center;height:100%"><div style="width:9px;height:100px;background:var(--blue);border-radius:3px 3px 0 0"></div><div style="width:9px;height:74px;background:var(--green);border-radius:3px 3px 0 0"></div></div>
+          </div>
+          <div class="row" style="margin-top:6px"><span class="muted" style="flex:1;text-align:center">16</span><span class="muted" style="flex:1;text-align:center">17</span><span class="muted" style="flex:1;text-align:center">18</span><span class="muted" style="flex:1;text-align:center">19</span><span class="muted" style="flex:1;text-align:center">20</span><span class="muted" style="flex:1;text-align:center">21</span><span class="muted" style="flex:1;text-align:center">22</span></div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:8px">Смотреть полный график ›</a>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">C. Ячейки и размещение</span></div>
+          <div id="celllist"></div>
+          <a style="color:var(--blue);font-weight:600;font-size:12px;display:inline-block;margin-top:8px">Все ячейки и карта склада ›</a>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">D. Складские сотрудники</span></div>
+          <div class="stat"><span class="row" style="gap:8px"><span class="muted">📋</span>Кладовщики</span><span><b style="color:var(--amber)">2</b><span class="muted"> / 3</span></span></div>
+          <div class="stat"><span class="row" style="gap:8px"><span class="muted">📦</span>Комплектовщики</span><span><b style="color:var(--amber)">3</b><span class="muted"> / 4</span></span></div>
+          <div class="stat"><span class="row" style="gap:8px"><span class="muted">🎁</span>Упаковка</span><span><b style="color:var(--green)">2</b><span class="muted"> / 2</span></span></div>
+          <div class="stat"><span class="row" style="gap:8px"><span class="muted">🚚</span>Погрузка</span><span><b style="color:var(--red)">1</b><span class="muted"> / 2</span></span></div>
+          <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:12px;text-align:center"><b style="font-size:14px;color:var(--blue)">На смене: 8 из 11</b></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="layout.js"></script>
+<script src="store.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('warehouses','Склады','Остатки, ячейки, движение материалов и контроль запасов BORZO');</script>
+<script src="warehouses.js"></script>
+</body>
+</html>
