@@ -112,10 +112,12 @@
     });
     bindReqPlates($('sup-notifs'));
 
-    // история
-    var hist=txs();
-    $('sup-history').innerHTML = hist.length ? hist.map(opRow).join('') : '<div class="empty">Пока пусто. Как получите деньги и начнёте закуп — операции появятся здесь.</div>';
-    bindOpRows($('sup-history'));
+    // история — раздельно приход и расход
+    var ins=txs().filter(function(x){return x.kind==='issue';});
+    var outs=txs().filter(function(x){return x.kind==='expense';});
+    $('sup-in').innerHTML = ins.length ? ins.map(opRow).join('') : '<div class="empty">Приходов пока нет. Когда управленец выдаст деньги — они появятся здесь.</div>';
+    $('sup-out').innerHTML = outs.length ? outs.map(opRow).join('') : '<div class="empty">Расходов пока нет. Нажмите «Закупаюсь».</div>';
+    bindOpRows($('sup-in')); bindOpRows($('sup-out'));
   }
 
   function opRow(x){
@@ -253,7 +255,7 @@
       '<button class="btn btn-buy" id="do-buy">'+(ed?'Отправить на согласование':'Расход прошёл — списать')+'</button>'+
       '<button class="btn btn-ghost" id="cancel" style="margin-top:8px">Отмена</button>';
   }
-  var UNITS=['шт','л','лист','рул','кг','м','компл'];
+  var UNITS=['шт','л','кг'];
   function catOf(it){ return it.cat||buf.category; }
   function renderItems(){
     $('items').innerHTML=buf.items.map(function(it,i){
@@ -285,7 +287,7 @@
     if($('scan')) $('scan').onclick=function(){
       if(!buf.invoice){ alert('Сначала сфотографируйте накладную'); return; }
       // 🔴 ДЕМО: реальное распознавание (OCR) подключим на сервере — vision-модель разберёт позиции сама.
-      buf.items=[{name:'Плёнка ПВХ матовая',qty:'3',unit:'рул'},{name:'Ручки мебельные',qty:'10',unit:'шт'},{name:'МДФ 16мм',qty:'5',unit:'лист'}];
+      buf.items=[{name:'МДФ 16мм',qty:'5',unit:'шт'},{name:'Ручки мебельные',qty:'10',unit:'шт'},{name:'Грунт-эмаль',qty:'8',unit:'л'}];
       renderItems();
       alert('🔴 Демо-распознавание: позиции подставлены для примера. На сервере накладную будет читать ИИ и заполнять сам — вы только проверяете.');
     };
@@ -399,6 +401,10 @@
   $('role-mgr').onclick=function(){ setRole('mgr'); };
   $('btn-buy').onclick=openBuy;
   $('btn-give').onclick=openGive;
+
+  // вкладки снабженца (приход / расход)
+  $('tab-in').onclick=function(){ $('tab-in').className='on'; $('tab-out').className=''; $('sup-in').style.display=''; $('sup-out').style.display='none'; };
+  $('tab-out').onclick=function(){ $('tab-out').className='on'; $('tab-in').className=''; $('sup-out').style.display=''; $('sup-in').style.display='none'; };
 
   // вкладки управленца
   $('tab-issues').onclick=function(){ $('tab-issues').className='on'; $('tab-inv').className=''; $('mgr-issues').style.display=''; $('mgr-inv').style.display='none'; };
