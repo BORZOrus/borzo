@@ -83,8 +83,12 @@
   .photo img{max-height:64px;border-radius:8px;margin-top:8px;display:block;margin-left:auto;margin-right:auto}
   .item-line{display:flex;gap:7px;margin-bottom:7px;align-items:center}
   .item-line input{padding:10px}
-  .item-line .nm{flex:2}.item-line .qt{flex:.7}.item-line .un{flex:.8}
-  .item-line .del{flex:0 0 30px;background:var(--k-card2);border:1px solid var(--k-line);color:var(--k-mut);border-radius:9px;padding:9px 0;cursor:pointer}
+  .item-line .nm{flex:1.5;min-width:0}.item-line .qt{flex:0 0 52px;text-align:center}
+  .item-line .un{flex:0 0 44px;background:var(--k-bg);border:1px solid var(--k-line);color:var(--k-ink);border-radius:9px;padding:10px 0;cursor:pointer;font-size:12px;font-weight:600}
+  .item-line .catdot{flex:0 0 30px;border:none;border-radius:9px;padding:10px 0;cursor:pointer;font-weight:800;font-size:13px}
+  .item-line .catdot.syr{background:rgba(139,92,246,.2);color:#a78bfa}
+  .item-line .catdot.gen{background:rgba(240,166,33,.18);color:var(--k-amber)}
+  .item-line .del{flex:0 0 28px;background:var(--k-card2);border:1px solid var(--k-line);color:var(--k-mut);border-radius:9px;padding:9px 0;cursor:pointer}
   .scanbtn{background:rgba(59,130,246,.12);color:#7fb0ff;border:1px solid rgba(59,130,246,.35);border-radius:11px;padding:11px;width:100%;font-weight:600;font-size:13px;cursor:pointer;margin-bottom:10px}
   .bigsum{font-size:30px;font-weight:800;text-align:center;margin:6px 0 4px}
   table.sk{width:100%;border-collapse:collapse;font-size:13px}
@@ -124,11 +128,11 @@
     </div>
     <button class="btn btn-give" id="btn-give" style="margin-bottom:16px">💸 Выдать деньги снабженцу</button>
     <div class="tabbar">
-      <button id="tab-ops" class="on">Все операции</button>
-      <button id="tab-sklad">Приход на склад</button>
+      <button id="tab-issues" class="on">Выданные деньги</button>
+      <button id="tab-inv">Накладные</button>
     </div>
-    <div id="mgr-ops" class="card"></div>
-    <div id="mgr-sklad" class="card" style="display:none"></div>
+    <div id="mgr-issues" class="card"></div>
+    <div id="mgr-inv" class="card" style="display:none"></div>
   </div>
 
 </div>

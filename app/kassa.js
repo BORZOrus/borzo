@@ -92,12 +92,15 @@
 
   function showOp(id){
     var x=DB.find('kassaTx',id); if(!x) return;
-    var items=(x.items||[]).map(function(i){return '<tr><td>'+i.name+'</td><td style="text-align:right">'+i.qty+' '+i.unit+'</td></tr>';}).join('');
+    var items=(x.items||[]).map(function(i){
+      var c=i.cat||x.category, pill=c==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>';
+      return '<tr><td>'+i.name+'</td><td style="text-align:right">'+i.qty+' '+i.unit+'</td><td style="text-align:right">'+pill+'</td></tr>';
+    }).join('');
     var ph=function(src,lbl){ return src?'<div class="fld"><label>'+lbl+'</label><img src="'+src+'" style="width:100%;border-radius:10px"></div>':''; };
-    openSheet('<h3>Детали расхода</h3>'+
+    openSheet('<h3>Детали накладной</h3>'+
       '<div class="bigsum" style="color:var(--k-red)">−'+money(x.amount)+'</div>'+
-      '<div class="muted fz13" style="text-align:center;margin-bottom:14px">'+stamp(new Date(x.t))+' · '+x.category+'</div>'+
-      (items?'<table class="sk" style="margin-bottom:14px"><thead><tr><th>Наименование</th><th style="text-align:right">Кол-во</th></tr></thead><tbody>'+items+'</tbody></table>':'')+
+      '<div class="muted fz13" style="text-align:center;margin-bottom:14px">'+stamp(new Date(x.t))+' · осн. категория: '+x.category+'</div>'+
+      (items?'<table class="sk" style="margin-bottom:14px"><thead><tr><th>Наименование</th><th style="text-align:right">Кол-во</th><th style="text-align:right">Тип</th></tr></thead><tbody>'+items+'</tbody></table>':'')+
       ph(x.invoice,'Накладная')+ph(x.receipt,'Чек')+
       '<button class="btn btn-ghost" id="cl">Закрыть</button>');
     $('cl').onclick=closeSheet;
@@ -117,7 +120,7 @@
         '<label class="photo grow'+(buf.receipt?' has':'')+'" style="margin:0">'+(buf.receipt?'✓ Чек<img src="'+buf.receipt+'">':'🧾 Чек')+'<input type="file" accept="image/*" id="ph-rec"></label>'+
       '</div>'+
       '<button class="scanbtn" id="scan">🔎 Сканировать накладную (распознать позиции)</button>'+
-      '<div class="fld"><label>Что закуплено</label><div id="items"></div>'+
+      '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· кнопка «шт» — единица, точка С/О — категория позиции</span></label><div id="items"></div>'+
         '<button class="btn-ghost" id="additem" style="border:1px dashed var(--k-line);border-radius:10px">+ Добавить позицию</button></div>'+
       '<div class="fld"><label>Направление расхода</label><div class="seg" id="cat">'+
         '<button data-c="Сырьё" class="on syr">Сырьё</button><button data-c="Общие">Общие</button></div></div>'+
@@ -126,15 +129,25 @@
       '<button class="btn btn-buy" id="do-buy">Расход прошёл — списать</button>'+
       '<button class="btn btn-ghost" id="cancel" style="margin-top:8px">Отмена</button>';
   }
+  var UNITS=['шт','л','лист','рул','кг','м','компл'];
+  function catOf(it){ return it.cat||buf.category; }
   function renderItems(){
     $('items').innerHTML=buf.items.map(function(it,i){
+      var c=catOf(it), syr=c==='Сырьё';
       return '<div class="item-line"><input class="nm" placeholder="наименование" value="'+(it.name||'')+'" data-i="'+i+'" data-f="name">'+
         '<input class="qt" inputmode="decimal" placeholder="кол-во" value="'+(it.qty||'')+'" data-i="'+i+'" data-f="qty">'+
-        '<input class="un" placeholder="ед" value="'+(it.unit||'')+'" data-i="'+i+'" data-f="unit">'+
+        '<button class="un" data-un="'+i+'" title="ед. изм. — нажмите чтобы сменить">'+(it.unit||'шт')+'</button>'+
+        '<button class="catdot '+(syr?'syr':'gen')+'" data-cat="'+i+'" title="категория этой позиции">'+(syr?'С':'О')+'</button>'+
         (buf.items.length>1?'<button class="del" data-del="'+i+'">✕</button>':'')+'</div>';
     }).join('');
     Array.prototype.forEach.call($('items').querySelectorAll('input'),function(inp){
       inp.oninput=function(){ buf.items[+inp.getAttribute('data-i')][inp.getAttribute('data-f')]=inp.value; };
+    });
+    Array.prototype.forEach.call($('items').querySelectorAll('[data-un]'),function(b){
+      b.onclick=function(){ var i=+b.getAttribute('data-un'); var cur=buf.items[i].unit||'шт'; var n=(UNITS.indexOf(cur)+1)%UNITS.length; buf.items[i].unit=UNITS[n]; renderItems(); };
+    });
+    Array.prototype.forEach.call($('items').querySelectorAll('[data-cat]'),function(b){
+      b.onclick=function(){ var i=+b.getAttribute('data-cat'); buf.items[i].cat=(catOf(buf.items[i])==='Сырьё')?'Общие':'Сырьё'; renderItems(); };
     });
     Array.prototype.forEach.call($('items').querySelectorAll('[data-del]'),function(b){
       b.onclick=function(){ buf.items.splice(+b.getAttribute('data-del'),1); renderItems(); };
@@ -157,6 +170,7 @@
         buf.category=b.getAttribute('data-c');
         Array.prototype.forEach.call($('cat').querySelectorAll('button'),function(x){ x.className=''; });
         b.className='on '+(buf.category==='Сырьё'?'syr':'gen');
+        renderItems();
       };
     });
     $('cancel').onclick=closeSheet;
@@ -169,12 +183,12 @@
     if(amt<=0){ alert('Укажите сумму расхода'); return; }
     if(!buf.invoice && !buf.receipt){ alert('Прикрепите накладную или чек — без документа списать нельзя'); return; }
     if(amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше, чем есть'); return; }
-    var items=buf.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:i.unit||''};});
+    var items=buf.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:i.unit||'шт',cat:i.cat||buf.category};});
     var now=Date.now();
     DB.add('kassaTx',{kind:'expense',t:now,amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt});
-    // приход на склад (позиции)
+    // приход на склад (позиции, каждая со своей категорией)
     items.forEach(function(i){
-      DB.add('skladIntake',{t:now,date:stamp(new Date(now)),name:i.name,qty:i.qty,unit:i.unit,category:buf.category,from:'снабжение'});
+      DB.add('skladIntake',{t:now,date:stamp(new Date(now)),name:i.name,qty:i.qty,unit:i.unit,category:i.cat,from:'снабжение'});
     });
     closeSheet(); renderSup();
   }
@@ -182,21 +196,22 @@
   // ================= КАБИНЕТ УПРАВЛЕНЦА =================
   function renderMgr(){
     var s=sums();
-    $('mgr-given').textContent=short(s.given)||money(s.given);
-    $('mgr-spent').textContent=short(s.spent)||money(s.spent);
-    $('mgr-left').textContent=short(s.left)||money(s.left);
     $('mgr-given').textContent=money(s.given); $('mgr-spent').textContent=money(s.spent); $('mgr-left').textContent=money(s.left);
 
-    var ops=txs();
-    $('mgr-ops').innerHTML = ops.length ? ops.map(opRow).join('') : '<div class="empty">Операций пока нет. Нажмите «Выдать деньги снабженцу».</div>';
-    bindOpRows($('mgr-ops'));
+    // вкладка 1 — выданные деньги (история всех выдач)
+    var issues=txs().filter(function(x){return x.kind==='issue';});
+    $('mgr-issues').innerHTML = issues.length ? issues.map(function(x){
+      var st = x.status==='accepted' ? '<span class="pill pill-doc">получено</span>' : '<span class="pill pill-wait">ждёт подтверждения</span>';
+      return '<div class="op"><div class="ic ic-in">⬇</div><div class="grow">'+
+        '<div style="font-weight:600">'+x.source+'</div>'+
+        '<div class="muted fz12" style="margin-top:2px">'+stamp(new Date(x.t))+' '+st+'</div></div>'+
+        '<div class="amt amt-in">+'+money(x.amount)+'</div></div>';
+    }).join('') : '<div class="empty">Выдач ещё не было. Нажмите «Выдать деньги снабженцу».</div>';
 
-    var sk=DB.all('skladIntake').sort(function(a,b){return b.t-a.t;});
-    $('mgr-sklad').innerHTML = sk.length ?
-      '<table class="sk"><thead><tr><th>Дата</th><th>Наименование</th><th style="text-align:right">Кол-во</th><th>Тип</th></tr></thead><tbody>'+
-      sk.map(function(r){return '<tr><td class="muted">'+r.date+'</td><td>'+r.name+'</td><td style="text-align:right">'+r.qty+' '+r.unit+'</td><td>'+
-        (r.category==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>')+'</td></tr>';}).join('')+
-      '</tbody></table>' : '<div class="empty">Пока ничего не поступало. Приход появится после закупок снабженца.</div>';
+    // вкладка 2 — накладные (все закупки, клик = детали)
+    var inv=txs().filter(function(x){return x.kind==='expense';});
+    $('mgr-inv').innerHTML = inv.length ? inv.map(opRow).join('') : '<div class="empty">Накладных пока нет.</div>';
+    bindOpRows($('mgr-inv'));
   }
   function openGive(){
     openSheet('<h3>💸 Выдать деньги снабженцу</h3>'+
@@ -229,8 +244,8 @@
   $('btn-give').onclick=openGive;
 
   // вкладки управленца
-  $('tab-ops').onclick=function(){ $('tab-ops').className='on'; $('tab-sklad').className=''; $('mgr-ops').style.display=''; $('mgr-sklad').style.display='none'; };
-  $('tab-sklad').onclick=function(){ $('tab-sklad').className='on'; $('tab-ops').className=''; $('mgr-sklad').style.display=''; $('mgr-ops').style.display='none'; };
+  $('tab-issues').onclick=function(){ $('tab-issues').className='on'; $('tab-inv').className=''; $('mgr-issues').style.display=''; $('mgr-inv').style.display='none'; };
+  $('tab-inv').onclick=function(){ $('tab-inv').className='on'; $('tab-issues').className=''; $('mgr-inv').style.display=''; $('mgr-issues').style.display='none'; };
 
   setRole(localStorage.getItem('kassa_role')||'sup');
 })();
