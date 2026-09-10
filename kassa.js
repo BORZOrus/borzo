@@ -241,12 +241,11 @@
   function buyHtml(){
     var ed=!!editingId, sy=buf.category==='Сырьё';
     return '<h3>'+(ed?'✏️ Изменить накладную':'🛒 Закуп')+'</h3>'+
-      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?'Правки уйдут второй стороне на согласование — молча ничего не меняется.':'Сфотографируйте накладную и/или чек. Без документа списание провести нельзя.')+'</div>'+
+      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?'Правки уйдут второй стороне на согласование — молча ничего не меняется.':'Сфотографируйте накладную — позиции и цены распознаются автоматически (🔴 демо-пример; реальный ИИ на сервере). Чек можно приложить отдельно. Без документа списание нельзя.')+'</div>'+
       '<div class="row" style="gap:10px;margin-bottom:12px">'+
         '<label class="photo grow'+(buf.invoice?' has':'')+'" style="margin:0">'+(buf.invoice?'✓ Накладная<img src="'+buf.invoice+'">':'📄 Накладная')+'<input type="file" accept="image/*" capture="environment" id="ph-inv"></label>'+
         '<label class="photo grow'+(buf.receipt?' has':'')+'" style="margin:0">'+(buf.receipt?'✓ Чек<img src="'+buf.receipt+'">':'🧾 Чек')+'<input type="file" accept="image/*" id="ph-rec"></label>'+
       '</div>'+
-      (ed?'':'<button class="scanbtn" id="scan">🔎 Сканировать накладную (распознать позиции)</button>')+
       '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· «шт» — единица, «цена/ед» — цена за штуку, точка С/О — категория</span></label><div id="items"></div>'+
         '<button class="btn-ghost" id="additem" style="border:1px dashed var(--k-line);border-radius:10px">+ Добавить позицию</button></div>'+
       '<div class="fld"><label>Направление расхода</label><div class="seg" id="cat">'+
@@ -299,18 +298,16 @@
     });
     recalcTotal();
   }
+  // 🔴 ДЕМО-распознавание накладной. На сервере заменяется реальным OCR-агентом (vision-модель разбирает фото сама).
+  function autoScan(){
+    buf.items=[{name:'МДФ 16мм',qty:'5',unit:'шт',price:'12000'},{name:'Ручки мебельные',qty:'10',unit:'шт',price:'850'},{name:'Грунт-эмаль',qty:'8',unit:'л',price:'2400'}];
+  }
   function wireBuy(){
     renderItems();
-    $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; refreshBuy(); }); };
+    // загрузка фото накладной — сразу распознаём и заполняем позиции (кроме режима правки)
+    $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; if(!editingId) autoScan(); refreshBuy(); }); };
     $('ph-rec').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.receipt=d; refreshBuy(); }); };
     $('additem').onclick=function(){ buf.items.push({name:'',qty:'',unit:'шт'}); renderItems(); };
-    if($('scan')) $('scan').onclick=function(){
-      if(!buf.invoice){ alert('Сначала сфотографируйте накладную'); return; }
-      // 🔴 ДЕМО: реальное распознавание (OCR) подключим на сервере — vision-модель разберёт позиции сама.
-      buf.items=[{name:'МДФ 16мм',qty:'5',unit:'шт',price:'12000'},{name:'Ручки мебельные',qty:'10',unit:'шт',price:'850'},{name:'Грунт-эмаль',qty:'8',unit:'л',price:'2400'}];
-      renderItems();
-      alert('🔴 Демо-распознавание: позиции подставлены для примера. На сервере накладную будет читать ИИ и заполнять сам — вы только проверяете.');
-    };
     Array.prototype.forEach.call($('cat').querySelectorAll('button'),function(b){
       b.onclick=function(){
         buf.category=b.getAttribute('data-c');
@@ -391,6 +388,21 @@
     var inv=txs().filter(function(x){return x.kind==='expense';});
     $('mgr-inv').innerHTML = inv.length ? inv.map(opRow).join('') : '<div class="empty">Накладных пока нет.</div>';
     bindOpRows($('mgr-inv'));
+
+    // вкладка 3 — мини-склад (агрегат позиций: сколько чего пришло)
+    var agg={}, order=[];
+    DB.all('skladIntake').forEach(function(r){
+      var key=r.name+'|'+r.unit;
+      if(!agg[key]){ agg[key]={name:r.name,unit:r.unit,qty:0,sum:0,cat:r.category}; order.push(key); }
+      agg[key].qty += parseFloat(r.qty)||0;
+      agg[key].sum += parseFloat(r.sum)||0;
+    });
+    $('mgr-sklad').innerHTML = order.length ?
+      '<table class="sk"><thead><tr><th>Позиция</th><th style="text-align:right">Всего</th><th style="text-align:right">Сумма</th></tr></thead><tbody>'+
+      order.map(function(k){ var a=agg[k]; var pill=a.cat==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>';
+        return '<tr><td>'+a.name+' '+pill+'</td><td style="text-align:right;font-weight:600">'+(Math.round(a.qty*100)/100)+' '+a.unit+'</td><td style="text-align:right" class="muted">'+money(a.sum)+'</td></tr>';
+      }).join('')+'</tbody></table>' :
+      '<div class="empty">Склад пуст. Позиции появятся здесь после закупок снабженца.</div>';
   }
   function openGive(){
     openSheet('<h3>💸 Выдать деньги снабженцу</h3>'+
@@ -426,9 +438,17 @@
   $('tab-in').onclick=function(){ $('tab-in').className='on'; $('tab-out').className=''; $('sup-in').style.display=''; $('sup-out').style.display='none'; };
   $('tab-out').onclick=function(){ $('tab-out').className='on'; $('tab-in').className=''; $('sup-out').style.display=''; $('sup-in').style.display='none'; };
 
-  // вкладки управленца
-  $('tab-issues').onclick=function(){ $('tab-issues').className='on'; $('tab-inv').className=''; $('mgr-issues').style.display=''; $('mgr-inv').style.display='none'; };
-  $('tab-inv').onclick=function(){ $('tab-inv').className='on'; $('tab-issues').className=''; $('mgr-inv').style.display=''; $('mgr-issues').style.display='none'; };
+  // вкладки управленца (выдачи / накладные / склад)
+  function mgrTab(active){
+    var map={issues:'mgr-issues',inv:'mgr-inv',sklad:'mgr-sklad'};
+    Object.keys(map).forEach(function(k){
+      $('tab-'+k).className = (k===active?'on':'');
+      $(map[k]).style.display = (k===active?'':'none');
+    });
+  }
+  $('tab-issues').onclick=function(){ mgrTab('issues'); };
+  $('tab-inv').onclick=function(){ mgrTab('inv'); };
+  $('tab-sklad').onclick=function(){ mgrTab('sklad'); };
 
   setRole(localStorage.getItem('kassa_role')||'sup');
 })();
