@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BORZO Касса">
+<meta name="theme-color" content="#0f1115">
+<title>BORZO · Касса снабжения</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  :root{
+    --k-bg:#0f1115; --k-card:#181b21; --k-card2:#20242c; --k-ink:#eef0f3; --k-mut:#9aa0a8;
+    --k-line:#2a2e37; --k-green:#28c07a; --k-blue:#3b82f6; --k-amber:#f0a621; --k-red:#f0555c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--k-bg);color:var(--k-ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:0 0 40px;position:relative}
+  /* демо-переключатель ролей */
+  .roleswitch{display:flex;gap:6px;padding:10px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--k-line)}
+  .roleswitch button{flex:1;padding:9px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:10px;font-weight:600;font-size:13px;cursor:pointer}
+  .roleswitch button.on{background:var(--k-card2);color:var(--k-ink);border-color:#3a3f4a}
+  .demo-note{font-size:11px;color:var(--k-mut);text-align:center;padding:6px 14px 0}
+  .pad{padding:14px}
+  .h1{font-size:15px;font-weight:700;margin:2px 0 12px}
+  /* касса-плашка */
+  .balance{background:linear-gradient(135deg,#1c2129,#141821);border:1px solid var(--k-line);border-radius:18px;padding:20px;text-align:center;margin-bottom:14px}
+  .balance .lbl{font-size:12px;color:var(--k-mut);letter-spacing:.02em;text-transform:uppercase}
+  .balance .sum{font-size:38px;font-weight:800;margin-top:6px;letter-spacing:-.02em}
+  .balance .sub{font-size:12px;color:var(--k-mut);margin-top:6px}
+  /* карточки */
+  .card{background:var(--k-card);border:1px solid var(--k-line);border-radius:14px;padding:14px;margin-bottom:10px}
+  .notif{background:rgba(40,192,122,.08);border:1px solid rgba(40,192,122,.4)}
+  .row{display:flex;align-items:center;gap:10px}
+  .grow{flex:1;min-width:0}
+  .muted{color:var(--k-mut)}
+  .fz12{font-size:12px}.fz13{font-size:13px}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border:none;border-radius:13px;font-weight:700;font-size:16px;cursor:pointer}
+  .btn-buy{background:var(--k-green);color:#04140b}
+  .btn-give{background:var(--k-blue);color:#fff}
+  .btn-ghost{background:var(--k-card2);color:var(--k-ink);font-size:14px;padding:12px}
+  .btn-ok{background:var(--k-green);color:#04140b;font-size:14px;padding:11px}
+  .op{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--k-line)}
+  .op:last-child{border-bottom:none}
+  .op .ic{width:38px;height:38px;border-radius:10px;flex:0 0 38px;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .ic-in{background:rgba(59,130,246,.15)}
+  .ic-out{background:rgba(240,85,92,.13)}
+  .op .amt{font-weight:700;white-space:nowrap}
+  .amt-in{color:var(--k-blue)}.amt-out{color:var(--k-red)}
+  .pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px}
+  .pill-syr{background:rgba(139,92,246,.16);color:#a78bfa}
+  .pill-gen{background:rgba(240,166,33,.14);color:var(--k-amber)}
+  .pill-wait{background:rgba(240,166,33,.14);color:var(--k-amber)}
+  .pill-doc{background:rgba(40,192,122,.13);color:var(--k-green)}
+  .pill-nodoc{background:rgba(240,85,92,.14);color:var(--k-red)}
+  .kpi3{display:flex;gap:8px;margin-bottom:12px}
+  .kpi3 .k{flex:1;background:var(--k-card);border:1px solid var(--k-line);border-radius:12px;padding:11px}
+  .kpi3 .k .v{font-size:18px;font-weight:800;margin-top:3px}
+  .kpi3 .k .l{font-size:10.5px;color:var(--k-mut);text-transform:uppercase;letter-spacing:.02em}
+  .tabbar{display:flex;gap:6px;margin-bottom:12px}
+  .tabbar button{flex:1;padding:9px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:10px;font-weight:600;font-size:13px;cursor:pointer}
+  .tabbar button.on{background:var(--k-card2);color:var(--k-ink)}
+  .empty{text-align:center;color:var(--k-mut);font-size:13px;padding:26px 0}
+  /* мини-модалка снизу */
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;display:none}
+  .sheet-bg.on{display:block}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--k-card);border-radius:20px 20px 0 0;padding:18px 16px 26px;max-width:520px;margin:0 auto;transform:translateY(100%);transition:transform .22s;max-height:92vh;overflow:auto}
+  .sheet.on{transform:translateY(0)}
+  .sheet h3{margin:0 0 14px;font-size:17px}
+  .fld{margin-bottom:13px}
+  .fld label{display:block;font-size:12px;color:var(--k-mut);margin-bottom:6px}
+  .fld input,.fld select,.fld textarea{width:100%;padding:13px;background:var(--k-bg);border:1px solid var(--k-line);border-radius:11px;color:var(--k-ink);font-size:15px;font-family:inherit}
+  .seg{display:flex;gap:8px}
+  .seg button{flex:1;padding:12px;border:1px solid var(--k-line);background:var(--k-bg);color:var(--k-mut);border-radius:11px;font-weight:600;font-size:14px;cursor:pointer}
+  .seg button.on{border-color:currentColor}
+  .seg button.on.syr{color:#a78bfa;background:rgba(139,92,246,.1)}
+  .seg button.on.gen{color:var(--k-amber);background:rgba(240,166,33,.1)}
+  .photo{border:1.5px dashed var(--k-line);border-radius:12px;padding:16px;text-align:center;color:var(--k-mut);font-size:13px;cursor:pointer;position:relative}
+  .photo.has{border-style:solid;border-color:var(--k-green);color:var(--k-green)}
+  .photo input{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .photo img{max-height:64px;border-radius:8px;margin-top:8px;display:block;margin-left:auto;margin-right:auto}
+  .item-line{display:flex;gap:7px;margin-bottom:7px;align-items:center}
+  .item-line input{padding:10px}
+  .item-line .nm{flex:2}.item-line .qt{flex:.7}.item-line .un{flex:.8}
+  .item-line .del{flex:0 0 30px;background:var(--k-card2);border:1px solid var(--k-line);color:var(--k-mut);border-radius:9px;padding:9px 0;cursor:pointer}
+  .scanbtn{background:rgba(59,130,246,.12);color:#7fb0ff;border:1px solid rgba(59,130,246,.35);border-radius:11px;padding:11px;width:100%;font-weight:600;font-size:13px;cursor:pointer;margin-bottom:10px}
+  .bigsum{font-size:30px;font-weight:800;text-align:center;margin:6px 0 4px}
+  table.sk{width:100%;border-collapse:collapse;font-size:13px}
+  table.sk th{text-align:left;color:var(--k-mut);font-weight:600;font-size:11px;text-transform:uppercase;padding:6px 6px;border-bottom:1px solid var(--k-line)}
+  table.sk td{padding:9px 6px;border-bottom:1px solid var(--k-line)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ДЕМО: переключатель ролей (в реальной версии — вход по логину, эта полоса исчезнет) -->
+  <div class="roleswitch">
+    <button id="role-sup" class="on">📦 Кабинет снабженца</button>
+    <button id="role-mgr">👤 Кабинет управленца</button>
+  </div>
+  <div class="demo-note">🔴 Демо: роли переключаются кнопкой. В рабочей версии — вход по логину/паролю, данные общие на сервере.</div>
+
+  <!-- КАБИНЕТ СНАБЖЕНЦА -->
+  <div id="view-sup" class="pad">
+    <div class="balance">
+      <div class="lbl">Деньги в кассе</div>
+      <div class="sum" id="sup-balance">0 ₸</div>
+      <div class="sub" id="sup-balance-sub">касса снабжения</div>
+    </div>
+    <div id="sup-notifs"></div>
+    <button class="btn btn-buy" id="btn-buy" style="margin-bottom:16px">🛒 Закупаюсь</button>
+    <div class="h1">История операций</div>
+    <div class="card" id="sup-history"></div>
+  </div>
+
+  <!-- КАБИНЕТ УПРАВЛЕНЦА -->
+  <div id="view-mgr" class="pad" style="display:none">
+    <div class="kpi3">
+      <div class="k"><div class="l">Выдано</div><div class="v" id="mgr-given">0</div></div>
+      <div class="k"><div class="l">Потрачено</div><div class="v" id="mgr-spent">0</div></div>
+      <div class="k"><div class="l">Остаток</div><div class="v" id="mgr-left" style="color:var(--k-green)">0</div></div>
+    </div>
+    <button class="btn btn-give" id="btn-give" style="margin-bottom:16px">💸 Выдать деньги снабженцу</button>
+    <div class="tabbar">
+      <button id="tab-ops" class="on">Все операции</button>
+      <button id="tab-sklad">Приход на склад</button>
+    </div>
+    <div id="mgr-ops" class="card"></div>
+    <div id="mgr-sklad" class="card" style="display:none"></div>
+  </div>
+
+</div>
+
+<!-- нижняя модалка -->
+<div class="sheet-bg" id="sheet-bg"></div>
+<div class="sheet" id="sheet"><div id="sheet-body"></div></div>
+
+<script src="store.js"></script>
+<script src="kassa.js"></script>
+</body>
+</html>
