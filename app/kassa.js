@@ -22,6 +22,55 @@
     }); return {given:given,spent:spent,left:given-spent};
   }
 
+  // ---------- роль / клоны ----------
+  function role(){ return localStorage.getItem('kassa_role')||'sup'; }
+  function roleName(r){ return r==='mgr'?'управленец':'снабженец'; }
+  function clone(o){ return JSON.parse(JSON.stringify(o)); }
+  function rerender(){ if(role()==='sup') renderSup(); else renderMgr(); }
+
+  // ---------- дифф «было → стало» ----------
+  function itemStr(i){ return (i.name||'—')+': '+(i.qty||'?')+' '+(i.unit||'')+' ('+(i.cat||'')+')'; }
+  function genericDiff(tx,next){
+    var d=[];
+    if('amount' in next && (+next.amount)!==(+tx.amount)) d.push({label:'Сумма', from:money(tx.amount), to:money(next.amount)});
+    if('source' in next && next.source!==tx.source) d.push({label:'Источник', from:tx.source, to:next.source});
+    if('category' in next && next.category!==tx.category) d.push({label:'Осн. категория', from:tx.category, to:next.category});
+    if('items' in next){
+      var a=tx.items||[], b=next.items||[], n=Math.max(a.length,b.length);
+      for(var k=0;k<n;k++){
+        if(!a[k]) d.push({label:'Добавлена позиция', from:'—', to:itemStr(b[k])});
+        else if(!b[k]) d.push({label:'Удалена позиция', from:itemStr(a[k]), to:'—'});
+        else if(itemStr(a[k])!==itemStr(b[k])) d.push({label:'Позиция', from:itemStr(a[k]), to:itemStr(b[k])});
+      }
+    }
+    return d;
+  }
+  function diffRows(d){
+    return '<div class="diff">'+d.map(function(c){
+      return '<div class="diffrow"><div class="dl">'+c.label+'</div>'+
+        '<div class="dv"><span class="from">'+c.from+'</span> <span class="arr">→</span> <span class="to">'+c.to+'</span></div></div>';
+    }).join('')+'</div>';
+  }
+
+  // ---------- запрос на изменение (двустороннее согласование) ----------
+  function proposeChange(id,next,note){
+    var tx=DB.find('kassaTx',id); if(!tx) return;
+    if(!genericDiff(tx,next).length){ alert('Вы ничего не изменили'); return false; }
+    DB.update('kassaTx',id,{pending:{by:role(),next:next,note:note||'',t:Date.now()}});
+    return true;
+  }
+  function approveChange(id){
+    var tx=DB.find('kassaTx',id); if(!tx||!tx.pending) return;
+    var d=genericDiff(tx,tx.pending.next);
+    var entry={t:Date.now(),by:tx.pending.by,approver:role(),changes:d,note:tx.pending.note};
+    DB.update('kassaTx',id, Object.assign({}, tx.pending.next, {pending:null, log:(tx.log||[]).concat([entry])}));
+  }
+  function rejectChange(id){
+    var tx=DB.find('kassaTx',id); if(!tx||!tx.pending) return;
+    var entry={t:Date.now(),by:tx.pending.by,approver:role(),rejected:true,changes:genericDiff(tx,tx.pending.next),note:tx.pending.note};
+    DB.update('kassaTx',id,{pending:null, log:(tx.log||[]).concat([entry])});
+  }
+
   // ---------- нижняя модалка ----------
   var sheetBg=$('sheet-bg'), sheet=$('sheet'), sheetBody=$('sheet-body');
   function openSheet(html){ sheetBody.innerHTML=html; sheetBg.classList.add('on'); sheet.classList.add('on'); }
@@ -49,17 +98,19 @@
   function renderSup(){
     $('sup-balance').textContent=money(balance());
 
-    // уведомления о выданных, но ещё не принятых суммах
+    // уведомления: выданные, но не принятые суммы + запросы на согласование от управленца
     var pend=txs().filter(function(x){return x.kind==='issue' && x.status==='wait';});
-    $('sup-notifs').innerHTML=pend.map(function(x){
+    var notifHtml=pend.map(function(x){
       return '<div class="card notif"><div class="row"><div class="grow">'+
         '<div style="font-weight:700">💰 Вам выдано '+money(x.amount)+'</div>'+
         '<div class="muted fz12" style="margin-top:2px">Источник: '+x.source+' · '+stamp(new Date(x.t))+'</div></div></div>'+
         '<button class="btn btn-ok" style="margin-top:11px" data-accept="'+x.id+'">✓ Подтвердить получение</button></div>';
-    }).join('');
-    Array.prototype.forEach.call(document.querySelectorAll('[data-accept]'),function(b){
+    }).join('') + reqPlates('mgr');
+    $('sup-notifs').innerHTML=notifHtml;
+    Array.prototype.forEach.call($('sup-notifs').querySelectorAll('[data-accept]'),function(b){
       b.onclick=function(){ DB.update('kassaTx',b.getAttribute('data-accept'),{status:'accepted',ta:Date.now()}); renderSup(); };
     });
+    bindReqPlates($('sup-notifs'));
 
     // история
     var hist=txs();
@@ -89,44 +140,117 @@
       el.onclick=function(){ showOp(el.getAttribute('data-op')); };
     });
   }
+  // плашки входящих запросов на согласование (byRole = кто инициатор)
+  function reqPlates(byRole){
+    var reqs=txs().filter(function(x){ return x.pending && x.pending.by===byRole; });
+    return reqs.map(function(x){
+      var what = x.kind==='expense' ? 'накладной' : 'выдаче';
+      return '<div class="card notif" style="border-color:rgba(240,166,33,.5);background:rgba(240,166,33,.07)">'+
+        '<div style="font-weight:700">✏️ Запрос на изменение в '+what+'</div>'+
+        '<div class="muted fz12" style="margin:3px 0 10px">от: '+roleName(byRole)+' · '+stamp(new Date(x.pending.t))+'</div>'+
+        '<button class="btn btn-ok" data-req="'+x.id+'">Посмотреть и решить</button></div>';
+    }).join('');
+  }
+  function bindReqPlates(root){
+    Array.prototype.forEach.call(root.querySelectorAll('[data-req]'),function(b){
+      b.onclick=function(){ showOp(b.getAttribute('data-req')); };
+    });
+  }
 
   function showOp(id){
     var x=DB.find('kassaTx',id); if(!x) return;
-    var items=(x.items||[]).map(function(i){
-      var c=i.cat||x.category, pill=c==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>';
-      return '<tr><td>'+i.name+'</td><td style="text-align:right">'+i.qty+' '+i.unit+'</td><td style="text-align:right">'+pill+'</td></tr>';
-    }).join('');
-    var ph=function(src,lbl){ return src?'<div class="fld"><label>'+lbl+'</label><img src="'+src+'" style="width:100%;border-radius:10px"></div>':''; };
-    openSheet('<h3>Детали накладной</h3>'+
-      '<div class="bigsum" style="color:var(--k-red)">−'+money(x.amount)+'</div>'+
-      '<div class="muted fz13" style="text-align:center;margin-bottom:14px">'+stamp(new Date(x.t))+' · осн. категория: '+x.category+'</div>'+
-      (items?'<table class="sk" style="margin-bottom:14px"><thead><tr><th>Наименование</th><th style="text-align:right">Кол-во</th><th style="text-align:right">Тип</th></tr></thead><tbody>'+items+'</tbody></table>':'')+
-      ph(x.invoice,'Накладная')+ph(x.receipt,'Чек')+
-      '<button class="btn btn-ghost" id="cl">Закрыть</button>');
+    var R=role(), body='';
+    if(x.kind==='expense'){
+      var items=(x.items||[]).map(function(i){
+        var c=i.cat||x.category, pill=c==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>';
+        return '<tr><td>'+i.name+'</td><td style="text-align:right">'+i.qty+' '+i.unit+'</td><td style="text-align:right">'+pill+'</td></tr>';
+      }).join('');
+      var ph=function(src,lbl){ return src?'<div class="fld"><label>'+lbl+'</label><img src="'+src+'" style="width:100%;border-radius:10px"></div>':''; };
+      body='<h3>Детали накладной</h3>'+
+        '<div class="bigsum" style="color:var(--k-red)">−'+money(x.amount)+'</div>'+
+        '<div class="muted fz13" style="text-align:center;margin-bottom:14px">'+stamp(new Date(x.t))+' · осн. категория: '+x.category+'</div>'+
+        (items?'<table class="sk" style="margin-bottom:14px"><thead><tr><th>Наименование</th><th style="text-align:right">Кол-во</th><th style="text-align:right">Тип</th></tr></thead><tbody>'+items+'</tbody></table>':'')+
+        ph(x.invoice,'Накладная')+ph(x.receipt,'Чек');
+    } else {
+      var st = x.status==='accepted' ? '<span class="pill pill-doc">получено</span>' : '<span class="pill pill-wait">ждёт подтверждения</span>';
+      body='<h3>Выдача денег</h3>'+
+        '<div class="bigsum" style="color:var(--k-blue)">+'+money(x.amount)+'</div>'+
+        '<div class="muted fz13" style="text-align:center;margin-bottom:14px">'+x.source+' · '+stamp(new Date(x.t))+' '+st+'</div>';
+    }
+
+    // блок согласования / кнопки правки
+    if(x.pending){
+      var d=genericDiff(x,x.pending.next);
+      body+='<div class="pend"><div class="ph">✏️ Запрос на изменение · от: '+roleName(x.pending.by)+'</div>'+
+        diffRows(d)+
+        (x.pending.note?'<div class="muted fz12" style="margin-top:6px">Комментарий: '+x.pending.note+'</div>':'')+'</div>';
+      if(x.pending.by!==R){
+        body+='<button class="btn btn-ok" id="op-appr" style="margin-bottom:8px">✓ Одобрить изменение</button>'+
+              '<button class="btn btn-ghost" id="op-rej" style="margin-bottom:8px">Отклонить</button>';
+      } else {
+        body+='<div class="muted fz13" style="text-align:center;margin-bottom:10px">Ждёт согласования второй стороны ('+roleName(x.pending.by==='sup'?'mgr':'sup')+')</div>';
+      }
+    } else {
+      if(x.kind==='expense'){
+        body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Изменить (через согласование)</button>';
+      } else if(x.kind==='issue'){
+        if(x.status==='wait' && R==='mgr'){
+          body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Изменить</button>'+
+                '<button class="btn btn-ghost" id="op-cancel" style="margin-bottom:8px;color:var(--k-red)">Отменить выдачу</button>';
+        } else if(x.status==='accepted'){
+          body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Скорректировать (через согласование)</button>';
+        }
+      }
+    }
+
+    // журнал изменений
+    if(x.log && x.log.length){
+      body+='<div class="logh">История изменений</div>';
+      body+=x.log.slice().reverse().map(function(e){
+        var head=(e.rejected?'✕ Отклонено':'✓ Одобрено')+' · предложил '+roleName(e.by)+', '+(e.rejected?'отклонил':'одобрил')+' '+roleName(e.approver)+' · '+stamp(new Date(e.t));
+        return '<div class="logi"><div class="muted fz12">'+head+'</div>'+diffRows(e.changes)+'</div>';
+      }).join('');
+    }
+
+    body+='<button class="btn btn-ghost" id="cl">Закрыть</button>';
+    openSheet(body);
     $('cl').onclick=closeSheet;
+    if($('op-appr')) $('op-appr').onclick=function(){ approveChange(id); closeSheet(); rerender(); };
+    if($('op-rej')) $('op-rej').onclick=function(){ rejectChange(id); closeSheet(); rerender(); };
+    if($('op-edit')) $('op-edit').onclick=function(){ if(x.kind==='expense') openEdit(id); else openEditIssue(id); };
+    if($('op-cancel')) $('op-cancel').onclick=function(){ if(confirm('Отменить эту выдачу?')){ DB.remove('kassaTx',id); closeSheet(); rerender(); } };
   }
 
-  // ----- форма «Закупаюсь» -----
-  var buf={invoice:null,receipt:null,items:[{name:'',qty:'',unit:'шт'}],category:'Сырьё'};
+  // ----- форма «Закупаюсь» / редактирование -----
+  var buf={invoice:null,receipt:null,items:[{name:'',qty:'',unit:'шт'}],category:'Сырьё',amount:''};
+  var editingId=null;
   function openBuy(){
-    buf={invoice:null,receipt:null,items:[{name:'',qty:'',unit:'шт'}],category:'Сырьё'};
+    editingId=null;
+    buf={invoice:null,receipt:null,items:[{name:'',qty:'',unit:'шт'}],category:'Сырьё',amount:''};
+    openSheet(buyHtml()); wireBuy();
+  }
+  function openEdit(id){
+    var x=DB.find('kassaTx',id); if(!x) return;
+    editingId=id;
+    buf={invoice:x.invoice||null,receipt:x.receipt||null,items:clone(x.items&&x.items.length?x.items:[{name:'',qty:'',unit:'шт'}]),category:x.category,amount:x.amount};
     openSheet(buyHtml()); wireBuy();
   }
   function buyHtml(){
-    return '<h3>🛒 Закуп</h3>'+
-      '<div class="muted fz12" style="margin-bottom:12px">Сфотографируйте накладную и/или чек. Без документа списание провести нельзя.</div>'+
+    var ed=!!editingId, sy=buf.category==='Сырьё';
+    return '<h3>'+(ed?'✏️ Изменить накладную':'🛒 Закуп')+'</h3>'+
+      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?'Правки уйдут второй стороне на согласование — молча ничего не меняется.':'Сфотографируйте накладную и/или чек. Без документа списание провести нельзя.')+'</div>'+
       '<div class="row" style="gap:10px;margin-bottom:12px">'+
         '<label class="photo grow'+(buf.invoice?' has':'')+'" style="margin:0">'+(buf.invoice?'✓ Накладная<img src="'+buf.invoice+'">':'📄 Накладная')+'<input type="file" accept="image/*" capture="environment" id="ph-inv"></label>'+
         '<label class="photo grow'+(buf.receipt?' has':'')+'" style="margin:0">'+(buf.receipt?'✓ Чек<img src="'+buf.receipt+'">':'🧾 Чек')+'<input type="file" accept="image/*" id="ph-rec"></label>'+
       '</div>'+
-      '<button class="scanbtn" id="scan">🔎 Сканировать накладную (распознать позиции)</button>'+
+      (ed?'':'<button class="scanbtn" id="scan">🔎 Сканировать накладную (распознать позиции)</button>')+
       '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· кнопка «шт» — единица, точка С/О — категория позиции</span></label><div id="items"></div>'+
         '<button class="btn-ghost" id="additem" style="border:1px dashed var(--k-line);border-radius:10px">+ Добавить позицию</button></div>'+
       '<div class="fld"><label>Направление расхода</label><div class="seg" id="cat">'+
-        '<button data-c="Сырьё" class="on syr">Сырьё</button><button data-c="Общие">Общие</button></div></div>'+
-      '<div class="fld"><label>Сумма расхода, ₸</label><input type="number" inputmode="numeric" id="amt" placeholder="0"></div>'+
-      '<div class="muted fz12" style="text-align:center;margin-bottom:10px">В кассе сейчас: <b style="color:var(--k-ink)">'+money(balance())+'</b></div>'+
-      '<button class="btn btn-buy" id="do-buy">Расход прошёл — списать</button>'+
+        '<button data-c="Сырьё" class="'+(sy?'on syr':'')+'">Сырьё</button><button data-c="Общие" class="'+(sy?'':'on gen')+'">Общие</button></div></div>'+
+      '<div class="fld"><label>Сумма расхода, ₸</label><input type="number" inputmode="numeric" id="amt" placeholder="0" value="'+(buf.amount||'')+'"></div>'+
+      (ed?'':'<div class="muted fz12" style="text-align:center;margin-bottom:10px">В кассе сейчас: <b style="color:var(--k-ink)">'+money(balance())+'</b></div>')+
+      '<button class="btn btn-buy" id="do-buy">'+(ed?'Отправить на согласование':'Расход прошёл — списать')+'</button>'+
       '<button class="btn btn-ghost" id="cancel" style="margin-top:8px">Отмена</button>';
   }
   var UNITS=['шт','л','лист','рул','кг','м','компл'];
@@ -158,7 +282,7 @@
     $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; refreshBuy(); }); };
     $('ph-rec').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.receipt=d; refreshBuy(); }); };
     $('additem').onclick=function(){ buf.items.push({name:'',qty:'',unit:'шт'}); renderItems(); };
-    $('scan').onclick=function(){
+    if($('scan')) $('scan').onclick=function(){
       if(!buf.invoice){ alert('Сначала сфотографируйте накладную'); return; }
       // 🔴 ДЕМО: реальное распознавание (OCR) подключим на сервере — vision-модель разберёт позиции сама.
       buf.items=[{name:'Плёнка ПВХ матовая',qty:'3',unit:'рул'},{name:'Ручки мебельные',qty:'10',unit:'шт'},{name:'МДФ 16мм',qty:'5',unit:'лист'}];
@@ -173,6 +297,7 @@
         renderItems();
       };
     });
+    $('amt').oninput=function(){ buf.amount=$('amt').value; };
     $('cancel').onclick=closeSheet;
     $('do-buy').onclick=doBuy;
   }
@@ -181,9 +306,17 @@
   function doBuy(){
     var amt=parseInt($('amt').value)||0;
     if(amt<=0){ alert('Укажите сумму расхода'); return; }
-    if(!buf.invoice && !buf.receipt){ alert('Прикрепите накладную или чек — без документа списать нельзя'); return; }
-    if(amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше, чем есть'); return; }
+    if(!buf.invoice && !buf.receipt){ alert('Прикрепите накладную или чек — без документа нельзя'); return; }
     var items=buf.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:i.unit||'шт',cat:i.cat||buf.category};});
+    // режим правки — отправляем на согласование, ничего не меняем сразу
+    if(editingId){
+      if(proposeChange(editingId,{amount:amt,category:buf.category,items:items})){
+        var eid=editingId; editingId=null; closeSheet(); rerender();
+        alert('Изменение отправлено на согласование второй стороне.');
+      }
+      return;
+    }
+    if(amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше, чем есть'); return; }
     var now=Date.now();
     DB.add('kassaTx',{kind:'expense',t:now,amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt});
     // приход на склад (позиции, каждая со своей категорией)
@@ -193,10 +326,34 @@
     closeSheet(); renderSup();
   }
 
+  // ----- корректировка выдачи -----
+  function openEditIssue(id){
+    var x=DB.find('kassaTx',id); if(!x) return;
+    var direct = (x.status==='wait' && role()==='mgr'); // до подтверждения — правим напрямую
+    openSheet('<h3>'+(direct?'✏️ Изменить выдачу':'✏️ Скорректировать выдачу')+'</h3>'+
+      (direct?'':'<div class="muted fz12" style="margin-bottom:12px">Правка уйдёт снабженцу на согласование — задним числом в одиночку изменить нельзя.</div>')+
+      '<div class="fld"><label>Сумма, ₸</label><input type="number" inputmode="numeric" id="e-amt" value="'+x.amount+'"></div>'+
+      '<div class="fld"><label>Источник</label><select id="e-src">'+
+        ['Наличные','Каспий','Карта','Ульяна'].map(function(s){return '<option'+(s===x.source?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div>'+
+      '<button class="btn btn-give" id="e-do">'+(direct?'Сохранить':'Отправить на согласование')+'</button>'+
+      '<button class="btn btn-ghost" id="e-cancel" style="margin-top:8px">Отмена</button>');
+    $('e-cancel').onclick=closeSheet;
+    $('e-do').onclick=function(){
+      var a=parseInt($('e-amt').value)||0; if(a<=0){ alert('Укажите сумму'); return; }
+      var next={amount:a,source:$('e-src').value};
+      if(direct){ DB.update('kassaTx',id,next); closeSheet(); rerender(); }
+      else if(proposeChange(id,next)){ closeSheet(); rerender(); alert('Корректировка отправлена снабженцу на согласование.'); }
+    };
+  }
+
   // ================= КАБИНЕТ УПРАВЛЕНЦА =================
   function renderMgr(){
     var s=sums();
     $('mgr-given').textContent=money(s.given); $('mgr-spent').textContent=money(s.spent); $('mgr-left').textContent=money(s.left);
+
+    // запросы на согласование, ждущие управленца (инициатор — снабженец)
+    $('mgr-notifs').innerHTML = reqPlates('sup');
+    bindReqPlates($('mgr-notifs'));
 
     // вкладка 1 — выданные деньги (история всех выдач)
     var issues=txs().filter(function(x){return x.kind==='issue';});
