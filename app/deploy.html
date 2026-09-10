@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BORZO · Сервер и развёртывание</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .dep-wrap{max-width:720px}
+  .status{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;border:1px solid var(--line);margin-bottom:16px}
+  .status .dot{width:11px;height:11px;border-radius:50%;flex:0 0 11px}
+  .status.off{background:#fff6f5;border-color:#f6d4d3}
+  .status.off .dot{background:var(--red)}
+  .status.on{background:#eef9f3;border-color:#bfe6d1}
+  .status.on .dot{background:var(--green)}
+  .fieldrow{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .fieldrow input{flex:1;padding:12px 13px;border:1px solid var(--line);border-radius:11px;font-size:14px;font-family:inherit;letter-spacing:.02em}
+  .fieldrow .eye,.fieldrow .help{flex:0 0 auto;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:#fff;cursor:pointer;font-weight:600;color:var(--ink2)}
+  .qbtn{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:700;color:var(--blue);flex:0 0 26px}
+  .warn{background:#fff8ec;border:1px solid #f3dfa9;border-radius:12px;padding:13px 15px;margin-top:14px;font-size:13px;line-height:1.5}
+  .warn b{color:#9a6a00}
+  .steps{counter-reset:s;margin-top:10px}
+  .step{display:flex;gap:11px;padding:9px 0;border-top:1px solid var(--line2)}
+  .step:first-child{border-top:0}
+  .step .n{flex:0 0 24px;height:24px;border-radius:50%;background:var(--blue-soft);color:var(--blue);display:grid;place-items:center;font-weight:700;font-size:12px}
+  .step .en{color:var(--ink3);font-size:12px;margin-top:2px}
+  code{background:var(--line2);padding:1px 6px;border-radius:5px;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="dep-wrap">
+
+        <div class="status off" id="dep-status">
+          <span class="dot"></span>
+          <div><div style="font-weight:600" id="dep-status-t">Сервер не подключён</div>
+          <div class="muted" style="font-size:12.5px" id="dep-status-s">Сейчас система работает в демо-режиме на этом устройстве. Общие данные, вход по логину и живая касса включатся после подключения сервера.</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="t">Подключение сервера (DigitalOcean)</span></div>
+          <div class="muted" style="margin-bottom:6px">Провайдер (provider — поставщик): <b>DigitalOcean</b>. Вставьте API-токен (API token — ключ доступа к серверу), чтобы развернуть BORZO.</div>
+
+          <div style="font-weight:600;font-size:13px;margin:12px 0 2px;display:flex;align-items:center;gap:8px">API-токен DigitalOcean
+            <button class="qbtn" id="tok-help" title="Как получить токен">?</button>
+          </div>
+          <div class="fieldrow">
+            <input id="tok" type="password" placeholder="dop_v1_..." autocomplete="off" spellcheck="false">
+            <button class="eye" id="tok-eye" title="Показать / скрыть">👁</button>
+          </div>
+          <button class="btn primary" id="tok-save" style="margin-top:12px"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>Сохранить и подключить</button>
+
+          <div class="warn">
+            🔴 <b>Важно про безопасность.</b> Это публичная демо-версия (адрес открыт всем). Токен даёт полный доступ к серверу, поэтому <b>сюда пока не вставляй боевой токен</b> — поле по-настоящему активируется, когда мы развернём сервер с защищённым хранилищем. После подключения токен хранится только на сервере в зашифрованном виде и в интерфейсе маскируется (показываются лишь последние 4 знака). Когда сервер поднимется — старый токен отзови и выпусти новый.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+<script src="layout.js"></script>
+<script src="store.js"></script>
+<script src="ui.js"></script>
+<script>BORZO.mount('settings','Сервер и развёртывание','Подключение сервера BORZO');</script>
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i);};
+  // восстановить маску, если раньше вводили
+  var masked=localStorage.getItem('borzo_do_masked');
+  if(masked){
+    $('dep-status').className='status on';
+    $('dep-status-t').textContent='Токен задан (демо-режим)';
+    $('dep-status-s').innerHTML='Сохранена маска <b>'+masked+'</b>. Реальное развёртывание — после запуска сервера.';
+  }
+  $('tok-eye').onclick=function(){ var t=$('tok'); t.type = t.type==='password'?'text':'password'; };
+  $('tok-save').onclick=function(){
+    var v=($('tok').value||'').trim();
+    if(!v){ UI.toast('Вставьте токен','err'); return; }
+    if(v.indexOf('dop_v1_')!==0){ UI.toast('Токен DigitalOcean начинается с dop_v1_','err'); return; }
+    var mask='dop_v1_••••'+v.slice(-4);
+    localStorage.setItem('borzo_do_masked',mask);   // храним ТОЛЬКО маску, не сам токен
+    $('tok').value='';
+    UI.info({title:'Токен принят (демо)', html:
+      '<div style="margin-bottom:8px">Сохранена только маска <b>'+mask+'</b> — сам токен в публичной версии не хранится.</div>'+
+      '<div class="muted" style="font-size:12.5px">🔴 Реальное подключение сервера включится на следующем шаге, когда развернём сервер с защищённым хранилищем. Тогда токен передаётся напрямую в него, минуя публичный сайт.</div>'});
+    $('dep-status').className='status on';
+    $('dep-status-t').textContent='Токен задан (демо-режим)';
+    $('dep-status-s').innerHTML='Сохранена маска <b>'+mask+'</b>. Реальное развёртывание — после запуска сервера.';
+  };
+  // двуязычная инструкция — где взять токен (правило: перевод рядом с англ. словами)
+  $('tok-help').onclick=function(){
+    UI.info({title:'Где взять токен DigitalOcean (how to get the token)', html:
+      '<div class="steps">'+
+      '<div class="step"><span class="n">1</span><div><div>Открой <code>cloud.digitalocean.com</code> и войди в аккаунт BORZO</div><div class="en">🇬🇧 Open <code>cloud.digitalocean.com</code> and sign in (войти)</div></div></div>'+
+      '<div class="step"><span class="n">2</span><div><div>Слева внизу в меню — раздел <b>API</b></div><div class="en">🇬🇧 In the left menu (меню слева), open <b>API</b></div></div></div>'+
+      '<div class="step"><span class="n">3</span><div><div>Нажми <b>Generate New Token</b> (создать новый токен)</div><div class="en">🇬🇧 Click <b>Generate New Token</b> (создать новый токен)</div></div></div>'+
+      '<div class="step"><span class="n">4</span><div><div>Имя (name): <code>borzo-server</code>. Права (scopes — доступ): <b>Full Access</b> (полный доступ)</div><div class="en">🇬🇧 Name (имя): <code>borzo-server</code>, Scopes (права): <b>Full Access</b> (полный доступ)</div></div></div>'+
+      '<div class="step"><span class="n">5</span><div><div>Нажми <b>Generate Token</b> (создать) и скопируй ключ <code>dop_v1_...</code> — он показывается один раз</div><div class="en">🇬🇧 Click <b>Generate Token</b> (создать), copy (скопируй) the <code>dop_v1_...</code> key — shown once (один раз)</div></div></div>'+
+      '<div class="step"><span class="n">6</span><div><div>Вставь его сюда и нажми «Сохранить»</div><div class="en">🇬🇧 Paste (вставь) it here and click Save (сохранить)</div></div></div>'+
+      '</div>'});
+  };
+})();
+</script>
+</body>
+</html>
