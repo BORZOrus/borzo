@@ -21,10 +21,11 @@
   body{margin:0;background:var(--k-bg);color:var(--k-ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
   .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:0 0 40px;position:relative}
   /* демо-переключатель ролей */
-  .userbar{display:flex;align-items:center;gap:10px;padding:11px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--k-line)}
-  .userbar .who{flex:1;font-size:13px}
-  .userbar #logout,.userbar #passbtn{padding:8px 14px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer}
-  .userbar #passbtn{padding:8px 12px}
+  .roleswitch{display:flex;gap:6px;padding:10px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--k-line)}
+  .roleswitch button{flex:1;padding:9px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:10px;font-weight:600;font-size:13px;cursor:pointer}
+  .roleswitch button.on{background:var(--k-card2);color:var(--k-ink);border-color:#3a3f4a}
+  .demo-note{font-size:11px;color:var(--k-mut);text-align:center;padding:6px 14px 0}
+  .scanning{text-align:center;color:#7fb0ff;font-size:13px;padding:8px;background:rgba(59,130,246,.1);border-radius:10px;margin-bottom:10px}
   .pad{padding:14px}
   .h1{font-size:15px;font-weight:700;margin:2px 0 12px}
   /* касса-плашка */
@@ -119,11 +120,11 @@
 <div class="wrap">
 
   <!-- шапка пользователя -->
-  <div class="userbar">
-    <div class="who"><span id="u-role" class="muted"></span> · <b id="u-name"></b></div>
-    <button id="passbtn" title="Сменить пароль">🔑</button>
-    <button id="logout">Выйти</button>
+  <div class="roleswitch">
+    <button id="role-sup" class="on">📦 Кабинет снабженца</button>
+    <button id="role-mgr">👤 Кабинет управленца</button>
   </div>
+  <div class="demo-note">🔴 Обкатка: роли переключаются кнопкой, данные общие на сервере. Вход по логину включим в финале.</div>
 
   <!-- КАБИНЕТ СНАБЖЕНЦА -->
   <div id="view-sup" class="pad">

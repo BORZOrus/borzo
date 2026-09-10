@@ -12,9 +12,14 @@ window.API = (function(){
       return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Ошибка'); return d; });
     });
   }
-  return {
+  var self;
+  self = {
     token: token,
     user: JSON.parse(localStorage.getItem('borzo_user')||'null'),
+    setToken: function(t){ token=t; self.token=t; localStorage.setItem('borzo_token',t); },
+    config:      function(){ return req('GET','/config'); },
+    demoToken:   function(role){ return req('POST','/demo/token',{role:role}); },
+    scan:        function(image){ return req('POST','/scan',{image:image}); },
     me:          function(){ return req('GET','/me'); },
     password:    function(b){ return req('POST','/auth/password', b); },
     kassa:       function(){ return req('GET','/kassa'); },
@@ -29,4 +34,5 @@ window.API = (function(){
     reject:      function(id){ return req('POST','/kassa/'+id+'/reject'); },
     logout: logout
   };
+  return self;
 })();

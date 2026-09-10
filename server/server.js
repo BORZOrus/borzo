@@ -235,6 +235,60 @@ app.get('/api/sklad', auth, async (req,res)=>{
   res.json({ items: order.map(k=>agg[k]) });
 });
 
+// ---------- ДЕМО-режим: переключение ролей без пароля (для обкатки; в финале DEMO_MODE=0) ----------
+app.get('/api/config', (req,res)=> res.json({ demo: process.env.DEMO_MODE==='1' }));
+app.post('/api/demo/token', async (req,res)=>{
+  if(process.env.DEMO_MODE!=='1') return res.status(404).json({error:'demo off'});
+  const role = req.body.role==='mgr'?'mgr':'sup';
+  const r = await pool.query('SELECT * FROM users WHERE role=$1 ORDER BY id LIMIT 1',[role]);
+  const u = r.rows[0];
+  if(!u) return res.status(400).json({error:'нет пользователя роли'});
+  res.json({ token: sign(u), user:{ name:u.name, role:u.role, login:u.login } });
+});
+
+// ---------- реальный сканер накладной (vision через OpenRouter) ----------
+const SCAN_PROMPT = 'Ты распознаёшь фото товарной накладной или чека (может быть на русском/казахском, печатной или от руки). '+
+  'Извлеки все позиции товаров. Верни СТРОГО валидный JSON-массив без пояснений и без markdown, каждый элемент: '+
+  '{"name": "наименование", "qty": "количество числом", "unit": "одно из: шт, л, кг", "price": "цена за ЕДИНИЦУ числом без пробелов и валюты"}. '+
+  'Если в накладной дана сумма по строке, а не цена за единицу — раздели сумму на количество. '+
+  'Единицу измерения приведи к шт, л или кг (штуки/листы/рулоны/комплекты → шт; литры → л; килограммы → кг). '+
+  'Если ничего не распознал — верни [].';
+app.post('/api/scan', auth, async (req,res)=>{
+  const image = req.body.image;
+  if(!image || String(image).indexOf('data:')!==0) return res.status(400).json({error:'нет изображения'});
+  const key = process.env.OPENROUTER_API_KEY;
+  if(!key) return res.status(500).json({error:'сканер не настроен'});
+  try{
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        model: process.env.SCAN_MODEL || 'google/gemini-2.0-flash-001',
+        temperature: 0,
+        messages: [{ role:'user', content:[
+          { type:'text', text: SCAN_PROMPT },
+          { type:'image_url', image_url:{ url: image } }
+        ]}]
+      })
+    });
+    const d = await r.json();
+    let txt = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
+    txt = String(txt).replace(/```json/gi,'').replace(/```/g,'').trim();
+    let items = [];
+    try { items = JSON.parse(txt); }
+    catch(e){ const m = txt.match(/\[[\s\S]*\]/); if(m){ try{ items = JSON.parse(m[0]); }catch(e2){} } }
+    if(!Array.isArray(items)) items = [];
+    items = items.filter(function(i){return i && (i.name||'').toString().trim();}).map(function(i){
+      var unit = ['шт','л','кг'].indexOf(i.unit)>=0 ? i.unit : 'шт';
+      return { name:String(i.name).slice(0,120), qty:String(i.qty==null?'':i.qty), unit:unit, price:String(i.price==null?'':i.price).replace(/[^\d.]/g,'') };
+    });
+    // лог расхода на ИИ (лёгкий счётчик)
+    const usage = d.usage || {};
+    console.log('[scan] items='+items.length+' tokens='+(usage.total_tokens||'?'));
+    res.json({ items: items });
+  }catch(e){ console.error('scan error', e.message); res.status(502).json({error:'не удалось распознать, введите вручную'}); }
+});
+
 app.get('/api/health', (req,res)=> res.json({ ok:true }));
 
 initSchema().then(()=>{

@@ -218,6 +218,7 @@
         '<label class="photo grow'+(buf.invoice?' has':'')+'" style="margin:0">'+(buf.invoice?'✓ Накладная<img src="'+buf.invoice+'">':'📄 Накладная')+'<input type="file" accept="image/*" capture="environment" id="ph-inv"></label>'+
         '<label class="photo grow'+(buf.receipt?' has':'')+'" style="margin:0">'+(buf.receipt?'✓ Чек<img src="'+buf.receipt+'">':'🧾 Чек')+'<input type="file" accept="image/*" id="ph-rec"></label>'+
       '</div>'+
+      (buf.scanning?'<div class="scanning">🔎 Распознаю накладную…</div>':'')+
       '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· «шт» — единица, «цена/ед» — цена за штуку, точка С/О — категория</span></label><div id="items"></div>'+
         '<button class="btn-ghost" id="additem" style="border:1px dashed var(--k-line);border-radius:10px">+ Добавить позицию</button></div>'+
       '<div class="fld"><label>Направление расхода</label><div class="seg" id="cat">'+
@@ -274,7 +275,16 @@
   }
   function wireBuy(){
     renderItems();
-    $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; if(!editingId) autoScan(); refreshBuy(); }); };
+    $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){
+      buf.invoice=d;
+      if(editingId){ refreshBuy(); return; }
+      buf.scanning=true; refreshBuy();
+      API.scan(d).then(function(res){
+        buf.scanning=false;
+        if(res.items && res.items.length) buf.items=res.items.map(function(i){return {name:i.name,qty:i.qty,unit:i.unit||'шт',price:i.price};});
+        refreshBuy();
+      }).catch(function(){ buf.scanning=false; refreshBuy(); alert('Не удалось распознать накладную — введите позиции вручную'); });
+    }); };
     $('ph-rec').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.receipt=d; refreshBuy(); }); };
     $('additem').onclick=function(){ buf.items.push({name:'',qty:'',unit:'шт'}); renderItems(); };
     Array.prototype.forEach.call($('cat').querySelectorAll('button'),function(b){
@@ -384,39 +394,25 @@
   $('tab-issues').onclick=function(){ mgrTab('issues'); };
   $('tab-inv').onclick=function(){ mgrTab('inv'); };
   $('tab-sklad').onclick=function(){ mgrTab('sklad'); };
-  $('logout').onclick=function(){ API.logout(); };
-  $('passbtn').onclick=function(){
-    openSheet('<h3>🔑 Смена пароля</h3>'+
-      '<div class="fld"><label>Текущий пароль</label><input type="password" id="p-old" autocomplete="current-password"></div>'+
-      '<div class="fld"><label>Новый пароль (минимум 5 символов)</label><input type="password" id="p-new" autocomplete="new-password"></div>'+
-      '<div class="fld"><label>Повторите новый пароль</label><input type="password" id="p-new2" autocomplete="new-password"></div>'+
-      '<button class="btn btn-give" id="p-do">Сменить пароль</button>'+
-      '<button class="btn btn-ghost" id="p-cancel" style="margin-top:8px">Отмена</button>');
-    $('p-cancel').onclick=closeSheet;
-    $('p-do').onclick=function(){
-      var o=$('p-old').value, n=$('p-new').value, n2=$('p-new2').value;
-      if(!n||n.length<5){ alert('Новый пароль — минимум 5 символов'); return; }
-      if(n!==n2){ alert('Пароли не совпадают'); return; }
-      API.password({old_pass:o,new_pass:n}).then(function(){ closeSheet(); alert('Пароль изменён'); }).catch(fail);
-    };
-  };
-
-  // ================= старт =================
+  // ================= роли (обкатка: переключатель; в финале — вход по логину) =================
   function applyRole(role){
     STATE.role=role;
     var sup=role==='sup';
     $('view-sup').style.display=sup?'':'none';
     $('view-mgr').style.display=sup?'none':'';
-    $('u-role').textContent = sup?'Кабинет снабженца':'Кабинет управленца';
+    $('role-sup').className=sup?'on':'';
+    $('role-mgr').className=sup?'':'on';
   }
-  if(!API.token){ location.replace('login.html'); return; }
-  API.me().then(function(d){
-    STATE.user=d.user;
-    $('u-name').textContent=d.user.name;
-    applyRole(d.user.role);
-    return refresh();
-  }).catch(function(e){ if((e&&e.message)==='401') return; console.warn(e); });
+  function switchRole(role){
+    return API.demoToken(role).then(function(res){
+      API.setToken(res.token); STATE.user=res.user; localStorage.setItem('kassa_role',role);
+      applyRole(role); return refresh();
+    }).catch(fail);
+  }
+  $('role-sup').onclick=function(){ switchRole('sup'); };
+  $('role-mgr').onclick=function(){ switchRole('mgr'); };
 
-  // живое обновление (пока модалка закрыта) — выдачи, подтверждения, запросы согласования прилетают сами
+  switchRole(localStorage.getItem('kassa_role')||'sup');
+  // живое обновление (пока модалка закрыта) — выдачи/подтверждения/запросы прилетают сами
   setInterval(function(){ if(!sheetOpen && API.token) refresh(); }, 15000);
 })();
