@@ -385,6 +385,21 @@
   $('tab-inv').onclick=function(){ mgrTab('inv'); };
   $('tab-sklad').onclick=function(){ mgrTab('sklad'); };
   $('logout').onclick=function(){ API.logout(); };
+  $('passbtn').onclick=function(){
+    openSheet('<h3>🔑 Смена пароля</h3>'+
+      '<div class="fld"><label>Текущий пароль</label><input type="password" id="p-old" autocomplete="current-password"></div>'+
+      '<div class="fld"><label>Новый пароль (минимум 5 символов)</label><input type="password" id="p-new" autocomplete="new-password"></div>'+
+      '<div class="fld"><label>Повторите новый пароль</label><input type="password" id="p-new2" autocomplete="new-password"></div>'+
+      '<button class="btn btn-give" id="p-do">Сменить пароль</button>'+
+      '<button class="btn btn-ghost" id="p-cancel" style="margin-top:8px">Отмена</button>');
+    $('p-cancel').onclick=closeSheet;
+    $('p-do').onclick=function(){
+      var o=$('p-old').value, n=$('p-new').value, n2=$('p-new2').value;
+      if(!n||n.length<5){ alert('Новый пароль — минимум 5 символов'); return; }
+      if(n!==n2){ alert('Пароли не совпадают'); return; }
+      API.password({old_pass:o,new_pass:n}).then(function(){ closeSheet(); alert('Пароль изменён'); }).catch(fail);
+    };
+  };
 
   // ================= старт =================
   function applyRole(role){

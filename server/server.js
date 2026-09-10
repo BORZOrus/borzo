@@ -106,6 +106,16 @@ app.post('/api/auth/login', async (req,res)=>{
 });
 app.get('/api/me', auth, (req,res)=> res.json({ user:{ name:req.user.name, role:req.user.role, login:req.user.login } }));
 
+app.post('/api/auth/password', auth, async (req,res)=>{
+  const { old_pass, new_pass } = req.body||{};
+  if(!new_pass || String(new_pass).length<5) return res.status(400).json({error:'новый пароль — минимум 5 символов'});
+  const r = await pool.query('SELECT * FROM users WHERE id=$1',[req.user.id]);
+  const u = r.rows[0];
+  if(!u || !bcrypt.compareSync(old_pass||'', u.pass_hash)) return res.status(401).json({error:'текущий пароль неверный'});
+  await pool.query('UPDATE users SET pass_hash=$1 WHERE id=$2',[bcrypt.hashSync(new_pass,10), u.id]);
+  res.json({ ok:true });
+});
+
 // ---------- касса ----------
 app.get('/api/kassa', auth, async (req,res)=>{
   const tx = await pool.query('SELECT * FROM kassa_tx ORDER BY ts DESC');
@@ -190,6 +200,15 @@ app.post('/api/kassa/:id/approve', auth, async (req,res)=>{
   fields.push('pending=NULL'); fields.push('log=$'+n); vals.push(JSON.stringify(log)); n++;
   vals.push(tx.id);
   await pool.query(`UPDATE kassa_tx SET ${fields.join(', ')} WHERE id=$${n}`, vals);
+  // если у расхода изменились позиции — пересобрать приход на склад
+  if(tx.kind==='expense' && ('items' in next)){
+    await pool.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
+    const items = next.items||[];
+    for(const i of items){
+      await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum!=null?i.sum:rowSum(i), i.cat||next.category||tx.category, tx.id]);
+    }
+  }
   res.json({ ok:true });
 });
 // отклонить изменение

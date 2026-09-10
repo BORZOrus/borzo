@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="BORZO Касса">
 <meta name="theme-color" content="#0f1115">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
 <title>BORZO · Касса снабжения</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -21,7 +23,8 @@
   /* демо-переключатель ролей */
   .userbar{display:flex;align-items:center;gap:10px;padding:11px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--k-line)}
   .userbar .who{flex:1;font-size:13px}
-  .userbar #logout{padding:8px 14px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer}
+  .userbar #logout,.userbar #passbtn{padding:8px 14px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer}
+  .userbar #passbtn{padding:8px 12px}
   .pad{padding:14px}
   .h1{font-size:15px;font-weight:700;margin:2px 0 12px}
   /* касса-плашка */
@@ -118,6 +121,7 @@
   <!-- шапка пользователя -->
   <div class="userbar">
     <div class="who"><span id="u-role" class="muted"></span> · <b id="u-name"></b></div>
+    <button id="passbtn" title="Сменить пароль">🔑</button>
     <button id="logout">Выйти</button>
   </div>
 

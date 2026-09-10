@@ -16,6 +16,7 @@ window.API = (function(){
     token: token,
     user: JSON.parse(localStorage.getItem('borzo_user')||'null'),
     me:          function(){ return req('GET','/me'); },
+    password:    function(b){ return req('POST','/auth/password', b); },
     kassa:       function(){ return req('GET','/kassa'); },
     sklad:       function(){ return req('GET','/sklad'); },
     issue:       function(b){ return req('POST','/kassa/issue', b); },
