@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>BORZO · Вход</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0f1115;--card:#181b21;--ink:#eef0f3;--mut:#9aa0a8;--line:#2a2e37;--blue:#3b82f6;--red:#f0555c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .box{width:100%;max-width:360px}
+  .logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:24px}
+  .logo .m{width:40px;height:40px;border-radius:10px;background:var(--blue);display:grid;place-items:center;font-weight:800;font-size:20px;color:#fff}
+  .logo b{font-size:22px;letter-spacing:.02em}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
+  .card h1{font-size:17px;margin:0 0 4px}
+  .card .sub{color:var(--mut);font-size:13px;margin-bottom:18px}
+  label{display:block;font-size:12px;color:var(--mut);margin:12px 0 6px}
+  input{width:100%;padding:13px;background:var(--bg);border:1px solid var(--line);border-radius:11px;color:var(--ink);font-size:15px;font-family:inherit}
+  button{width:100%;margin-top:18px;padding:14px;border:none;border-radius:12px;background:var(--blue);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  button:disabled{opacity:.6}
+  .err{color:var(--red);font-size:13px;margin-top:12px;min-height:16px;text-align:center}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo"><span class="m">B</span><b>BORZO</b></div>
+  <div class="card">
+    <h1>Вход в систему</h1>
+    <div class="sub">Касса снабжения и управление</div>
+    <label>Логин</label>
+    <input id="login" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="логин">
+    <label>Пароль</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="пароль">
+    <button id="go">Войти</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i);};
+  // если уже вошёл — на кассу
+  if(localStorage.getItem('borzo_token')) location.replace('kassa.html');
+  function submit(){
+    var login=$('login').value.trim(), password=$('password').value;
+    if(!login||!password){ $('err').textContent='Введите логин и пароль'; return; }
+    $('go').disabled=true; $('err').textContent='';
+    fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login:login,password:password})})
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,d:d}; }); })
+      .then(function(res){
+        if(!res.ok){ $('err').textContent=res.d.error||'Ошибка входа'; $('go').disabled=false; return; }
+        localStorage.setItem('borzo_token',res.d.token);
+        localStorage.setItem('borzo_user',JSON.stringify(res.d.user));
+        location.replace('kassa.html');
+      })
+      .catch(function(){ $('err').textContent='Нет связи с сервером'; $('go').disabled=false; });
+  }
+  $('go').onclick=submit;
+  $('password').addEventListener('keydown',function(e){ if(e.key==='Enter') submit(); });
+})();
+</script>
+</body>
+</html>
