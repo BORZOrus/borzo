@@ -81,14 +81,20 @@
   .photo.has{border-style:solid;border-color:var(--k-green);color:var(--k-green)}
   .photo input{position:absolute;inset:0;opacity:0;cursor:pointer}
   .photo img{max-height:64px;border-radius:8px;margin-top:8px;display:block;margin-left:auto;margin-right:auto}
-  .item-line{display:flex;gap:7px;margin-bottom:7px;align-items:center}
-  .item-line input{padding:10px}
-  .item-line .nm{flex:1.5;min-width:0}.item-line .qt{flex:0 0 52px;text-align:center}
-  .item-line .un{flex:0 0 44px;background:var(--k-bg);border:1px solid var(--k-line);color:var(--k-ink);border-radius:9px;padding:10px 0;cursor:pointer;font-size:12px;font-weight:600}
-  .item-line .catdot{flex:0 0 30px;border:none;border-radius:9px;padding:10px 0;cursor:pointer;font-weight:800;font-size:13px}
+  .item-line{background:var(--k-bg);border:1px solid var(--k-line);border-radius:11px;padding:9px;margin-bottom:8px}
+  .item-line input{padding:9px;background:var(--k-card);border:1px solid var(--k-line);border-radius:8px;color:var(--k-ink);font-size:14px;font-family:inherit}
+  .item-line .ln1{display:flex;gap:7px;align-items:center;margin-bottom:7px}
+  .item-line .ln2{display:flex;gap:6px;align-items:center}
+  .item-line .nm{flex:1;min-width:0}
+  .item-line .qt{flex:0 0 50px;text-align:center}
+  .item-line .pr{flex:1;min-width:0;text-align:center}
+  .item-line .un{flex:0 0 40px;background:var(--k-card);border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:9px 0;cursor:pointer;font-size:12px;font-weight:600}
+  .item-line .mult,.item-line .eq{color:var(--k-mut);font-size:12px;flex:0 0 auto}
+  .item-line .rsum{flex:0 0 auto;font-weight:700;font-size:13px;white-space:nowrap;min-width:56px;text-align:right}
+  .item-line .catdot{flex:0 0 30px;border:none;border-radius:8px;padding:9px 0;cursor:pointer;font-weight:800;font-size:13px}
   .item-line .catdot.syr{background:rgba(139,92,246,.2);color:#a78bfa}
   .item-line .catdot.gen{background:rgba(240,166,33,.18);color:var(--k-amber)}
-  .item-line .del{flex:0 0 28px;background:var(--k-card2);border:1px solid var(--k-line);color:var(--k-mut);border-radius:9px;padding:9px 0;cursor:pointer}
+  .item-line .del{flex:0 0 28px;background:var(--k-card2);border:1px solid var(--k-line);color:var(--k-mut);border-radius:8px;padding:8px 0;cursor:pointer}
   .scanbtn{background:rgba(59,130,246,.12);color:#7fb0ff;border:1px solid rgba(59,130,246,.35);border-radius:11px;padding:11px;width:100%;font-weight:600;font-size:13px;cursor:pointer;margin-bottom:10px}
   .bigsum{font-size:30px;font-weight:800;text-align:center;margin:6px 0 4px}
   table.sk{width:100%;border-collapse:collapse;font-size:13px}

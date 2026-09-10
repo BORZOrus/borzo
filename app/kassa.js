@@ -29,7 +29,7 @@
   function rerender(){ if(role()==='sup') renderSup(); else renderMgr(); }
 
   // ---------- дифф «было → стало» ----------
-  function itemStr(i){ return (i.name||'—')+': '+(i.qty||'?')+' '+(i.unit||'')+' ('+(i.cat||'')+')'; }
+  function itemStr(i){ var p=i.price?(' × '+money(i.price)):''; return (i.name||'—')+': '+(i.qty||'?')+' '+(i.unit||'')+p+' ('+(i.cat||'')+')'; }
   function genericDiff(tx,next){
     var d=[];
     if('amount' in next && (+next.amount)!==(+tx.amount)) d.push({label:'Сумма', from:money(tx.amount), to:money(next.amount)});
@@ -165,13 +165,14 @@
     if(x.kind==='expense'){
       var items=(x.items||[]).map(function(i){
         var c=i.cat||x.category, pill=c==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>';
-        return '<tr><td>'+i.name+'</td><td style="text-align:right">'+i.qty+' '+i.unit+'</td><td style="text-align:right">'+pill+'</td></tr>';
+        var per=i.price?money(i.price):'—', sm=(i.sum||rowSum(i));
+        return '<tr><td>'+i.name+' '+pill+'</td><td style="text-align:right" class="muted">'+i.qty+' '+i.unit+' × '+per+'</td><td style="text-align:right;font-weight:600;white-space:nowrap">'+money(sm)+'</td></tr>';
       }).join('');
       var ph=function(src,lbl){ return src?'<div class="fld"><label>'+lbl+'</label><img src="'+src+'" style="width:100%;border-radius:10px"></div>':''; };
       body='<h3>Детали накладной</h3>'+
         '<div class="bigsum" style="color:var(--k-red)">−'+money(x.amount)+'</div>'+
         '<div class="muted fz13" style="text-align:center;margin-bottom:14px">'+stamp(new Date(x.t))+' · осн. категория: '+x.category+'</div>'+
-        (items?'<table class="sk" style="margin-bottom:14px"><thead><tr><th>Наименование</th><th style="text-align:right">Кол-во</th><th style="text-align:right">Тип</th></tr></thead><tbody>'+items+'</tbody></table>':'')+
+        (items?'<table class="sk" style="margin-bottom:14px"><thead><tr><th>Позиция</th><th style="text-align:right">Кол-во × цена</th><th style="text-align:right">Сумма</th></tr></thead><tbody>'+items+'</tbody></table>':'')+
         ph(x.invoice,'Накладная')+ph(x.receipt,'Чек');
     } else {
       var st = x.status==='accepted' ? '<span class="pill pill-doc">получено</span>' : '<span class="pill pill-wait">ждёт подтверждения</span>';
@@ -246,28 +247,46 @@
         '<label class="photo grow'+(buf.receipt?' has':'')+'" style="margin:0">'+(buf.receipt?'✓ Чек<img src="'+buf.receipt+'">':'🧾 Чек')+'<input type="file" accept="image/*" id="ph-rec"></label>'+
       '</div>'+
       (ed?'':'<button class="scanbtn" id="scan">🔎 Сканировать накладную (распознать позиции)</button>')+
-      '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· кнопка «шт» — единица, точка С/О — категория позиции</span></label><div id="items"></div>'+
+      '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· «шт» — единица, «цена/ед» — цена за штуку, точка С/О — категория</span></label><div id="items"></div>'+
         '<button class="btn-ghost" id="additem" style="border:1px dashed var(--k-line);border-radius:10px">+ Добавить позицию</button></div>'+
       '<div class="fld"><label>Направление расхода</label><div class="seg" id="cat">'+
         '<button data-c="Сырьё" class="'+(sy?'on syr':'')+'">Сырьё</button><button data-c="Общие" class="'+(sy?'':'on gen')+'">Общие</button></div></div>'+
-      '<div class="fld"><label>Сумма расхода, ₸</label><input type="number" inputmode="numeric" id="amt" placeholder="0" value="'+(buf.amount||'')+'"></div>'+
+      '<div class="fld"><label>Сумма расхода, ₸ <span style="color:var(--k-mut)">· считается из позиций</span></label><input type="number" inputmode="numeric" id="amt" placeholder="0" value="'+(buf.amount||'')+'"></div>'+
       (ed?'':'<div class="muted fz12" style="text-align:center;margin-bottom:10px">В кассе сейчас: <b style="color:var(--k-ink)">'+money(balance())+'</b></div>')+
       '<button class="btn btn-buy" id="do-buy">'+(ed?'Отправить на согласование':'Расход прошёл — списать')+'</button>'+
       '<button class="btn btn-ghost" id="cancel" style="margin-top:8px">Отмена</button>';
   }
   var UNITS=['шт','л','кг'];
   function catOf(it){ return it.cat||buf.category; }
+  function rowSum(it){ return (parseFloat(it.qty)||0)*(parseFloat(it.price)||0); }
+  function itemsTotal(){ return buf.items.reduce(function(a,it){return a+rowSum(it);},0); }
+  function recalcTotal(){
+    var t=itemsTotal();
+    if(t>0){ buf.amount=t; if($('amt')){ $('amt').value=t; $('amt').readOnly=true; $('amt').style.opacity=.75; } }
+    else if($('amt')){ $('amt').readOnly=false; $('amt').style.opacity=1; }
+  }
   function renderItems(){
     $('items').innerHTML=buf.items.map(function(it,i){
       var c=catOf(it), syr=c==='Сырьё';
-      return '<div class="item-line"><input class="nm" placeholder="наименование" value="'+(it.name||'')+'" data-i="'+i+'" data-f="name">'+
-        '<input class="qt" inputmode="decimal" placeholder="кол-во" value="'+(it.qty||'')+'" data-i="'+i+'" data-f="qty">'+
-        '<button class="un" data-un="'+i+'" title="ед. изм. — нажмите чтобы сменить">'+(it.unit||'шт')+'</button>'+
-        '<button class="catdot '+(syr?'syr':'gen')+'" data-cat="'+i+'" title="категория этой позиции">'+(syr?'С':'О')+'</button>'+
-        (buf.items.length>1?'<button class="del" data-del="'+i+'">✕</button>':'')+'</div>';
+      return '<div class="item-line">'+
+        '<div class="ln1"><input class="nm" placeholder="наименование" value="'+(it.name||'')+'" data-i="'+i+'" data-f="name">'+
+          (buf.items.length>1?'<button class="del" data-del="'+i+'">✕</button>':'')+'</div>'+
+        '<div class="ln2">'+
+          '<input class="qt" inputmode="decimal" placeholder="кол-во" value="'+(it.qty||'')+'" data-i="'+i+'" data-f="qty">'+
+          '<button class="un" data-un="'+i+'" title="ед. изм.">'+(it.unit||'шт')+'</button>'+
+          '<span class="mult">×</span>'+
+          '<input class="pr" inputmode="decimal" placeholder="цена/ед" value="'+(it.price||'')+'" data-i="'+i+'" data-f="price">'+
+          '<span class="eq">=</span>'+
+          '<span class="rsum" data-sum="'+i+'">'+money(rowSum(it))+'</span>'+
+          '<button class="catdot '+(syr?'syr':'gen')+'" data-cat="'+i+'" title="категория позиции">'+(syr?'С':'О')+'</button>'+
+        '</div></div>';
     }).join('');
     Array.prototype.forEach.call($('items').querySelectorAll('input'),function(inp){
-      inp.oninput=function(){ buf.items[+inp.getAttribute('data-i')][inp.getAttribute('data-f')]=inp.value; };
+      inp.oninput=function(){
+        var i=+inp.getAttribute('data-i'), f=inp.getAttribute('data-f');
+        buf.items[i][f]=inp.value;
+        if(f==='qty'||f==='price'){ var s=$('items').querySelector('[data-sum="'+i+'"]'); if(s)s.textContent=money(rowSum(buf.items[i])); recalcTotal(); }
+      };
     });
     Array.prototype.forEach.call($('items').querySelectorAll('[data-un]'),function(b){
       b.onclick=function(){ var i=+b.getAttribute('data-un'); var cur=buf.items[i].unit||'шт'; var n=(UNITS.indexOf(cur)+1)%UNITS.length; buf.items[i].unit=UNITS[n]; renderItems(); };
@@ -276,8 +295,9 @@
       b.onclick=function(){ var i=+b.getAttribute('data-cat'); buf.items[i].cat=(catOf(buf.items[i])==='Сырьё')?'Общие':'Сырьё'; renderItems(); };
     });
     Array.prototype.forEach.call($('items').querySelectorAll('[data-del]'),function(b){
-      b.onclick=function(){ buf.items.splice(+b.getAttribute('data-del'),1); renderItems(); };
+      b.onclick=function(){ buf.items.splice(+b.getAttribute('data-del'),1); renderItems(); recalcTotal(); };
     });
+    recalcTotal();
   }
   function wireBuy(){
     renderItems();
@@ -287,7 +307,7 @@
     if($('scan')) $('scan').onclick=function(){
       if(!buf.invoice){ alert('Сначала сфотографируйте накладную'); return; }
       // 🔴 ДЕМО: реальное распознавание (OCR) подключим на сервере — vision-модель разберёт позиции сама.
-      buf.items=[{name:'МДФ 16мм',qty:'5',unit:'шт'},{name:'Ручки мебельные',qty:'10',unit:'шт'},{name:'Грунт-эмаль',qty:'8',unit:'л'}];
+      buf.items=[{name:'МДФ 16мм',qty:'5',unit:'шт',price:'12000'},{name:'Ручки мебельные',qty:'10',unit:'шт',price:'850'},{name:'Грунт-эмаль',qty:'8',unit:'л',price:'2400'}];
       renderItems();
       alert('🔴 Демо-распознавание: позиции подставлены для примера. На сервере накладную будет читать ИИ и заполнять сам — вы только проверяете.');
     };
@@ -309,7 +329,7 @@
     var amt=parseInt($('amt').value)||0;
     if(amt<=0){ alert('Укажите сумму расхода'); return; }
     if(!buf.invoice && !buf.receipt){ alert('Прикрепите накладную или чек — без документа нельзя'); return; }
-    var items=buf.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:i.unit||'шт',cat:i.cat||buf.category};});
+    var items=buf.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:i.unit||'шт',price:i.price||'',sum:rowSum(i),cat:i.cat||buf.category};});
     // режим правки — отправляем на согласование, ничего не меняем сразу
     if(editingId){
       if(proposeChange(editingId,{amount:amt,category:buf.category,items:items})){
@@ -323,7 +343,7 @@
     DB.add('kassaTx',{kind:'expense',t:now,amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt});
     // приход на склад (позиции, каждая со своей категорией)
     items.forEach(function(i){
-      DB.add('skladIntake',{t:now,date:stamp(new Date(now)),name:i.name,qty:i.qty,unit:i.unit,category:i.cat,from:'снабжение'});
+      DB.add('skladIntake',{t:now,date:stamp(new Date(now)),name:i.name,qty:i.qty,unit:i.unit,price:i.price,sum:i.sum,category:i.cat,from:'снабжение'});
     });
     closeSheet(); renderSup();
   }
