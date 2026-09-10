@@ -94,6 +94,17 @@
   table.sk{width:100%;border-collapse:collapse;font-size:13px}
   table.sk th{text-align:left;color:var(--k-mut);font-weight:600;font-size:11px;text-transform:uppercase;padding:6px 6px;border-bottom:1px solid var(--k-line)}
   table.sk td{padding:9px 6px;border-bottom:1px solid var(--k-line)}
+  /* блок согласования / дифф */
+  .pend{background:rgba(240,166,33,.08);border:1px solid rgba(240,166,33,.4);border-radius:12px;padding:12px;margin-bottom:12px}
+  .pend .ph{font-weight:700;margin-bottom:8px;font-size:14px}
+  .diff{display:flex;flex-direction:column;gap:7px}
+  .diffrow{font-size:13px}
+  .diffrow .dl{color:var(--k-mut);font-size:11px;text-transform:uppercase;letter-spacing:.02em;margin-bottom:1px}
+  .diffrow .from{color:var(--k-red);text-decoration:line-through;opacity:.85}
+  .diffrow .arr{color:var(--k-mut)}
+  .diffrow .to{color:var(--k-green);font-weight:600}
+  .logh{font-weight:700;font-size:13px;margin:6px 0 8px;color:var(--k-mut);text-transform:uppercase;letter-spacing:.02em}
+  .logi{border-left:2px solid var(--k-line);padding:2px 0 10px 10px;margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -127,6 +138,7 @@
       <div class="k"><div class="l">Остаток</div><div class="v" id="mgr-left" style="color:var(--k-green)">0</div></div>
     </div>
     <button class="btn btn-give" id="btn-give" style="margin-bottom:16px">💸 Выдать деньги снабженцу</button>
+    <div id="mgr-notifs"></div>
     <div class="tabbar">
       <button id="tab-issues" class="on">Выданные деньги</button>
       <button id="tab-inv">Накладные</button>
