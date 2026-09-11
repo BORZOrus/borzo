@@ -45,8 +45,12 @@
 <script>
 (function(){
   var $=function(i){return document.getElementById(i);};
-  // если уже вошёл — на кассу
-  if(localStorage.getItem('borzo_token')) location.replace('kassa.html');
+  // маршрут по роли: руководитель → весь пульт, снабженец → касса
+  function routeByRole(user){ location.replace(user && user.role==='mgr' ? 'index.html' : 'kassa.html'); }
+  // если уже вошёл — сразу по роли
+  if(localStorage.getItem('borzo_token')){
+    try{ routeByRole(JSON.parse(localStorage.getItem('borzo_user')||'null')); }catch(e){ location.replace('kassa.html'); }
+  }
   function submit(){
     var login=$('login').value.trim(), password=$('password').value;
     if(!login||!password){ $('err').textContent='Введите логин и пароль'; return; }
@@ -57,7 +61,7 @@
         if(!res.ok){ $('err').textContent=res.d.error||'Ошибка входа'; $('go').disabled=false; return; }
         localStorage.setItem('borzo_token',res.d.token);
         localStorage.setItem('borzo_user',JSON.stringify(res.d.user));
-        location.replace('kassa.html');
+        routeByRole(res.d.user);
       })
       .catch(function(){ $('err').textContent='Нет связи с сервером'; $('go').disabled=false; });
   }

@@ -394,25 +394,38 @@
   $('tab-issues').onclick=function(){ mgrTab('issues'); };
   $('tab-inv').onclick=function(){ mgrTab('inv'); };
   $('tab-sklad').onclick=function(){ mgrTab('sklad'); };
-  // ================= роли (обкатка: переключатель; в финале — вход по логину) =================
+  // ================= вход по логину =================
   function applyRole(role){
     STATE.role=role;
     var sup=role==='sup';
     $('view-sup').style.display=sup?'':'none';
     $('view-mgr').style.display=sup?'none':'';
-    $('role-sup').className=sup?'on':'';
-    $('role-mgr').className=sup?'':'on';
+    $('u-role').textContent = sup?'Кабинет снабженца':'Кабинет управленца';
+    $('topult').style.display = sup?'none':'';   // руководителю — кнопка «← Пульт»
   }
-  function switchRole(role){
-    return API.demoToken(role).then(function(res){
-      API.setToken(res.token); STATE.user=res.user; localStorage.setItem('kassa_role',role);
-      applyRole(role); return refresh();
-    }).catch(fail);
-  }
-  $('role-sup').onclick=function(){ switchRole('sup'); };
-  $('role-mgr').onclick=function(){ switchRole('mgr'); };
-
-  switchRole(localStorage.getItem('kassa_role')||'sup');
+  $('logout').onclick=function(){ API.logout(); };
+  $('passbtn').onclick=function(){
+    openSheet('<h3>🔑 Смена пароля</h3>'+
+      '<div class="fld"><label>Текущий пароль</label><input type="password" id="p-old" autocomplete="current-password"></div>'+
+      '<div class="fld"><label>Новый пароль (минимум 5 символов)</label><input type="password" id="p-new" autocomplete="new-password"></div>'+
+      '<div class="fld"><label>Повторите новый пароль</label><input type="password" id="p-new2" autocomplete="new-password"></div>'+
+      '<button class="btn btn-give" id="p-do">Сменить пароль</button>'+
+      '<button class="btn btn-ghost" id="p-cancel" style="margin-top:8px">Отмена</button>');
+    $('p-cancel').onclick=closeSheet;
+    $('p-do').onclick=function(){
+      var o=$('p-old').value, n=$('p-new').value, n2=$('p-new2').value;
+      if(!n||n.length<5){ alert('Новый пароль — минимум 5 символов'); return; }
+      if(n!==n2){ alert('Пароли не совпадают'); return; }
+      API.password({old_pass:o,new_pass:n}).then(function(){ closeSheet(); alert('Пароль изменён'); }).catch(fail);
+    };
+  };
+  if(!API.token){ location.replace('login.html'); return; }
+  API.me().then(function(d){
+    STATE.user=d.user;
+    $('u-name').textContent=d.user.name;
+    applyRole(d.user.role);
+    return refresh();
+  }).catch(function(e){ if((e&&e.message)==='401') return; console.warn(e); });
   // живое обновление (пока модалка закрыта) — выдачи/подтверждения/запросы прилетают сами
   setInterval(function(){ if(!sheetOpen && API.token) refresh(); }, 15000);
 })();
