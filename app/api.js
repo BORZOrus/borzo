@@ -32,6 +32,8 @@ window.API = (function(){
     propose:     function(id,b){ return req('POST','/kassa/'+id+'/propose', b); },
     approve:     function(id){ return req('POST','/kassa/'+id+'/approve'); },
     reject:      function(id){ return req('POST','/kassa/'+id+'/reject'); },
+    finGet:      function(){ return req('GET','/fin'); },
+    finPut:      function(data){ return req('PUT','/fin',{data:data}); },
     logout: logout
   };
   return self;

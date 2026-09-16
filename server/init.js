@@ -15,6 +15,7 @@ async function upsert(login, pass, role, name){
 (async()=>{
   await upsert(process.env.MGR_LOGIN||'ruslan', process.env.MGR_PASS||'changeme', 'mgr', process.env.MGR_NAME||'Руслан (руководитель)');
   await upsert(process.env.SUP_LOGIN||'snab', process.env.SUP_PASS||'changeme', 'sup', process.env.SUP_NAME||'Снабженец');
+  await upsert(process.env.FIN_LOGIN||'ulyana', process.env.FIN_PASS||'changeme', 'fin', process.env.FIN_NAME||'Ульяна (финансы)');
   await pool.end();
   console.log('DONE');
 })().catch(e=>{ console.error(e); process.exit(1); });

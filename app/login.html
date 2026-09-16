@@ -46,7 +46,7 @@
 (function(){
   var $=function(i){return document.getElementById(i);};
   // маршрут по роли: руководитель → весь пульт, снабженец → касса
-  function routeByRole(user){ location.replace(user && user.role==='mgr' ? 'index.html' : 'kassa.html'); }
+  function routeByRole(user){ var r=user&&user.role; location.replace(r==='mgr'?'index.html':(r==='fin'?'fin.html':'kassa.html')); }
   // если уже вошёл — сразу по роли
   if(localStorage.getItem('borzo_token')){
     try{ routeByRole(JSON.parse(localStorage.getItem('borzo_user')||'null')); }catch(e){ location.replace('kassa.html'); }

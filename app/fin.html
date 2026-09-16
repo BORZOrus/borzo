@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>BORZO · Финансы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0f1115;--page:#0f1115;--card:#181b21;--card2:#20242c;--ink:#eef0f3;--mut:#9aa0a8;--line:#2a2e37;
+    --green:#28c07a;--blue:#3b82f6;--amber:#f0a621;--red:#f0555c;--violet:#a78bfa}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:0 0 40px}
+  .roleswitch{display:flex;gap:6px;padding:10px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--line)}
+  .roleswitch button{flex:1;padding:9px;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:10px;font-weight:600;font-size:13px;cursor:pointer}
+  .roleswitch button.on{background:var(--card2);color:var(--ink);border-color:#3a3f4a}
+  .demo-note{font-size:11px;color:var(--mut);text-align:center;padding:6px 14px 0}
+  .pad{padding:14px}
+  .tabbar{display:flex;gap:6px;margin-bottom:12px}
+  .tabbar button{flex:1;padding:9px;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:10px;font-weight:600;font-size:13px;cursor:pointer}
+  .tabbar button.on{background:var(--card2);color:var(--ink)}
+  .balances{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .bal{flex:1;min-width:100px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px}
+  .bal .l{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.02em}
+  .bal .v{font-size:17px;font-weight:800;margin-top:3px}
+  .hero{background:linear-gradient(135deg,#1c2129,#141821);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:12px;text-align:center}
+  .hero .l{font-size:12px;color:var(--mut);text-transform:uppercase}
+  .hero .v{font-size:30px;font-weight:800;margin-top:4px}
+  .hero .sub{font-size:12px;color:var(--mut);margin-top:6px}
+  .btns{display:flex;gap:8px;margin-bottom:14px}
+  .btns button{flex:1;padding:13px;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer}
+  .b-in{background:var(--blue);color:#fff}.b-out{background:var(--red);color:#fff}.b-tr{background:var(--card2);color:var(--ink);border:1px solid var(--line)!important}
+  .b-full{background:var(--green);color:#04140b}
+  .an-btn{width:100%;padding:11px;border:1px solid var(--line);background:var(--card2);color:var(--ink);border-radius:11px;font-weight:600;font-size:13px;cursor:pointer;margin-bottom:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px 14px}
+  .h1{font-size:14px;font-weight:700;margin:2px 0 10px}
+  .op{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--line);align-items:center}
+  .op:last-child{border-bottom:none}
+  .op .ic{width:36px;height:36px;border-radius:10px;flex:0 0 36px;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .ic-in{background:rgba(59,130,246,.15)}.ic-out{background:rgba(240,85,92,.13)}.ic-tr{background:rgba(167,139,250,.15)}
+  .ic-fam{background:rgba(240,166,33,.18);color:var(--amber)}
+  .op .amt{font-weight:700;white-space:nowrap}
+  .amt-in{color:var(--blue)}.amt-out{color:var(--red)}.amt-tr{color:var(--violet)}
+  .op .main-t{font-weight:600;font-size:14px}.op .sub-t{color:var(--mut);font-size:12px;margin-top:2px}
+  .pill{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:20px;background:var(--card2);color:var(--mut)}
+  .empty{text-align:center;color:var(--mut);font-size:13px;padding:24px 0}
+  .split{display:flex;gap:8px;margin-bottom:12px}
+  .split .s{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+  .split .s .l{font-size:11px;color:var(--mut)}.split .s .v{font-size:16px;font-weight:700;margin-top:2px}
+  /* квадраты проектов при выборе */
+  .sqs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .sq{flex:1;min-width:100px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px;cursor:pointer}
+  .sq.on{border-color:var(--blue);background:rgba(59,130,246,.1)}
+  .sq .n{font-weight:700;font-size:14px}
+  .sq .b{font-size:12px;color:var(--mut);margin-top:3px}
+  .emp button.adv,.pill.adv{color:var(--red)}
+  .advrow{color:var(--red);font-weight:600}
+  .antabs{display:flex;gap:6px;margin-bottom:12px}
+  .antabs button{flex:1;padding:8px;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:9px;font-weight:600;font-size:12px;cursor:pointer}
+  .antabs button.on{background:var(--card2);color:var(--ink)}
+  .mnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .mnav button{background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:6px 12px;cursor:pointer;font-weight:700}
+  .mnav .m{font-weight:700;font-size:14px}
+  /* sheet */
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;display:none}
+  .sheet-bg.on{display:block}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--card);border-radius:20px 20px 0 0;padding:18px 16px 26px;max-width:520px;margin:0 auto;transform:translateY(100%);transition:transform .22s;max-height:92vh;overflow:auto}
+  .sheet.on{transform:translateY(0)}
+  .sheet h3{margin:0 0 14px;font-size:17px}
+  .fld{margin-bottom:13px}
+  .fld label{display:block;font-size:12px;color:var(--mut);margin-bottom:6px}
+  .fld input,.fld select{width:100%;padding:13px;background:var(--bg);border:1px solid var(--line);border-radius:11px;color:var(--ink);font-size:15px;font-family:inherit}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chips button{padding:9px 13px;border:1px solid var(--line);background:var(--bg);color:var(--mut);border-radius:20px;font-size:13px;font-weight:600;cursor:pointer}
+  .chips button.on{border-color:var(--blue);color:var(--ink);background:rgba(59,130,246,.12)}
+  .chips button.chip-add{width:34px;height:34px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--card2);color:var(--mut);font-size:19px;font-weight:700;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+  /* аккуратный список категорий + конструктор */
+  .catlist{border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:260px;overflow-y:auto}
+  .catrow{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--bg)}
+  .catrow:last-child{border-bottom:none}
+  .catrow .cr-name{flex:1;font-size:14px;color:var(--mut)}
+  .catrow.on{background:rgba(59,130,246,.12)}
+  .catrow.on .cr-name{color:var(--ink);font-weight:600}
+  .catrow.on::before{content:"✓";color:var(--blue);font-weight:800;font-size:13px}
+  .catrow.other .cr-name{font-style:italic}
+  .cr-del{border:none;background:transparent;color:var(--mut);font-size:13px;cursor:pointer;padding:4px 6px;border-radius:7px;line-height:1;opacity:.55}
+  .cr-del:hover{background:rgba(240,85,92,.15);color:var(--red);opacity:1}
+  .catadd{margin-top:8px;width:100%;padding:10px;border:1px dashed var(--line);background:transparent;color:var(--mut);border-radius:11px;font-size:13px;font-weight:600;cursor:pointer}
+  .catadd:hover{color:var(--ink);border-color:#3a3f4a}
+  .other-wrap input{width:100%;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:11px;color:var(--ink);font-size:15px;font-family:inherit}
+  .btn{display:block;width:100%;padding:14px;border:none;border-radius:12px;font-weight:700;font-size:16px;cursor:pointer;margin-top:4px}
+  .btn-ghost{background:var(--card2);color:var(--ink)}
+  .anrow{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .anrow:last-child{border-bottom:none}
+  .op-search{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:14px;font-family:inherit;margin-bottom:8px}
+  .bar{height:6px;border-radius:3px;background:var(--blue);margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="roleswitch">
+    <button id="role-ruslan" class="on">👤 Руслан</button>
+    <button id="role-ulyana">👩 Ульяна</button>
+  </div>
+  <div class="demo-note">🔴 Демо на этом устройстве. Переключатель Я/Ульяна — для обкатки, потом будет вход по логину.</div>
+  <div style="text-align:center;padding:2px 14px 6px;display:flex;gap:8px;justify-content:center">
+    <button id="do-import" style="background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:9px;padding:7px 14px;font-size:12px;cursor:pointer">⤓ Импорт истории BORZO</button>
+    <button id="do-clear" style="background:var(--card2);border:1px solid var(--line);color:var(--red);border-radius:9px;padding:7px 14px;font-size:12px;cursor:pointer">🗑 Очистить всё</button>
+  </div>
+
+  <!-- ===== КАБИНЕТ РУСЛАНА ===== -->
+  <div id="view-ruslan" class="pad">
+    <div class="tabbar">
+      <button id="tab-work" class="on">Рабочие</button>
+      <button id="tab-pers">Личные</button>
+    </div>
+
+    <div id="pane-work">
+      <div id="r-reqs"></div>
+      <div class="balances" id="r-balances"></div>
+      <div class="btns">
+        <button class="b-in" data-act="in">+ Приход</button>
+        <button class="b-out" data-act="out">− Расход</button>
+      </div>
+      <div class="btns">
+        <button class="b-tr" data-act="transfer">⇄ Перевод</button>
+        <button class="b-tr" data-act="salary">💰 Зарплата</button>
+      </div>
+      <div class="btns">
+        <button class="b-tr" data-act="credits" style="flex:1">🏦 Кредиты</button>
+      </div>
+      <button class="an-btn" data-an="work">📊 Аналитика</button>
+      <div class="h1">Операции</div>
+      <input id="s-work" class="op-search" placeholder="🔍 поиск: дата, название, сумма"><div class="card" id="r-work-list"></div>
+    </div>
+
+    <div id="pane-pers" style="display:none">
+      <div class="hero">
+        <div class="l">Потрачено на мою зарплату в этом месяце</div>
+        <div class="v" id="p-spent">0 ₸</div>
+        <div class="sub">баланс зарплаты: <b id="p-balance" style="color:var(--ink)">0 ₸</b></div>
+      </div>
+      <div class="split">
+        <div class="s"><div class="l">Потратил я</div><div class="v" id="p-by-me">0 ₸</div></div>
+        <div class="s"><div class="l">Потратила Ульяна</div><div class="v" id="p-by-u">0 ₸</div></div>
+      </div>
+      <div class="btns">
+        <button class="b-tr" data-act="topzp">↓ Пополнить зарплату</button>
+        <button class="b-out" data-act="perslust">− Личный расход</button>
+      </div>
+      <div class="btns">
+        <button class="b-in" data-act="perincome" style="flex:1">+ Пополнить лично (приход)</button>
+      </div>
+      <button class="an-btn" data-an="pers">📊 На что уходит (мои категории)</button>
+      <div class="h1">Мои личные операции</div>
+      <input id="s-pers" class="op-search" placeholder="🔍 поиск: дата, название, сумма"><div class="card" id="r-pers-list"></div>
+    </div>
+  </div>
+
+  <!-- ===== КАБИНЕТ УЛЬЯНЫ ===== -->
+  <div id="view-ulyana" class="pad" style="display:none">
+    <div class="tabbar">
+      <button id="tab-uborzo" class="on">BORZO</button>
+      <button id="tab-uzp">Моя зарплата</button>
+      <button id="tab-urus">Кошелёк Руслана</button>
+    </div>
+
+    <div id="pane-uborzo">
+      <div class="balances" id="u-borzo-bal"></div>
+      <div class="btns">
+        <button class="b-in" data-act="uin">+ Приход (продажа)</button>
+      </div>
+      <div class="btns">
+        <button class="b-out" data-act="uout" style="flex:2">− Расход BORZO</button>
+        <button class="b-tr" data-act="usalary">💰 Зарплата</button>
+      </div>
+      <div class="btns">
+        <button class="b-tr" data-act="ucredits" style="flex:1">🏦 Кредиты</button>
+      </div>
+      <button class="an-btn" data-an="uborzo">📊 Аналитика</button>
+      <div class="h1">Операции BORZO</div>
+      <input id="s-uborzo" class="op-search" placeholder="🔍 поиск: дата, название, сумма"><div class="card" id="u-borzo-list"></div>
+    </div>
+
+    <div id="pane-uzp" style="display:none">
+      <div class="hero">
+        <div class="l">Моя зарплата — в кошельке</div>
+        <div class="v" id="uzp-balance">0 ₸</div>
+        <div class="sub">потрачено в этом месяце: <b id="uzp-spent" style="color:var(--ink)">0 ₸</b></div>
+      </div>
+      <div class="btns">
+        <button class="b-out b-full" data-act="uperslust" style="background:var(--red);color:#fff">− Мой расход</button>
+      </div>
+      <div class="btns">
+        <button class="b-in" data-act="uperincome" style="flex:1">+ Пополнить лично (приход)</button>
+      </div>
+      <button class="an-btn" data-an="uzp">📊 На что я трачу</button>
+      <div class="h1">Мои личные операции</div>
+      <input id="s-uzp" class="op-search" placeholder="🔍 поиск: дата, название, сумма"><div class="card" id="u-zp-list"></div>
+    </div>
+
+    <div id="pane-urus" style="display:none">
+      <div class="hero">
+        <div class="l">Потратила с денег Руслана (семейное)</div>
+        <div class="v" id="urus-spent">0 ₸</div>
+        <div class="sub">берётся из BORZO как зарплата Руслана</div>
+      </div>
+      <div class="btns">
+        <button class="b-out" data-act="ufamily" style="background:var(--red);color:#fff">− Семейный расход</button>
+      </div>
+      <button class="an-btn" data-an="urus">📊 На что уходит (моё)</button>
+      <div class="h1">Мои семейные траты</div>
+      <input id="s-urus" class="op-search" placeholder="🔍 поиск: дата, название, сумма"><div class="card" id="u-rus-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-bg" id="sheet-bg"></div>
+<div class="sheet" id="sheet"><div id="sheet-body"></div></div>
+
+<script src="api.js?v=2"></script>
+<script src="fin.js?v=22"></script>
+</body>
+</html>

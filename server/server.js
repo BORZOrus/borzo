@@ -46,6 +46,13 @@ async function initSchema() {
       ts BIGINT, date TEXT, name TEXT, qty TEXT, unit TEXT, price TEXT,
       sum NUMERIC, category TEXT, tx_id TEXT
     );
+    CREATE TABLE IF NOT EXISTS fin_state (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      data JSONB NOT NULL DEFAULT '{}',
+      rev INTEGER NOT NULL DEFAULT 0,
+      updated_by INTEGER,
+      updated_at BIGINT
+    );
   `);
 }
 
@@ -95,6 +102,7 @@ function auth(req,res,next){
   catch(e){ return res.status(401).json({error:'токен недействителен'}); }
 }
 function requireRole(role){ return (req,res,next)=> req.user.role===role ? next() : res.status(403).json({error:'нет прав'}); }
+function requireAny(roles){ return (req,res,next)=> roles.indexOf(req.user.role)>=0 ? next() : res.status(403).json({error:'нет прав'}); }
 
 app.post('/api/auth/login', async (req,res)=>{
   const { login, password } = req.body||{};
@@ -287,6 +295,22 @@ app.post('/api/scan', auth, async (req,res)=>{
     console.log('[scan] items='+items.length+' tokens='+(usage.total_tokens||'?'));
     res.json({ items: items });
   }catch(e){ console.error('scan error', e.message); res.status(502).json({error:'не удалось распознать, введите вручную'}); }
+});
+
+// ---------- финмодуль: общее состояние (продажи, кредиты, аналитика). Доступ: руководитель + финансист (Ульяна) ----------
+app.get('/api/fin', auth, requireAny(['mgr','fin']), async (req,res)=>{
+  const r = await pool.query('SELECT data, rev, updated_at FROM fin_state WHERE id=1');
+  if(!r.rowCount) return res.json({ data:null, rev:0 });
+  res.json({ data:r.rows[0].data, rev:r.rows[0].rev, updated_at:Number(r.rows[0].updated_at)||0 });
+});
+app.put('/api/fin', auth, requireAny(['mgr','fin']), async (req,res)=>{
+  const data = req.body && req.body.data;
+  if(!data || typeof data!=='object' || !Array.isArray(data.ops)) return res.status(400).json({error:'некорректные данные'});
+  const r = await pool.query(`
+    INSERT INTO fin_state(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3)
+    ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, rev=fin_state.rev+1, updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at
+    RETURNING rev`, [JSON.stringify(data), req.user.id, Date.now()]);
+  res.json({ ok:true, rev:r.rows[0].rev });
 });
 
 app.get('/api/health', (req,res)=> res.json({ ok:true }));
