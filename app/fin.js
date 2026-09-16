@@ -826,14 +826,33 @@
   // режим: залогинен → кабинет по роли + облачная синхронизация; иначе демо на localStorage
   if(CLOUD){
     var U=window.API.user||{}, owner=(U.role==='mgr');
-    var dn=document.querySelector('.demo-note'); if(dn)dn.style.display='none';
+    var dn=document.querySelector('.demo-note');
+    if(dn){ dn.style.color='var(--ink)'; dn.innerHTML=
+      '<div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:2px 0">'+
+      '<span style="color:var(--mut)">'+((U.name||'—'))+'</span>'+
+      (owner?'<button id="fin-supply" style="background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer">🛒 Снабжение</button>':'')+
+      (owner?'<button id="fin-pult" style="background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer">🏠 Пульт</button>':'')+
+      '<button id="fin-pass" style="background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer">🔑 Пароль</button>'+
+      '<button id="fin-logout" style="background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer">Выйти</button>'+
+      '</div>'; }
+    var sup=document.getElementById('fin-supply'); if(sup)sup.onclick=function(){ location.href='kassa.html'; };
+    var plt=document.getElementById('fin-pult'); if(plt)plt.onclick=function(){ location.href='index.html'; };
+    var lo=document.getElementById('fin-logout'); if(lo)lo.onclick=function(){ window.API.logout(); };
+    var pb=document.getElementById('fin-pass'); if(pb)pb.onclick=function(){
+      var oldp=prompt('Текущий пароль:'); if(oldp===null)return;
+      var np=prompt('Новый пароль (минимум 5 символов):'); if(np===null)return;
+      if((np||'').length<5){ alert('Новый пароль — минимум 5 символов'); return; }
+      window.API.password({old_pass:oldp,new_pass:np}).then(function(){ alert('Пароль изменён'); }).catch(function(e){ alert(e.message||'Ошибка'); });
+    };
     if(!owner){ var rs=document.querySelector('.roleswitch'); if(rs)rs.style.display='none';
       if(impBtn&&impBtn.parentNode)impBtn.parentNode.style.display='none'; }
     setRole(owner?'ruslan':'ulyana');
     window.API.finGet().then(function(res){
       var sd=res&&res.data;
-      if(sd&&Array.isArray(sd.ops)&&sd.ops.length){ DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); render(); }
-      else { doPush(); } // сервер пуст — первая миграция: заливаем локальные данные
+      var sc=(sd&&Array.isArray(sd.ops))?sd.ops.length:0;
+      var lc=(DB&&Array.isArray(DB.ops))?DB.ops.length:0;
+      if(sc>lc){ DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); render(); }  // сервер богаче (напр. добавился закуп из снабжения) — берём сервер
+      else if(lc>sc){ doPush(); }                                                  // локально богаче — заливаем (защита от перезатирания)
     }).catch(function(){});
   } else {
     setRole('ruslan');

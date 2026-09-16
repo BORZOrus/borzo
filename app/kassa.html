@@ -25,7 +25,7 @@
   .userbar .who{flex:1;font-size:13px}
   .userbar #logout,.userbar #passbtn{padding:8px 14px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer}
   .userbar #passbtn{padding:8px 11px}
-  .userbar #topult{padding:8px 12px;border:1px solid var(--k-line);background:var(--k-card2);color:var(--k-ink);border-radius:9px;font-weight:600;font-size:13px;text-decoration:none}
+  .userbar #topult,.userbar #tofin{padding:8px 12px;border:1px solid var(--k-line);background:var(--k-card2);color:var(--k-ink);border-radius:9px;font-weight:600;font-size:13px;text-decoration:none}
   .scanning{text-align:center;color:#7fb0ff;font-size:13px;padding:8px;background:rgba(59,130,246,.1);border-radius:10px;margin-bottom:10px}
   .pad{padding:14px}
   .h1{font-size:15px;font-weight:700;margin:2px 0 12px}
@@ -123,6 +123,7 @@
   <!-- шапка пользователя -->
   <div class="userbar">
     <a id="topult" href="index.html" style="display:none">← Пульт</a>
+    <a id="tofin" href="fin.html" style="display:none">💳 Финансы</a>
     <div class="who"><span id="u-role" class="muted"></span> · <b id="u-name"></b></div>
     <button id="passbtn" title="Сменить пароль">🔑</button>
     <button id="logout">Выйти</button>
@@ -152,7 +153,10 @@
       <div class="k"><div class="l">Потрачено</div><div class="v" id="mgr-spent">0</div></div>
       <div class="k"><div class="l">Остаток</div><div class="v" id="mgr-left" style="color:var(--k-green)">0</div></div>
     </div>
-    <button class="btn btn-give" id="btn-give" style="margin-bottom:16px">💸 Выдать деньги снабженцу</button>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-give" id="btn-give" style="flex:1">💸 Выдать снабженцу</button>
+      <button class="btn btn-buy" id="btn-buy-mgr" style="flex:1">🛒 Закупаюсь сам</button>
+    </div>
     <div id="mgr-notifs"></div>
     <div class="tabbar">
       <button id="tab-issues" class="on">Выдачи</button>
@@ -170,7 +174,7 @@
 <div class="sheet-bg" id="sheet-bg"></div>
 <div class="sheet" id="sheet"><div id="sheet-body"></div></div>
 
-<script src="api.js"></script>
-<script src="kassa.js"></script>
+<script src="api.js?v=3"></script>
+<script src="kassa.js?v=4"></script>
 </body>
 </html>

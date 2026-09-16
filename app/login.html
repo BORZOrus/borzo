@@ -46,10 +46,11 @@
 (function(){
   var $=function(i){return document.getElementById(i);};
   // маршрут по роли: руководитель → весь пульт, снабженец → касса
-  function routeByRole(user){ var r=user&&user.role; location.replace(r==='mgr'?'index.html':(r==='fin'?'fin.html':'kassa.html')); }
-  // если уже вошёл — сразу по роли
+  function nextParam(){ try{ var n=(new URLSearchParams(location.search)).get('next'); return (n&&/^[a-z0-9_-]+\.html$/i.test(n))?n:null; }catch(e){ return null; } }
+  function go(user){ var n=nextParam(); if(n){ location.replace(n); return; } var r=user&&user.role; location.replace(r==='mgr'?'index.html':(r==='fin'?'fin.html':'kassa.html')); }
+  // если уже вошёл — сразу по назначению
   if(localStorage.getItem('borzo_token')){
-    try{ routeByRole(JSON.parse(localStorage.getItem('borzo_user')||'null')); }catch(e){ location.replace('kassa.html'); }
+    try{ go(JSON.parse(localStorage.getItem('borzo_user')||'null')); }catch(e){ location.replace('kassa.html'); }
   }
   function submit(){
     var login=$('login').value.trim(), password=$('password').value;
@@ -61,7 +62,7 @@
         if(!res.ok){ $('err').textContent=res.d.error||'Ошибка входа'; $('go').disabled=false; return; }
         localStorage.setItem('borzo_token',res.d.token);
         localStorage.setItem('borzo_user',JSON.stringify(res.d.user));
-        routeByRole(res.d.user);
+        go(res.d.user);
       })
       .catch(function(){ $('err').textContent='Нет связи с сервером'; $('go').disabled=false; });
   }

@@ -1,14 +1,17 @@
 /* BORZO — клиент API кассы. Токен в localStorage, все запросы с Bearer. */
 window.API = (function(){
   var token = localStorage.getItem('borzo_token');
-  function logout(){ localStorage.removeItem('borzo_token'); localStorage.removeItem('borzo_user'); location.replace('login.html'); }
+  function clearAuth(){ localStorage.removeItem('borzo_token'); localStorage.removeItem('borzo_user'); }
+  function logout(){ clearAuth(); location.replace('login.html'); }
+  // токен протух → на вход, но с памятью, куда возвращаться
+  function expired(){ clearAuth(); var here=location.pathname.replace(/^\//,'')||'index.html'; location.replace('login.html?next='+encodeURIComponent(here)); }
   function req(method, path, body){
     return fetch('/api'+path, {
       method: method,
       headers: Object.assign({'Content-Type':'application/json'}, token?{'Authorization':'Bearer '+token}:{}),
       body: body?JSON.stringify(body):undefined
     }).then(function(r){
-      if(r.status===401){ logout(); throw new Error('401'); }
+      if(r.status===401){ expired(); throw new Error('401'); }
       return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Ошибка'); return d; });
     });
   }

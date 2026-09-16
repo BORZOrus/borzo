@@ -14,9 +14,10 @@
   function txs(){ return STATE.tx; }
   function balance(){ return STATE.balance; }
   function sums(){
+    // Потрачено/Остаток = подотчёт снабженца: закупы руководителя (by_role='mgr') сюда не входят
     var given=0,spent=0; STATE.tx.forEach(function(x){
       if(x.kind==='issue' && x.status==='accepted') given+=(+x.amount);
-      if(x.kind==='expense') spent+=(+x.amount);
+      if(x.kind==='expense' && x.by_role!=='mgr') spent+=(+x.amount);
     }); return {given:given,spent:spent,left:given-spent};
   }
 
@@ -224,7 +225,9 @@
       '<div class="fld"><label>Направление расхода</label><div class="seg" id="cat">'+
         '<button data-c="Сырьё" class="'+(sy?'on syr':'')+'">Сырьё</button><button data-c="Общие" class="'+(sy?'':'on gen')+'">Общие</button></div></div>'+
       '<div class="fld"><label>Сумма расхода, ₸ <span style="color:var(--k-mut)">· считается из позиций</span></label><input type="number" inputmode="numeric" id="amt" placeholder="0" value="'+(buf.amount||'')+'"></div>'+
-      (ed?'':'<div class="muted fz12" style="text-align:center;margin-bottom:10px">В кассе сейчас: <b style="color:var(--k-ink)">'+money(balance())+'</b></div>')+
+      (ed?'':(STATE.role==='mgr'
+        ? '<div class="muted fz12" style="text-align:center;margin-bottom:10px">🛒 Прямой закуп — спишется <b style="color:var(--k-ink)">с котла (наша касса)</b>, не с кассы снабженца</div>'
+        : '<div class="muted fz12" style="text-align:center;margin-bottom:10px">В кассе сейчас: <b style="color:var(--k-ink)">'+money(balance())+'</b></div>'))+
       '<button class="btn btn-buy" id="do-buy">'+(ed?'Отправить на согласование':'Расход прошёл — списать')+'</button>'+
       '<button class="btn btn-ghost" id="cancel" style="margin-top:8px">Отмена</button>';
   }
@@ -384,6 +387,7 @@
 
   // ================= вкладки =================
   $('btn-buy').onclick=openBuy;
+  var bbm=$('btn-buy-mgr'); if(bbm) bbm.onclick=openBuy;
   $('btn-give').onclick=openGive;
   $('tab-in').onclick=function(){ $('tab-in').className='on'; $('tab-out').className=''; $('sup-in').style.display=''; $('sup-out').style.display='none'; };
   $('tab-out').onclick=function(){ $('tab-out').className='on'; $('tab-in').className=''; $('sup-out').style.display=''; $('sup-in').style.display='none'; };
@@ -402,6 +406,7 @@
     $('view-mgr').style.display=sup?'none':'';
     $('u-role').textContent = sup?'Кабинет снабженца':'Кабинет управленца';
     $('topult').style.display = sup?'none':'';   // руководителю — кнопка «← Пульт»
+    $('tofin').style.display = sup?'none':'';     // руководителю — кнопка «Финансы»
   }
   $('logout').onclick=function(){ API.logout(); };
   $('passbtn').onclick=function(){

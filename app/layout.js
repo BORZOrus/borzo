@@ -21,7 +21,7 @@
   var NAV = [
     {sec:'ПРОДАЖИ', items:[['overview','Обзор','index.html'],['crm','CRM','crm.html'],['clients','Клиенты и сервис','clients.html']]},
     {sec:'ПРОИЗВОДСТВО', items:[['catalog','Каталог','catalog.html'],['production','Производство','production.html'],['warehouses','Склады','warehouses.html'],['supply','Снабжение','supply.html'],['shipments','Отгрузки','shipments.html']]},
-    {sec:'ДЕНЬГИ', items:[['finance','Финансы','finance.html'],['analytics','Аналитика','analytics.html'],['documents','Документы','documents.html'],['reports','Отчёты','reports.html']]},
+    {sec:'ДЕНЬГИ', items:[['finance','Финансы','fin.html'],['analytics','Аналитика','analytics.html'],['documents','Документы','documents.html'],['reports','Отчёты','reports.html']]},
     {sec:'КОМАНДА', items:[['staff','Сотрудники и зарплаты','staff.html']]},
     {sec:'РОСТ', items:[['marketing','Маркетинг','marketing.html'],['smm','СММ и контент','smm.html']]}
   ];
@@ -57,11 +57,22 @@
       t+='<div class="tb-right">'+
          '<a href="kassa.html" style="display:inline-flex;align-items:center;gap:6px;padding:8px 13px;background:#2f66f6;color:#fff;border-radius:9px;font-weight:600;font-size:13px;text-decoration:none">💰 Касса снабжения</a>'+
          '<span class="profile"><span class="avatar"></span><span><div class="nm">'+((_user&&_user.name)||'—')+'</div><div class="rl">Руководитель</div></span></span>'+
+         '<button id="tb-pass" title="Сменить пароль" style="padding:8px 11px;border:1px solid var(--line);background:#fff;color:var(--ink2);border-radius:9px;font-weight:600;font-size:14px;cursor:pointer">🔑</button>'+
          '<button id="tb-logout" style="padding:8px 12px;border:1px solid var(--line);background:#fff;color:var(--ink2);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer">Выйти</button>'+
          '</div>';
       document.getElementById('topbar').innerHTML=t;
       var lo=document.getElementById('tb-logout');
       if(lo) lo.onclick=function(){ localStorage.removeItem('borzo_token'); localStorage.removeItem('borzo_user'); location.replace('login.html'); };
+      var pb=document.getElementById('tb-pass');
+      if(pb) pb.onclick=function(){
+        var oldp=prompt('Текущий пароль:'); if(oldp===null)return;
+        var np=prompt('Новый пароль (минимум 5 символов):'); if(np===null)return;
+        if((np||'').length<5){ alert('Новый пароль — минимум 5 символов'); return; }
+        fetch('/api/auth/password',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_tok},body:JSON.stringify({old_pass:oldp,new_pass:np})})
+          .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+          .then(function(res){ alert(res.ok?'Пароль изменён':(res.d.error||'Ошибка')); })
+          .catch(function(){ alert('Нет связи с сервером'); });
+      };
       document.title='BORZO · '+title;
     }
   };

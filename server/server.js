@@ -58,10 +58,12 @@ async function initSchema() {
 
 // ---------- утилиты ----------
 function money(n){ return Math.round(+n||0); }
+// касса снабженца = выдано и принято − потрачено СНАБЖЕНЦЕМ. Закупы руководителя (его деньги/общая касса) подотчёт не уменьшают.
 async function balance() {
   const r = await pool.query(`
-    SELECT COALESCE(SUM(CASE WHEN kind='issue' AND status='accepted' THEN amount
-                             WHEN kind='expense' THEN -amount ELSE 0 END),0) AS b FROM kassa_tx`);
+    SELECT COALESCE(SUM(CASE WHEN k.kind='issue' AND k.status='accepted' THEN k.amount
+                             WHEN k.kind='expense' AND u.role='sup' THEN -k.amount ELSE 0 END),0) AS b
+    FROM kassa_tx k LEFT JOIN users u ON u.id=k.created_by`);
   return money(r.rows[0].b);
 }
 function rowSum(i){ return (parseFloat(i.qty)||0)*(parseFloat(i.price)||0); }
@@ -124,9 +126,25 @@ app.post('/api/auth/password', auth, async (req,res)=>{
   res.json({ ok:true });
 });
 
+// ---------- котёл (Финансы): прямой закуп руководителя = расход из котла одной строкой «Снабжение» ----------
+// Списывается напрямую с котла (наша касса), НЕ из подотчёта снабженца. Детализация по позициям живёт в модуле снабжения.
+async function bookPotExpense(amount, note, kassaId){
+  const r = await pool.query('SELECT data FROM fin_state WHERE id=1');
+  if(!r.rowCount) return false;                 // котла ещё нет (финданные не залиты) — не пишем
+  const data = r.rows[0].data || {};
+  if(!Array.isArray(data.ops)) return false;
+  const now = Date.now(), d = new Date(now);
+  const per = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const op = { id:'sup_'+kassaId, ts:now, per, kind:'out', acc:'BORZO', project:'BORZO',
+               amount: money(amount), category:'Снабжение', who:'ruslan', note: note||'прямой закуп', supplyTxId: kassaId };
+  data.ops.unshift(op);
+  await pool.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), now]);
+  return true;
+}
+
 // ---------- касса ----------
 app.get('/api/kassa', auth, async (req,res)=>{
-  const tx = await pool.query('SELECT * FROM kassa_tx ORDER BY ts DESC');
+  const tx = await pool.query('SELECT k.*, u.role AS by_role FROM kassa_tx k LEFT JOIN users u ON u.id=k.created_by ORDER BY k.ts DESC');
   res.json({ balance: await balance(), tx: tx.rows });
 });
 
@@ -147,15 +165,16 @@ app.post('/api/kassa/accept/:id', auth, requireRole('sup'), async (req,res)=>{
   res.json({ ok:true });
 });
 
-// расход (снабженец)
-app.post('/api/kassa/expense', auth, requireRole('sup'), async (req,res)=>{
+// расход (снабженец или руководитель — руководитель закупается сам)
+app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=>{
   const amount = money(req.body.amount);
   const items = Array.isArray(req.body.items)? req.body.items : [];
   const invoice = savePhoto(req.body.invoice);
   const receipt = savePhoto(req.body.receipt);
   if(amount<=0) return res.status(400).json({error:'укажите сумму'});
   if(!invoice && !receipt) return res.status(400).json({error:'нужен документ: накладная или чек'});
-  if(amount > await balance()) return res.status(400).json({error:'нельзя списать больше, чем в кассе'});
+  // ограничение «не больше кассы» — только для снабженца (его подотчёт). Руководитель тратит свои/общие деньги.
+  if(req.user.role==='sup' && amount > await balance()) return res.status(400).json({error:'нельзя списать больше, чем в кассе'});
   const id = crypto.randomUUID(), now = Date.now();
   const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:i.qty||'',unit:i.unit||'шт',price:i.price||'',sum:rowSum(i),cat:i.cat||req.body.category}));
   await pool.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8)`,
@@ -164,7 +183,13 @@ app.post('/api/kassa/expense', auth, requireRole('sup'), async (req,res)=>{
     await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
   }
-  res.json({ ok:true, id });
+  // прямой закуп руководителя → списываем с котла в Финансах (снабженец так не делает — его подотчёт уже учтён выдачей)
+  let potBooked = false;
+  if(req.user.role==='mgr'){
+    const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
+    potBooked = await bookPotExpense(amount, 'прямой закуп'+(names?': '+names:''), id);
+  }
+  res.json({ ok:true, id, potBooked });
 });
 
 // правка выдачи ДО подтверждения (руководитель, напрямую)
