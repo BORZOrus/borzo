@@ -98,6 +98,8 @@
   // для зарплат/закрытий: считаем по выбранному месяцу o.per (за какой месяц начислено), иначе по дате операции
   function inRangeS(o,r){ var t=o.per||o.ts; return t>=r.s && t<r.e; }
   var curR=monthRange(0);
+  var potSnab=0;  // подотчёт снабженца (из кассы снабжения), для разбивки котла BORZO
+  function loadPot(){ if(!(window.API&&window.API.token&&window.API.kassa))return; window.API.kassa().then(function(d){ potSnab=d.balance||0; render(); }).catch(function(){}); }
 
   function balance(acc){
     var b=0; DB.ops.forEach(function(o){
@@ -747,7 +749,8 @@
       return '<div class="card" style="border-color:rgba(240,166,33,.5);background:rgba(240,166,33,.07);padding:12px;margin-bottom:10px"><div style="font-weight:700">Запрос Ульяны — '+act+'</div><button class="btn" data-req="'+o.id+'" style="background:var(--green);color:#04140b;margin-top:10px">Посмотреть и решить</button></div>';
     }).join('');
       Array.prototype.forEach.call(rb.querySelectorAll('[data-req]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-req'));};}); }
-    $('r-balances').innerHTML=PROJECTS.map(function(p){return '<div class="bal"><div class="l">'+p+'</div><div class="v">'+money(balance(p))+'</div></div>';}).join('');
+    $('r-balances').innerHTML=PROJECTS.map(function(p){return '<div class="bal"><div class="l">'+p+'</div><div class="v">'+money(balance(p))+'</div></div>';}).join('')
+      +'<div style="flex-basis:100%;font-size:11.5px;color:var(--mut);margin-top:2px">Котёл BORZO: наша касса <b style="color:var(--ink)">'+money(balance('BORZO')-potSnab)+'</b> · у снабженца <b style="color:var(--ink)">'+money(potSnab)+'</b></div>';
     wireSearch('s-work',$('r-work-list'),opsSorted().filter(function(o){return PROJECTS.indexOf(o.project)>=0&&!o.family&&!o.supplyExpense;}),'Операций пока нет.');
 
     var byMe=sumW(function(o){return o.kind==='out'&&o.acc==='zpRuslan'&&inRangeS(o,curR);});
@@ -756,7 +759,8 @@
     $('p-balance').textContent=money(balance('zpRuslan'));
     wireSearch('s-pers',$('r-pers-list'),opsSorted().filter(function(o){return (o.kind==='out'&&o.acc==='zpRuslan')||(o.kind==='in'&&o.acc==='zpRuslan')||(o.kind==='transfer'&&o.to==='zpRuslan')||o.family;}),'Личных операций пока нет.');
 
-    $('u-borzo-bal').innerHTML='<div class="bal"><div class="l">Касса BORZO</div><div class="v">'+money(balance('BORZO'))+'</div></div>';
+    $('u-borzo-bal').innerHTML='<div class="bal"><div class="l">Касса BORZO</div><div class="v">'+money(balance('BORZO'))+'</div></div>'
+      +'<div style="flex-basis:100%;font-size:11.5px;color:var(--mut);margin-top:2px">из них наша касса <b style="color:var(--ink)">'+money(balance('BORZO')-potSnab)+'</b> · у снабженца <b style="color:var(--ink)">'+money(potSnab)+'</b></div>';
     wireSearch('s-uborzo',$('u-borzo-list'),opsSorted().filter(function(o){return ((o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO'))&&!o.family&&!o.supplyExpense;}),'Операций пока нет.');
 
     $('uzp-balance').textContent=money(balance('zpUlyana'));
@@ -848,6 +852,7 @@
     if(!owner){ var rs=document.querySelector('.roleswitch'); if(rs)rs.style.display='none';
       if(impBtn&&impBtn.parentNode)impBtn.parentNode.style.display='none'; }
     setRole(owner?'ruslan':'ulyana');
+    loadPot();
     window.API.finGet().then(function(res){
       var sd=res&&res.data;
       var sc=(sd&&Array.isArray(sd.ops))?sd.ops.length:0;

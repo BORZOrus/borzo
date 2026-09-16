@@ -8,7 +8,8 @@
   function stamp(ts){ var d=new Date(+ts); return pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
   function clone(o){ return JSON.parse(JSON.stringify(o)); }
   function roleName(r){ return r==='mgr'?'управленец':'снабженец'; }
-  function rowSum(i){ return (parseFloat(i.qty)||0)*(parseFloat(i.price)||0); }
+  function numf(v){ return parseFloat(String(v==null?'':v).replace(',','.'))||0; }  // 25,2 → 25.2
+  function rowSum(i){ return numf(i.qty)*numf(i.price); }
 
   var STATE={ balance:0, tx:[], role:null, user:null };
   function txs(){ return STATE.tx; }
@@ -343,6 +344,7 @@
       return;
     }
     if(!isMgr && amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше'); return; }
+    if(!items.length && !confirm('Ты не заполнил позиции (что закуплено). Тогда закуп НЕ попадёт на склад — спишется только суммой. Всё равно провести?')) return;
     API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt})
       .then(function(){ closeSheet(); return refresh(); }).catch(fail);
   }

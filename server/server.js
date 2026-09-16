@@ -66,7 +66,8 @@ async function balance() {
     FROM kassa_tx k LEFT JOIN users u ON u.id=k.created_by`);
   return money(r.rows[0].b);
 }
-function rowSum(i){ return (parseFloat(i.qty)||0)*(parseFloat(i.price)||0); }
+function numf(v){ return parseFloat(String(v==null?'':v).replace(',','.'))||0; }  // 25,2 → 25.2
+function rowSum(i){ return numf(i.qty)*numf(i.price); }
 function savePhoto(dataUrl){
   if(!dataUrl || typeof dataUrl!=='string' || dataUrl.indexOf('data:')!==0) return null;
   const m = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
@@ -189,7 +190,8 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   // ограничение «не больше кассы» — только для снабженца (его подотчёт). Руководитель тратит свои/общие деньги.
   if(req.user.role==='sup' && amount > await balance()) return res.status(400).json({error:'нельзя списать больше, чем в кассе'});
   const id = crypto.randomUUID(), now = Date.now();
-  const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:i.qty||'',unit:i.unit||'шт',price:i.price||'',sum:rowSum(i),cat:i.cat||req.body.category}));
+  const norm = v => String(v==null?'':v).replace(',','.');  // 25,2 → 25.2 для склада
+  const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||req.body.category}));
   await pool.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8)`,
     [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, req.user.id]);
   for(const i of cleanItems){
