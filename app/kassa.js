@@ -93,6 +93,31 @@
     $('sup-in').innerHTML = ins.length ? ins.map(opRow).join('') : '<div class="empty">Приходов пока нет. Когда управленец выдаст деньги — появятся здесь.</div>';
     $('sup-out').innerHTML = outs.length ? outs.map(opRow).join('') : '<div class="empty">Расходов пока нет. Нажмите «Закупаюсь».</div>';
     bindOpRows($('sup-in')); bindOpRows($('sup-out'));
+    renderSupAnal(outs); if($('sup-sklad').style.display!=='none') renderSupSklad();
+  }
+  // мелкая аналитика снабжения: сумма закупок за месяц по направлениям
+  function renderSupAnal(outs){
+    var el=$('sup-anal'); if(!el) return;
+    var d=new Date(), s=new Date(d.getFullYear(),d.getMonth(),1).getTime();
+    var syr=0,gen=0,n=0; outs.forEach(function(x){ if((+x.ts)<s) return; n++; if(x.category==='Сырьё') syr+=(+x.amount); else gen+=(+x.amount); });
+    var mon=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'][d.getMonth()];
+    el.innerHTML='<div class="kpi3" style="margin-bottom:12px">'+
+      '<div class="k"><div class="l">Сырьё · '+mon+'</div><div class="v" style="color:#a78bfa">'+money(syr)+'</div></div>'+
+      '<div class="k"><div class="l">Общие · '+mon+'</div><div class="v" style="color:var(--k-amber)">'+money(gen)+'</div></div>'+
+      '<div class="k"><div class="l">Закупок</div><div class="v">'+n+'</div></div></div>';
+  }
+  function renderSupSklad(){
+    var box=$('sup-sklad'); if(!box) return;
+    box.innerHTML='<div class="muted fz13" style="padding:6px 0">Загружаю склад…</div>';
+    API.sklad().then(function(d){
+      var it=d.items||[];
+      box.innerHTML = it.length ?
+        '<div class="h1">📦 Склад (накопительно)</div><table class="sk"><thead><tr><th>Позиция</th><th style="text-align:right">Всего</th><th style="text-align:right">Сумма</th></tr></thead><tbody>'+
+        it.map(function(a){ var pill=a.cat==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>';
+          return '<tr><td>'+a.name+' '+pill+'</td><td style="text-align:right;font-weight:600">'+(Math.round(a.qty*100)/100)+' '+a.unit+'</td><td style="text-align:right" class="muted">'+money(a.sum)+'</td></tr>';
+        }).join('')+'</tbody></table>' :
+        '<div class="empty">Склад пуст. Позиции появятся после закупок.</div>';
+    }).catch(function(){ box.innerHTML='<div class="empty">Не удалось загрузить склад.</div>'; });
   }
 
   function opRow(x){
@@ -214,7 +239,7 @@
   function buyHtml(){
     var ed=!!editingId, sy=buf.category==='Сырьё';
     return '<h3>'+(ed?'✏️ Изменить накладную':'🛒 Закуп')+'</h3>'+
-      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?'Правки уйдут второй стороне на согласование — молча ничего не меняется.':'Сфотографируйте накладную — позиции и цены распознаются автоматически (🔴 демо-пример; реальный ИИ на сервере). Чек можно приложить отдельно. Без документа списание нельзя.')+'</div>'+
+      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?'Правки уйдут второй стороне на согласование — молча ничего не меняется.':'Сфотографируйте накладную — позиции и цены распознаются автоматически (🔴 демо-пример; реальный ИИ на сервере). Чек можно приложить отдельно. '+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Без документа списание нельзя.'))+'</div>'+
       '<div class="row" style="gap:10px;margin-bottom:12px">'+
         '<label class="photo grow'+(buf.invoice?' has':'')+'" style="margin:0">'+(buf.invoice?'✓ Накладная<img src="'+buf.invoice+'">':'📄 Накладная')+'<input type="file" accept="image/*" capture="environment" id="ph-inv"></label>'+
         '<label class="photo grow'+(buf.receipt?' has':'')+'" style="margin:0">'+(buf.receipt?'✓ Чек<img src="'+buf.receipt+'">':'🧾 Чек')+'<input type="file" accept="image/*" id="ph-rec"></label>'+
@@ -231,7 +256,7 @@
       '<button class="btn btn-buy" id="do-buy">'+(ed?'Отправить на согласование':'Расход прошёл — списать')+'</button>'+
       '<button class="btn btn-ghost" id="cancel" style="margin-top:8px">Отмена</button>';
   }
-  var UNITS=['шт','л','кг'];
+  var UNITS=['шт','м','л','кг'];
   function catOf(it){ return it.cat||buf.category; }
   function itemsTotal(){ return buf.items.reduce(function(a,it){return a+rowSum(it);},0); }
   function recalcTotal(){
@@ -306,8 +331,10 @@
 
   function doBuy(){
     var amt=parseInt($('amt').value)||0;
+    var isMgr=(STATE.role==='mgr');
     if(amt<=0){ alert('Укажите сумму расхода'); return; }
-    if(!buf.invoice && !buf.receipt){ alert('Прикрепите накладную или чек — без документа нельзя'); return; }
+    // документ обязателен только снабженцу; руководитель может без чека/накладной
+    if(!isMgr && !buf.invoice && !buf.receipt){ alert('Прикрепите накладную или чек — без документа нельзя'); return; }
     var items=buf.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:i.unit||'шт',price:i.price||'',sum:rowSum(i),cat:i.cat||buf.category};});
     if(editingId){
       API.propose(editingId,{next:{amount:amt,category:buf.category,items:items}}).then(function(){
@@ -315,7 +342,7 @@
       }).then(function(){ alert('Изменение отправлено на согласование второй стороне.'); }).catch(fail);
       return;
     }
-    if(amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше'); return; }
+    if(!isMgr && amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше'); return; }
     API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt})
       .then(function(){ closeSheet(); return refresh(); }).catch(fail);
   }
@@ -389,8 +416,15 @@
   $('btn-buy').onclick=openBuy;
   var bbm=$('btn-buy-mgr'); if(bbm) bbm.onclick=openBuy;
   $('btn-give').onclick=openGive;
-  $('tab-in').onclick=function(){ $('tab-in').className='on'; $('tab-out').className=''; $('sup-in').style.display=''; $('sup-out').style.display='none'; };
-  $('tab-out').onclick=function(){ $('tab-out').className='on'; $('tab-in').className=''; $('sup-out').style.display=''; $('sup-in').style.display='none'; };
+  function supTab(which){
+    var map={'in':'sup-in','out':'sup-out','sklad':'sup-sklad'};
+    ['in','out','sklad'].forEach(function(k){ var v=$(map[k]); if(v)v.style.display=(k===which?'':'none'); });
+    $('tab-in').className=(which==='in'?'on':''); $('tab-out').className=(which==='out'?'on':''); var ts=$('tab-sup-sklad'); if(ts)ts.className=(which==='sklad'?'on':'');
+    if(which==='sklad') renderSupSklad();
+  }
+  $('tab-in').onclick=function(){ supTab('in'); };
+  $('tab-out').onclick=function(){ supTab('out'); };
+  var tss=$('tab-sup-sklad'); if(tss) tss.onclick=function(){ supTab('sklad'); };
   function mgrTab(active){
     var map={issues:'mgr-issues',inv:'mgr-inv',sklad:'mgr-sklad'};
     Object.keys(map).forEach(function(k){ $('tab-'+k).className=(k===active?'on':''); $(map[k]).style.display=(k===active?'':'none'); });

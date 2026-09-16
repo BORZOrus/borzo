@@ -126,20 +126,30 @@ app.post('/api/auth/password', auth, async (req,res)=>{
   res.json({ ok:true });
 });
 
-// ---------- котёл (Финансы): прямой закуп руководителя = расход из котла одной строкой «Снабжение» ----------
-// Списывается напрямую с котла (наша касса), НЕ из подотчёта снабженца. Детализация по позициям живёт в модуле снабжения.
-async function bookPotExpense(amount, note, kassaId){
+// ---------- котёл (Финансы) ↔ снабжение: стык без задвоения ----------
+// Общий помощник: дописать операцию в fin_state (котёл). Возвращает false, если котла ещё нет (финданные не залиты).
+async function bookPot(op){
   const r = await pool.query('SELECT data FROM fin_state WHERE id=1');
-  if(!r.rowCount) return false;                 // котла ещё нет (финданные не залиты) — не пишем
+  if(!r.rowCount) return false;
   const data = r.rows[0].data || {};
   if(!Array.isArray(data.ops)) return false;
-  const now = Date.now(), d = new Date(now);
-  const per = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-  const op = { id:'sup_'+kassaId, ts:now, per, kind:'out', acc:'BORZO', project:'BORZO',
-               amount: money(amount), category:'Снабжение', who:'ruslan', note: note||'прямой закуп', supplyTxId: kassaId };
+  // идемпотентность: не дублируем по supplyTxId+вид
+  if(op.id && data.ops.some(x=>x && x.id===op.id)) return true;
   data.ops.unshift(op);
-  await pool.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), now]);
+  await pool.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
   return true;
+}
+function monthPerNow(){ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }
+// ЗАКУП (снабженец или руководитель) → реальный расход из котла, падает в АНАЛИТИКУ (Сырьё/Общие), НЕ в ленту (hideFeed).
+async function bookSupplyExpense(amount, category, note, kassaId, who){
+  const cat = (category==='Сырьё') ? 'Сырьё' : 'Общие';
+  return bookPot({ id:'supx_'+kassaId, ts:Date.now(), per:monthPerNow(), kind:'out', acc:'BORZO', project:'BORZO',
+    amount: money(amount), category: cat, who: who||'snab', note: note||'закуп снабжения', supplyExpense:true, hideFeed:true, supplyTxId:kassaId });
+}
+// ВЫДАЧА снабженцу → видимая строка в ленте Финансов (Руслан+Ульяна), НЕ расход (котёл не трогает, из аналитики исключена).
+async function bookSupplyIssue(amount, kassaId){
+  return bookPot({ id:'supi_'+kassaId, ts:Date.now(), per:monthPerNow(), kind:'issue', project:'BORZO',
+    amount: money(amount), category:'Выдано снабженцу', who:'ruslan', supplyIssue:true, supplyTxId:kassaId });
 }
 
 // ---------- касса ----------
@@ -160,8 +170,10 @@ app.post('/api/kassa/issue', auth, requireRole('mgr'), async (req,res)=>{
 
 // подтвердить получение (снабженец)
 app.post('/api/kassa/accept/:id', auth, requireRole('sup'), async (req,res)=>{
-  const r = await pool.query(`UPDATE kassa_tx SET status='accepted' WHERE id=$1 AND kind='issue' AND status='wait' RETURNING id`,[req.params.id]);
+  const r = await pool.query(`UPDATE kassa_tx SET status='accepted' WHERE id=$1 AND kind='issue' AND status='wait' RETURNING id, amount`,[req.params.id]);
   if(!r.rowCount) return res.status(400).json({error:'нечего подтверждать'});
+  // подтверждённая выдача → видимая строка в ленте Финансов (не расход)
+  await bookSupplyIssue(r.rows[0].amount, r.rows[0].id);
   res.json({ ok:true });
 });
 
@@ -172,7 +184,8 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   const invoice = savePhoto(req.body.invoice);
   const receipt = savePhoto(req.body.receipt);
   if(amount<=0) return res.status(400).json({error:'укажите сумму'});
-  if(!invoice && !receipt) return res.status(400).json({error:'нужен документ: накладная или чек'});
+  // документ обязателен снабженцу; руководитель может закупаться без чека/накладной
+  if(req.user.role==='sup' && !invoice && !receipt) return res.status(400).json({error:'нужен документ: накладная или чек'});
   // ограничение «не больше кассы» — только для снабженца (его подотчёт). Руководитель тратит свои/общие деньги.
   if(req.user.role==='sup' && amount > await balance()) return res.status(400).json({error:'нельзя списать больше, чем в кассе'});
   const id = crypto.randomUUID(), now = Date.now();
@@ -183,12 +196,11 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
     await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
   }
-  // прямой закуп руководителя → списываем с котла в Финансах (снабженец так не делает — его подотчёт уже учтён выдачей)
-  let potBooked = false;
-  if(req.user.role==='mgr'){
-    const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
-    potBooked = await bookPotExpense(amount, 'прямой закуп'+(names?': '+names:''), id);
-  }
+  // любой закуп (снабженец или руководитель) → расход из котла в аналитику Финансов (не в ленту)
+  const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
+  const who = req.user.role==='mgr' ? 'ruslan' : 'snab';
+  const noteTxt = (req.user.role==='mgr'?'закуп Руслана':'закуп снабженца')+(names?': '+names:'');
+  const potBooked = await bookSupplyExpense(amount, req.body.category, noteTxt, id, who);
   res.json({ ok:true, id, potBooked });
 });
 
@@ -282,9 +294,9 @@ app.post('/api/demo/token', async (req,res)=>{
 // ---------- реальный сканер накладной (vision через OpenRouter) ----------
 const SCAN_PROMPT = 'Ты распознаёшь фото товарной накладной или чека (может быть на русском/казахском, печатной или от руки). '+
   'Извлеки все позиции товаров. Верни СТРОГО валидный JSON-массив без пояснений и без markdown, каждый элемент: '+
-  '{"name": "наименование", "qty": "количество числом", "unit": "одно из: шт, л, кг", "price": "цена за ЕДИНИЦУ числом без пробелов и валюты"}. '+
+  '{"name": "наименование", "qty": "количество числом", "unit": "одно из: шт, м, л, кг", "price": "цена за ЕДИНИЦУ числом без пробелов и валюты"}. '+
   'Если в накладной дана сумма по строке, а не цена за единицу — раздели сумму на количество. '+
-  'Единицу измерения приведи к шт, л или кг (штуки/листы/рулоны/комплекты → шт; литры → л; килограммы → кг). '+
+  'Единицу измерения приведи к шт, м, л или кг (штуки/листы/рулоны/комплекты → шт; метры/погонные метры/метраж плёнки → м; литры → л; килограммы → кг). '+
   'Если ничего не распознал — верни [].';
 app.post('/api/scan', auth, async (req,res)=>{
   const image = req.body.image;
@@ -312,7 +324,7 @@ app.post('/api/scan', auth, async (req,res)=>{
     catch(e){ const m = txt.match(/\[[\s\S]*\]/); if(m){ try{ items = JSON.parse(m[0]); }catch(e2){} } }
     if(!Array.isArray(items)) items = [];
     items = items.filter(function(i){return i && (i.name||'').toString().trim();}).map(function(i){
-      var unit = ['шт','л','кг'].indexOf(i.unit)>=0 ? i.unit : 'шт';
+      var unit = ['шт','м','л','кг'].indexOf(i.unit)>=0 ? i.unit : 'шт';
       return { name:String(i.name).slice(0,120), qty:String(i.qty==null?'':i.qty), unit:unit, price:String(i.price==null?'':i.price).replace(/[^\d.]/g,'') };
     });
     // лог расхода на ИИ (лёгкий счётчик)

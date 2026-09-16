@@ -718,6 +718,7 @@
     } else if(o.kind==='in'){ sign='+'; cls='amt-in'; ic='<div class="ic ic-in">⬇</div>'; title=o.sale?('Продажа · '+saleName):(o.category||'—');
     } else if(o.kind==='transfer'){ sign=''; cls='amt-tr'; ic='<div class="ic ic-tr">⇄</div>'; title='Перевод '+(o.note||'');
     } else if(o.kind==='close'){ sign=''; cls='amt-tr'; ic='<div class="ic ic-tr">✓</div>'; title='Закрыт аванс · '+o.emp;
+    } else if(o.kind==='issue'){ sign='−'; cls='amt-tr'; ic='<div class="ic ic-tr">🛒</div>'; title='Выдано снабженцу';
     } else if(o.kind==='credit'){ sign=''; cls='amt-tr'; ic='<div class="ic ic-tr">🏦</div>'; title='Кредит · '+((o.credit&&o.credit.name)||'');
     } else { sign='−'; cls='amt-out'; ic='<div class="ic '+(o.family?'ic-fam':'ic-out')+'">'+(o.kind==='return'?'↩':'⬆')+'</div>'; title=(o.kind==='return'?'↩ Возврат':(o.category||'—')); }
     var pend=o.pending?' <span class="pill" style="background:rgba(240,166,33,.15);color:var(--amber)">на согласовании</span>':'';
@@ -747,7 +748,7 @@
     }).join('');
       Array.prototype.forEach.call(rb.querySelectorAll('[data-req]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-req'));};}); }
     $('r-balances').innerHTML=PROJECTS.map(function(p){return '<div class="bal"><div class="l">'+p+'</div><div class="v">'+money(balance(p))+'</div></div>';}).join('');
-    wireSearch('s-work',$('r-work-list'),opsSorted().filter(function(o){return PROJECTS.indexOf(o.project)>=0&&!o.family;}),'Операций пока нет.');
+    wireSearch('s-work',$('r-work-list'),opsSorted().filter(function(o){return PROJECTS.indexOf(o.project)>=0&&!o.family&&!o.supplyExpense;}),'Операций пока нет.');
 
     var byMe=sumW(function(o){return o.kind==='out'&&o.acc==='zpRuslan'&&inRangeS(o,curR);});
     var byU=sumW(function(o){return o.family&&inRangeS(o,curR);});
@@ -756,7 +757,7 @@
     wireSearch('s-pers',$('r-pers-list'),opsSorted().filter(function(o){return (o.kind==='out'&&o.acc==='zpRuslan')||(o.kind==='in'&&o.acc==='zpRuslan')||(o.kind==='transfer'&&o.to==='zpRuslan')||o.family;}),'Личных операций пока нет.');
 
     $('u-borzo-bal').innerHTML='<div class="bal"><div class="l">Касса BORZO</div><div class="v">'+money(balance('BORZO'))+'</div></div>';
-    wireSearch('s-uborzo',$('u-borzo-list'),opsSorted().filter(function(o){return o.project==='BORZO'&&!o.family;}),'Операций пока нет.');
+    wireSearch('s-uborzo',$('u-borzo-list'),opsSorted().filter(function(o){return ((o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO'))&&!o.family&&!o.supplyExpense;}),'Операций пока нет.');
 
     $('uzp-balance').textContent=money(balance('zpUlyana'));
     $('uzp-spent').textContent=money(sumW(function(o){return o.kind==='out'&&o.acc==='zpUlyana'&&inRangeS(o,curR);}));
