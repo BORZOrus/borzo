@@ -65,6 +65,8 @@ async function initSchema() {
     );
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS sig TEXT;
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS dup BOOLEAN DEFAULT false;
+    ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS inv_no TEXT DEFAULT '';
+    ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS rec_no TEXT DEFAULT '';
   `);
 }
 // подпись накладной (для защиты от дублей): позиции+сумма+категория, устойчива к перезаливке того же
@@ -239,12 +241,14 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   const id = crypto.randomUUID(), now = Date.now();
   const norm = v => String(v==null?'':v).replace(',','.');  // 25,2 → 25.2 для склада
   const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||req.body.category}));
-  // защита от дублей: та же накладная (позиции+сумма+категория) уже проводилась?
+  // защита от дублей: та же накладная (позиции+сумма+категория) ИЛИ тот же № накладной уже проводились?
+  const invNo = String(req.body.invNo||'').trim().slice(0,40);
+  const recNo = String(req.body.recNo||'').trim().slice(0,40);
   const sig = sigOf(cleanItems, amount, req.body.category);
-  const dupR = await pool.query("SELECT to_timestamp(ts/1000) t FROM kassa_tx WHERE kind='expense' AND sig=$1 ORDER BY ts DESC LIMIT 1",[sig]);
+  const dupR = await pool.query("SELECT to_timestamp(ts/1000) t FROM kassa_tx WHERE kind='expense' AND (sig=$1 OR (COALESCE(inv_no,'')<>'' AND inv_no=$2)) ORDER BY ts DESC LIMIT 1",[sig, invNo||' ']);
   const isDup = dupR.rowCount>0;
-  await pool.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by,sig,dup) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, creator, sig, isDup]);
+  await pool.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by,sig,dup,inv_no,rec_no) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, creator, sig, isDup, invNo, recNo]);
   for(const i of cleanItems){
     await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
@@ -406,11 +410,12 @@ app.post('/api/demo/token', async (req,res)=>{
 
 // ---------- реальный сканер накладной (vision через OpenRouter) ----------
 const SCAN_PROMPT = 'Ты распознаёшь фото товарной накладной или чека (может быть на русском/казахском, печатной или от руки). '+
-  'Извлеки все позиции товаров. Верни СТРОГО валидный JSON-массив без пояснений и без markdown, каждый элемент: '+
-  '{"name": "наименование", "qty": "количество числом", "unit": "одно из: шт, м, л, кг", "price": "цена за ЕДИНИЦУ числом без пробелов и валюты"}. '+
+  'Верни СТРОГО валидный JSON-объект без пояснений и без markdown: '+
+  '{"number":"номер документа (№ накладной или № чека/фискальный номер), строкой; если номера нет — пустая строка", '+
+  '"items":[{"name":"наименование","qty":"количество числом","unit":"одно из: шт, м, л, кг","price":"цена за ЕДИНИЦУ числом без пробелов и валюты"}]}. '+
   'Если в накладной дана сумма по строке, а не цена за единицу — раздели сумму на количество. '+
-  'Единицу измерения приведи к шт, м, л или кг (штуки/листы/рулоны/комплекты → шт; метры/погонные метры/метраж плёнки → м; литры → л; килограммы → кг). '+
-  'Если ничего не распознал — верни [].';
+  'Единицу приведи к шт, м, л или кг (штуки/листы/рулоны/комплекты → шт; метры/погонные метры/метраж плёнки → м; литры → л; килограммы → кг). '+
+  'Если позиций нет — items пустой массив.';
 app.post('/api/scan', auth, async (req,res)=>{
   const image = req.body.image;
   if(!image || String(image).indexOf('data:')!==0) return res.status(400).json({error:'нет изображения'});
@@ -432,18 +437,18 @@ app.post('/api/scan', auth, async (req,res)=>{
     const d = await r.json();
     let txt = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
     txt = String(txt).replace(/```json/gi,'').replace(/```/g,'').trim();
-    let items = [];
-    try { items = JSON.parse(txt); }
-    catch(e){ const m = txt.match(/\[[\s\S]*\]/); if(m){ try{ items = JSON.parse(m[0]); }catch(e2){} } }
-    if(!Array.isArray(items)) items = [];
+    let parsed = null;
+    try { parsed = JSON.parse(txt); }
+    catch(e){ const m = txt.match(/\{[\s\S]*\}/) || txt.match(/\[[\s\S]*\]/); if(m){ try{ parsed = JSON.parse(m[0]); }catch(e2){} } }
+    let items = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.items) ? parsed.items : []);
+    let number = (parsed && !Array.isArray(parsed) && parsed.number!=null) ? String(parsed.number).trim().slice(0,40) : '';
     items = items.filter(function(i){return i && (i.name||'').toString().trim();}).map(function(i){
       var unit = ['шт','м','л','кг'].indexOf(i.unit)>=0 ? i.unit : 'шт';
       return { name:String(i.name).slice(0,120), qty:String(i.qty==null?'':i.qty), unit:unit, price:String(i.price==null?'':i.price).replace(/[^\d.]/g,'') };
     });
-    // лог расхода на ИИ (лёгкий счётчик)
     const usage = d.usage || {};
-    console.log('[scan] items='+items.length+' tokens='+(usage.total_tokens||'?'));
-    res.json({ items: items });
+    console.log('[scan] items='+items.length+' num='+(number||'-')+' tokens='+(usage.total_tokens||'?'));
+    res.json({ items: items, number: number });
   }catch(e){ console.error('scan error', e.message); res.status(502).json({error:'не удалось распознать, введите вручную'}); }
 });
 
