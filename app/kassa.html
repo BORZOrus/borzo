@@ -22,11 +22,16 @@
   body{margin:0;background:var(--k-bg);color:var(--k-ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;overscroll-behavior:none;width:100%;touch-action:pan-y}
   .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:0 0 40px;position:relative}
   /* демо-переключатель ролей */
-  .userbar{display:flex;align-items:center;gap:10px;padding:11px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--k-line)}
-  .userbar .who{flex:1;font-size:13px}
-  .userbar #logout,.userbar #passbtn{padding:8px 14px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer}
+  .userbar{padding:10px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--k-line)}
+  .ub-top{display:flex;align-items:center;gap:8px}
+  .ub-top .who{flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ub-top .who b{font-weight:700}
+  .userbar #logout,.userbar #passbtn{flex:0 0 auto;padding:8px 12px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer}
   .userbar #passbtn{padding:8px 11px}
-  .userbar #topult,.userbar #tofin{padding:8px 12px;border:1px solid var(--k-line);background:var(--k-card2);color:var(--k-ink);border-radius:9px;font-weight:600;font-size:13px;text-decoration:none}
+  .ub-nav{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}
+  .ub-nav a,.ub-nav button{padding:7px 11px;border:1px solid var(--k-line);background:var(--k-card2);color:var(--k-ink);border-radius:9px;font-weight:600;font-size:12.5px;text-decoration:none;cursor:pointer}
+  .ub-nav #viewtoggle.on{border-color:var(--k-amber);color:var(--k-amber)}
+  .preview-note{background:rgba(240,166,33,.12);color:var(--k-amber);font-size:12px;text-align:center;padding:7px;border-radius:9px;margin:10px 14px 0}
   .scanning{text-align:center;color:#7fb0ff;font-size:13px;padding:8px;background:rgba(59,130,246,.1);border-radius:10px;margin-bottom:10px}
   .pad{padding:14px}
   .h1{font-size:15px;font-weight:700;margin:2px 0 12px}
@@ -123,12 +128,18 @@
 
   <!-- шапка пользователя -->
   <div class="userbar">
-    <a id="topult" href="index.html" style="display:none">← Пульт</a>
-    <a id="tofin" href="fin.html" style="display:none">💳 Финансы</a>
-    <div class="who"><span id="u-role" class="muted"></span> · <b id="u-name"></b></div>
-    <button id="passbtn" title="Сменить пароль">🔑</button>
-    <button id="logout">Выйти</button>
+    <div class="ub-top">
+      <div class="who"><b id="u-name"></b> · <span id="u-role" class="muted"></span></div>
+      <button id="passbtn" title="Сменить пароль">🔑</button>
+      <button id="logout">Выйти</button>
+    </div>
+    <div class="ub-nav" id="ub-nav" style="display:none">
+      <a id="topult" href="index.html">← Пульт</a>
+      <a id="tofin" href="fin.html">💳 Финансы</a>
+      <button id="viewtoggle" type="button">👁 Смотреть как снабженец</button>
+    </div>
   </div>
+  <div class="preview-note" id="preview-note" style="display:none">👁 Просмотр кабинета снабженца (только смотришь, действуешь как управленец)</div>
 
   <!-- КАБИНЕТ СНАБЖЕНЦА -->
   <div id="view-sup" class="pad">
@@ -179,6 +190,6 @@
 <div class="sheet" id="sheet"><div id="sheet-body"></div></div>
 
 <script src="api.js?v=4"></script>
-<script src="kassa.js?v=11"></script>
+<script src="kassa.js?v=12"></script>
 </body>
 </html>

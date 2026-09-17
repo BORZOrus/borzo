@@ -53,8 +53,10 @@
   sheetBg.addEventListener('click',closeSheet);
 
   function fail(e){ alert((e&&e.message)||'Ошибка. Проверьте связь.'); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function refresh(){ return API.kassa().then(function(d){ STATE.balance=d.balance; STATE.tx=d.tx; renderCurrent(); }).catch(function(e){ if((e&&e.message)!=='401') console.warn(e); }); }
-  function renderCurrent(){ if(STATE.role==='sup') renderSup(); else renderMgr(); }
+  var viewRole=null;
+  function renderCurrent(){ if(viewRole==='sup') renderSup(); else renderMgr(); }
 
   // ---------- фото → dataURL ----------
   function readPhoto(file, cb){
@@ -275,7 +277,7 @@
       (ed?'':(STATE.role==='mgr'
         ? '<div class="muted fz12" style="text-align:center;margin-bottom:10px">🛒 Прямой закуп — спишется <b style="color:var(--k-ink)">с котла (наша касса)</b>, не с кассы снабженца</div>'
         : '<div class="muted fz12" style="text-align:center;margin-bottom:10px">В кассе сейчас: <b style="color:var(--k-ink)">'+money(balance())+'</b></div>'))+
-      '<button class="btn btn-buy" id="do-buy">'+(ed?(editDirect?'Сохранить':'Отправить на согласование'):'Расход прошёл — списать')+'</button>'+
+      '<button class="btn btn-buy" id="do-buy">'+(ed?(editDirect?'Сохранить':'Отправить на согласование'):'Далее — проверить →')+'</button>'+
       '<button class="btn btn-ghost" id="cancel" style="margin-top:8px">Отмена</button>';
   }
   var UNITS=['шт','м','л','кг'];
@@ -376,9 +378,26 @@
       return;
     }
     if(!isMgr && amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше'); return; }
-    if(!items.length && !confirm('Ты не заполнил позиции (что закуплено). Тогда закуп НЕ попадёт на склад — спишется только суммой. Всё равно провести?')) return;
-    API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt})
-      .then(function(){ closeSheet(); return refresh(); }).catch(fail);
+    if(!items.length && !confirm('Ты не заполнил позиции (что закуплено). Тогда закуп НЕ попадёт на склад — спишется только суммой. Всё равно продолжить?')) return;
+    // контрольное окно — сводка перед списанием
+    var doc = buf.invoice&&buf.receipt ? 'накладная + чек' : (buf.invoice?'накладная':(buf.receipt?'чек':'без документа'));
+    var lines = items.length ? items.map(function(i){ return '• '+esc(i.name)+' — '+(i.qty||'?')+' '+i.unit+(i.price?(' × '+money(i.price)):'')+' = '+money(i.sum); }).join('<br>') : '<span class="muted">позиции не заполнены</span>';
+    openSheet('<h3>Проверьте списание</h3>'+
+      '<div class="card" style="margin-bottom:14px">'+
+        '<div class="row" style="justify-content:space-between"><span class="muted">Сумма</span><b style="font-size:18px;color:var(--k-red)">−'+money(amt)+'</b></div>'+
+        '<div class="row" style="justify-content:space-between;margin-top:6px"><span class="muted">Направление</span><b>'+buf.category+'</b></div>'+
+        '<div class="row" style="justify-content:space-between;margin-top:6px"><span class="muted">Документ</span><b>'+doc+'</b></div>'+
+        '<div class="row" style="justify-content:space-between;margin-top:6px"><span class="muted">Откуда</span><b>'+(isMgr?'котёл (наша касса)':'касса снабженца')+'</b></div>'+
+        '<div style="border-top:1px solid var(--k-line);margin-top:10px;padding-top:10px;font-size:13px">'+lines+'</div>'+
+      '</div>'+
+      '<button class="btn btn-buy" id="cf-yes">💸 Списать</button>'+
+      '<button class="btn btn-ghost" id="cf-no" style="margin-top:8px">← Назад, поправить</button>');
+    $('cf-no').onclick=function(){ openSheet(buyHtml()); wireBuy(); };   // buf сохранён — вернёт с данными
+    $('cf-yes').onclick=function(){
+      $('cf-yes').disabled=true;
+      API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt})
+        .then(function(){ closeSheet(); return refresh(); }).catch(function(e){ $('cf-yes').disabled=false; fail(e); });
+    };
   }
 
   function openEditIssue(id){
@@ -467,15 +486,19 @@
   $('tab-inv').onclick=function(){ mgrTab('inv'); };
   $('tab-sklad').onclick=function(){ mgrTab('sklad'); };
   // ================= вход по логину =================
-  function applyRole(role){
-    STATE.role=role;
-    var sup=role==='sup';
+  function applyRole(role){ STATE.role=role; viewRole=role; setView(); }
+  // setView: какой кабинет показать (viewRole). STATE.role — настоящая роль (для прав), viewRole — что смотрим.
+  function setView(){
+    var sup=viewRole==='sup', mgr=STATE.role==='mgr';
     $('view-sup').style.display=sup?'':'none';
     $('view-mgr').style.display=sup?'none':'';
     $('u-role').textContent = sup?'Кабинет снабженца':'Кабинет управленца';
-    $('topult').style.display = sup?'none':'';   // руководителю — кнопка «← Пульт»
-    $('tofin').style.display = sup?'none':'';     // руководителю — кнопка «Финансы»
+    $('ub-nav').style.display = mgr?'':'none';   // навигация и переключатель — только у управленца
+    var vt=$('viewtoggle'); if(vt){ vt.textContent = sup?'↩ Вернуться к себе':'👁 Смотреть как снабженец'; vt.className = sup?'on':''; }
+    $('preview-note').style.display = (mgr&&sup)?'':'none';
+    renderCurrent();
   }
+  var vtb=$('viewtoggle'); if(vtb) vtb.onclick=function(){ if(STATE.role!=='mgr')return; viewRole=(viewRole==='sup'?'mgr':'sup'); setView(); };
   $('logout').onclick=function(){ API.logout(); };
   $('passbtn').onclick=function(){
     openSheet('<h3>🔑 Смена пароля</h3>'+
