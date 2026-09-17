@@ -8,3 +8,6 @@ app/_*.png
 .deploy_key
 .deploy_key.pub
 .server_ip
+
+# offsite-копии БД (реальные финданные — НИКОГДА не коммитить)
+.backups_offsite/

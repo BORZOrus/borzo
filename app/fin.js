@@ -749,8 +749,10 @@
       return '<div class="card" style="border-color:rgba(240,166,33,.5);background:rgba(240,166,33,.07);padding:12px;margin-bottom:10px"><div style="font-weight:700">Запрос Ульяны — '+act+'</div><button class="btn" data-req="'+o.id+'" style="background:var(--green);color:#04140b;margin-top:10px">Посмотреть и решить</button></div>';
     }).join('');
       Array.prototype.forEach.call(rb.querySelectorAll('[data-req]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-req'));};}); }
-    $('r-balances').innerHTML=PROJECTS.map(function(p){return '<div class="bal"><div class="l">'+p+'</div><div class="v">'+money(balance(p))+'</div></div>';}).join('')
-      +'<div style="flex-basis:100%;font-size:11.5px;color:var(--mut);margin-top:2px">BORZO — на руках <b style="color:var(--ink)">'+money(balance('BORZO')-potSnab)+'</b> · у снабженца <b style="color:var(--ink)">'+money(potSnab)+'</b></div>';
+    $('r-balances').innerHTML=PROJECTS.map(function(p){
+      var sub=(p==='BORZO')?'<div style="font-size:10px;color:var(--mut);margin-top:4px">касса '+money(balance('BORZO')-potSnab)+' · снабжение '+money(potSnab)+'</div>':'';
+      return '<div class="bal"><div class="l">'+p+'</div><div class="v">'+money(balance(p))+'</div>'+sub+'</div>';
+    }).join('');
     wireSearch('s-work',$('r-work-list'),opsSorted().filter(function(o){return PROJECTS.indexOf(o.project)>=0&&!o.family&&!o.supplyExpense;}),'Операций пока нет.');
 
     var byMe=sumW(function(o){return o.kind==='out'&&o.acc==='zpRuslan'&&inRangeS(o,curR);});
@@ -759,8 +761,7 @@
     $('p-balance').textContent=money(balance('zpRuslan'));
     wireSearch('s-pers',$('r-pers-list'),opsSorted().filter(function(o){return (o.kind==='out'&&o.acc==='zpRuslan')||(o.kind==='in'&&o.acc==='zpRuslan')||(o.kind==='transfer'&&o.to==='zpRuslan')||o.family;}),'Личных операций пока нет.');
 
-    $('u-borzo-bal').innerHTML='<div class="bal"><div class="l">Касса BORZO</div><div class="v">'+money(balance('BORZO'))+'</div></div>'
-      +'<div style="flex-basis:100%;font-size:11.5px;color:var(--mut);margin-top:2px">на руках <b style="color:var(--ink)">'+money(balance('BORZO')-potSnab)+'</b> · у снабженца <b style="color:var(--ink)">'+money(potSnab)+'</b></div>';
+    $('u-borzo-bal').innerHTML='<div class="bal"><div class="l">Касса BORZO</div><div class="v">'+money(balance('BORZO'))+'</div><div style="font-size:10px;color:var(--mut);margin-top:4px">касса '+money(balance('BORZO')-potSnab)+' · снабжение '+money(potSnab)+'</div></div>';
     wireSearch('s-uborzo',$('u-borzo-list'),opsSorted().filter(function(o){return ((o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO'))&&!o.family&&!o.supplyExpense;}),'Операций пока нет.');
 
     $('uzp-balance').textContent=money(balance('zpUlyana'));
