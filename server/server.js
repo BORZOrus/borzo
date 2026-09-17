@@ -141,6 +141,18 @@ async function bookPot(op){
   return true;
 }
 function monthPerNow(){ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }
+// снять операцию из котла по id (при удалении/правке закупа руководителя)
+async function unbookPot(id){
+  const r = await pool.query('SELECT data FROM fin_state WHERE id=1');
+  if(!r.rowCount) return false;
+  const data = r.rows[0].data || {};
+  if(!Array.isArray(data.ops)) return false;
+  const before = data.ops.length;
+  data.ops = data.ops.filter(x=> !(x && x.id===id));
+  if(data.ops.length===before) return false;
+  await pool.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
+  return true;
+}
 // ЗАКУП (снабженец или руководитель) → реальный расход из котла, падает в АНАЛИТИКУ (Сырьё/Общие), НЕ в ленту (hideFeed).
 async function bookSupplyExpense(amount, category, note, kassaId, who){
   const cat = (category==='Сырьё') ? 'Сырьё' : 'Общие';
@@ -204,6 +216,42 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   const noteTxt = (req.user.role==='mgr'?'закуп Руслана':'закуп снабженца')+(names?': '+names:'');
   const potBooked = await bookSupplyExpense(amount, req.body.category, noteTxt, id, who);
   res.json({ ok:true, id, potBooked });
+});
+
+// удаление СВОЕГО закупа руководителем — без согласования (только expense, созданный mgr)
+app.post('/api/kassa/expense/:id/delete', auth, requireRole('mgr'), async (req,res)=>{
+  const r = await pool.query('SELECT * FROM kassa_tx WHERE id=$1',[req.params.id]);
+  const tx = r.rows[0];
+  if(!tx || tx.kind!=='expense') return res.status(404).json({error:'не найдено'});
+  if(tx.created_by !== req.user.id) return res.status(403).json({error:'можно удалять только свой закуп'});
+  await pool.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
+  await pool.query('DELETE FROM kassa_tx WHERE id=$1',[tx.id]);
+  await unbookPot('supx_'+tx.id);   // снять расход из котла
+  res.json({ ok:true });
+});
+// прямая правка СВОЕГО закупа руководителем — без согласования
+app.post('/api/kassa/expense/:id/edit', auth, requireRole('mgr'), async (req,res)=>{
+  const r = await pool.query('SELECT * FROM kassa_tx WHERE id=$1',[req.params.id]);
+  const tx = r.rows[0];
+  if(!tx || tx.kind!=='expense') return res.status(404).json({error:'не найдено'});
+  if(tx.created_by !== req.user.id) return res.status(403).json({error:'можно править только свой закуп'});
+  const amount = money(req.body.amount);
+  if(amount<=0) return res.status(400).json({error:'укажите сумму'});
+  const items = Array.isArray(req.body.items)? req.body.items : [];
+  const norm = v => String(v==null?'':v).replace(',','.');
+  const cat = req.body.category || tx.category;
+  const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||cat}));
+  await pool.query('UPDATE kassa_tx SET amount=$1, category=$2, items=$3 WHERE id=$4',[amount, cat, JSON.stringify(cleanItems), tx.id]);
+  await pool.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
+  for(const i of cleanItems){
+    await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, tx.id]);
+  }
+  // перепровести в котле: снять старую, записать новую
+  await unbookPot('supx_'+tx.id);
+  const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
+  await bookSupplyExpense(amount, cat, 'закуп Руслана'+(names?': '+names:''), tx.id, 'ruslan');
+  res.json({ ok:true });
 });
 
 // правка выдачи ДО подтверждения (руководитель, напрямую)

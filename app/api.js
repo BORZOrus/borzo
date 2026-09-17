@@ -31,6 +31,8 @@ window.API = (function(){
     accept:      function(id){ return req('POST','/kassa/accept/'+id); },
     expense:     function(b){ return req('POST','/kassa/expense', b); },
     issueEdit:   function(id,b){ return req('POST','/kassa/issue/'+id+'/edit', b); },
+    expenseDelete: function(id){ return req('POST','/kassa/expense/'+id+'/delete'); },
+    expenseEdit:   function(id,b){ return req('POST','/kassa/expense/'+id+'/edit', b); },
     issueCancel: function(id){ return req('POST','/kassa/issue/'+id+'/cancel'); },
     propose:     function(id,b){ return req('POST','/kassa/'+id+'/propose', b); },
     approve:     function(id){ return req('POST','/kassa/'+id+'/approve'); },

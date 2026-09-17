@@ -195,7 +195,12 @@
       }
     } else {
       if(x.kind==='expense'){
-        body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Изменить (через согласование)</button>';
+        if(R==='mgr' && x.by_role==='mgr'){   // свой закуп — правит и удаляет сам, без согласования
+          body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Изменить</button>'+
+                '<button class="btn btn-ghost" id="op-del" style="margin-bottom:8px;color:var(--k-red)">🗑 Удалить закуп</button>';
+        } else {
+          body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Изменить (через согласование)</button>';
+        }
       } else if(x.kind==='issue'){
         if(x.status==='wait' && R==='mgr'){
           body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Изменить</button>'+
@@ -219,7 +224,8 @@
     $('cl').onclick=closeSheet;
     if($('op-appr')) $('op-appr').onclick=function(){ API.approve(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
     if($('op-rej')) $('op-rej').onclick=function(){ API.reject(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
-    if($('op-edit')) $('op-edit').onclick=function(){ if(x.kind==='expense') openEdit(id); else openEditIssue(id); };
+    if($('op-edit')) $('op-edit').onclick=function(){ if(x.kind==='expense') openEdit(id, (R==='mgr'&&x.by_role==='mgr')); else openEditIssue(id); };
+    if($('op-del')) $('op-del').onclick=function(){ if(confirm('Удалить этот закуп? Он уйдёт из склада и из расходов котла.')) API.expenseDelete(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
     if($('op-cancel')) $('op-cancel').onclick=function(){ if(confirm('Отменить эту выдачу?')) API.issueCancel(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
   }
 
@@ -227,20 +233,21 @@
   var buf={invoice:null,receipt:null,items:[{name:'',qty:'',unit:'шт'}],category:'Сырьё',amount:''};
   var editingId=null;
   function openBuy(){
-    editingId=null;
+    editingId=null; editDirect=false;
     buf={invoice:null,receipt:null,items:[{name:'',qty:'',unit:'шт'}],category:'Сырьё',amount:''};
     openSheet(buyHtml()); wireBuy();
   }
-  function openEdit(id){
+  var editDirect=false;
+  function openEdit(id,direct){
     var x=txs().filter(function(t){return t.id===id;})[0]; if(!x) return;
-    editingId=id;
+    editingId=id; editDirect=!!direct;
     buf={invoice:x.invoice||null,receipt:x.receipt||null,items:clone(x.items&&x.items.length?x.items:[{name:'',qty:'',unit:'шт'}]),category:x.category,amount:x.amount};
     openSheet(buyHtml()); wireBuy();
   }
   function buyHtml(){
     var ed=!!editingId, sy=buf.category==='Сырьё';
     return '<h3>'+(ed?'✏️ Изменить накладную':'🛒 Закуп')+'</h3>'+
-      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?'Правки уйдут второй стороне на согласование — молча ничего не меняется.':'Сфотографируйте накладную — позиции и цены распознаются автоматически (🔴 демо-пример; реальный ИИ на сервере). Чек можно приложить отдельно. '+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Без документа списание нельзя.'))+'</div>'+
+      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?(editDirect?'Твой закуп — правки применяются сразу, без согласования.':'Правки уйдут второй стороне на согласование — молча ничего не меняется.'):'Сфотографируйте накладную — позиции и цены распознаются автоматически (🔴 демо-пример; реальный ИИ на сервере). Чек можно приложить отдельно. '+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Без документа списание нельзя.'))+'</div>'+
       '<div class="row" style="gap:10px;margin-bottom:12px">'+
         '<label class="photo grow'+(buf.invoice?' has':'')+'" style="margin:0">'+(buf.invoice?'✓ Накладная<img src="'+buf.invoice+'">':'📄 Накладная')+'<input type="file" accept="image/*" capture="environment" id="ph-inv"></label>'+
         '<label class="photo grow'+(buf.receipt?' has':'')+'" style="margin:0">'+(buf.receipt?'✓ Чек<img src="'+buf.receipt+'">':'🧾 Чек')+'<input type="file" accept="image/*" id="ph-rec"></label>'+
@@ -254,7 +261,7 @@
       (ed?'':(STATE.role==='mgr'
         ? '<div class="muted fz12" style="text-align:center;margin-bottom:10px">🛒 Прямой закуп — спишется <b style="color:var(--k-ink)">с котла (наша касса)</b>, не с кассы снабженца</div>'
         : '<div class="muted fz12" style="text-align:center;margin-bottom:10px">В кассе сейчас: <b style="color:var(--k-ink)">'+money(balance())+'</b></div>'))+
-      '<button class="btn btn-buy" id="do-buy">'+(ed?'Отправить на согласование':'Расход прошёл — списать')+'</button>'+
+      '<button class="btn btn-buy" id="do-buy">'+(ed?(editDirect?'Сохранить':'Отправить на согласование'):'Расход прошёл — списать')+'</button>'+
       '<button class="btn btn-ghost" id="cancel" style="margin-top:8px">Отмена</button>';
   }
   var UNITS=['шт','м','л','кг'];
@@ -338,9 +345,15 @@
     if(!isMgr && !buf.invoice && !buf.receipt){ alert('Прикрепите накладную или чек — без документа нельзя'); return; }
     var items=buf.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:i.unit||'шт',price:i.price||'',sum:rowSum(i),cat:i.cat||buf.category};});
     if(editingId){
-      API.propose(editingId,{next:{amount:amt,category:buf.category,items:items}}).then(function(){
-        editingId=null; closeSheet(); return refresh();
-      }).then(function(){ alert('Изменение отправлено на согласование второй стороне.'); }).catch(fail);
+      if(editDirect){
+        API.expenseEdit(editingId,{amount:amt,category:buf.category,items:items}).then(function(){
+          editingId=null; editDirect=false; closeSheet(); return refresh();
+        }).catch(fail);
+      } else {
+        API.propose(editingId,{next:{amount:amt,category:buf.category,items:items}}).then(function(){
+          editingId=null; closeSheet(); return refresh();
+        }).then(function(){ alert('Изменение отправлено на согласование второй стороне.'); }).catch(fail);
+      }
       return;
     }
     if(!isMgr && amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше'); return; }
