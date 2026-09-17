@@ -421,6 +421,7 @@
     if(!isMgr && amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше'); return; }
     if(!items.length && !confirm('Ты не заполнил позиции (что закуплено). Тогда закуп НЕ попадёт на склад — спишется только суммой. Всё равно продолжить?')) return;
     if($('docdate')) buf.docDate=$('docdate').value;
+    buf.reqId = 'rq_'+Date.now()+'_'+Math.random().toString(36).slice(2,10);  // ключ идемпотентности: один клик = одна запись даже при обрыве/повторе
     // контрольное окно — сводка перед списанием
     var doc = buf.invoice&&buf.receipt ? 'накладная + чек' : (buf.invoice?'накладная':(buf.receipt?'чек':'без документа'));
     var dateRow = buf.docDate ? '<div class="row" style="justify-content:space-between;margin-top:6px"><span class="muted">Дата документа</span><b>'+esc(fmtDate(buf.docDate))+'</b></div>' : '';
@@ -439,7 +440,7 @@
     $('cf-no').onclick=function(){ openSheet(buyHtml()); wireBuy(); };   // buf сохранён — вернёт с данными
     $('cf-yes').onclick=function(){
       $('cf-yes').disabled=true;
-      API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt,invNo:buf.invNo||'',recNo:buf.recNo||'',docDate:buf.docDate||'',asSup:(viewRole==='sup'&&STATE.role==='mgr')})
+      API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt,invNo:buf.invNo||'',recNo:buf.recNo||'',docDate:buf.docDate||'',reqId:buf.reqId,asSup:(viewRole==='sup'&&STATE.role==='mgr')})
         .then(function(r){ closeSheet(); if(r&&r.dup) alert('⚠ ВНИМАНИЕ: такая же накладная уже проводилась ранее — возможный дубль. Помечено, руководитель увидит.'); return refresh(); })
         .catch(function(e){ $('cf-yes').disabled=false; fail(e); });
     };

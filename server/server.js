@@ -68,6 +68,8 @@ async function initSchema() {
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS inv_no TEXT DEFAULT '';
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS rec_no TEXT DEFAULT '';
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS doc_date TEXT DEFAULT '';
+    ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS req_id TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS kassa_tx_req_id_uidx ON kassa_tx(req_id) WHERE req_id IS NOT NULL;
   `);
 }
 // подпись накладной (для защиты от дублей): позиции+сумма+категория, устойчива к перезаливке того же
@@ -91,8 +93,9 @@ async function sendPushToRole(role, payload){
 // ---------- утилиты ----------
 function money(n){ return Math.round(+n||0); }
 // касса снабженца = выдано и принято − потрачено СНАБЖЕНЦЕМ. Закупы руководителя (его деньги/общая касса) подотчёт не уменьшают.
-async function balance() {
-  const r = await pool.query(`
+async function balance(db) {
+  const q = db||pool;
+  const r = await q.query(`
     SELECT COALESCE(SUM(CASE WHEN k.kind='issue' AND k.status='accepted' THEN k.amount
                              WHEN k.kind='expense' AND u.role='sup' THEN -k.amount ELSE 0 END),0) AS b
     FROM kassa_tx k LEFT JOIN users u ON u.id=k.created_by`);
@@ -160,42 +163,54 @@ app.post('/api/auth/password', auth, async (req,res)=>{
   res.json({ ok:true });
 });
 
+// ---------- транзакции: всё-или-ничего для денежных операций ----------
+const KASSA_LOCK = 4242;  // advisory-замок: сериализует изменения кассы снабжения (проверка баланса ↔ запись)
+async function withTx(fn){
+  const c = await pool.connect();
+  try{ await c.query('BEGIN'); const r = await fn(c); await c.query('COMMIT'); return r; }
+  catch(e){ try{ await c.query('ROLLBACK'); }catch(_){ } throw e; }
+  finally{ c.release(); }
+}
+function httpErr(code, msg){ const e=new Error(msg); e.httpCode=code; return e; }
+
 // ---------- котёл (Финансы) ↔ снабжение: стык без задвоения ----------
-// Общий помощник: дописать операцию в fin_state (котёл). Возвращает false, если котла ещё нет (финданные не залиты).
-async function bookPot(op){
-  const r = await pool.query('SELECT data FROM fin_state WHERE id=1');
+// Общий помощник: дописать операцию в fin_state (котёл). db — клиент транзакции (или pool). Блокирует строку FOR UPDATE.
+async function bookPot(op, db){
+  const q = db||pool;
+  const r = await q.query('SELECT data FROM fin_state WHERE id=1 FOR UPDATE');
   if(!r.rowCount) return false;
   const data = r.rows[0].data || {};
   if(!Array.isArray(data.ops)) return false;
   // идемпотентность: не дублируем по supplyTxId+вид
   if(op.id && data.ops.some(x=>x && x.id===op.id)) return true;
   data.ops.unshift(op);
-  await pool.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
+  await q.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
   return true;
 }
 function monthPerNow(){ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }
 // снять операцию из котла по id (при удалении/правке закупа руководителя)
-async function unbookPot(id){
-  const r = await pool.query('SELECT data FROM fin_state WHERE id=1');
+async function unbookPot(id, db){
+  const q = db||pool;
+  const r = await q.query('SELECT data FROM fin_state WHERE id=1 FOR UPDATE');
   if(!r.rowCount) return false;
   const data = r.rows[0].data || {};
   if(!Array.isArray(data.ops)) return false;
   const before = data.ops.length;
   data.ops = data.ops.filter(x=> !(x && x.id===id));
   if(data.ops.length===before) return false;
-  await pool.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
+  await q.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
   return true;
 }
 // ЗАКУП (снабженец или руководитель) → реальный расход из котла, падает в АНАЛИТИКУ (Сырьё/Операционка), НЕ в ленту (hideFeed).
-async function bookSupplyExpense(amount, category, note, kassaId, who){
+async function bookSupplyExpense(amount, category, note, kassaId, who, db, per){
   const cat = (category==='Сырьё') ? 'Сырьё' : 'Операционка';
-  return bookPot({ id:'supx_'+kassaId, ts:Date.now(), per:monthPerNow(), kind:'out', acc:'BORZO', project:'BORZO',
-    amount: money(amount), category: cat, who: who||'snab', note: note||'закуп снабжения', supplyExpense:true, hideFeed:true, supplyTxId:kassaId });
+  return bookPot({ id:'supx_'+kassaId, ts:Date.now(), per:per||monthPerNow(), kind:'out', acc:'BORZO', project:'BORZO',
+    amount: money(amount), category: cat, who: who||'snab', note: note||'закуп снабжения', supplyExpense:true, hideFeed:true, supplyTxId:kassaId }, db);
 }
 // ВЫДАЧА снабженцу → видимая строка в ленте Финансов (Руслан+Ульяна), НЕ расход (котёл не трогает, из аналитики исключена).
-async function bookSupplyIssue(amount, kassaId){
+async function bookSupplyIssue(amount, kassaId, db){
   return bookPot({ id:'supi_'+kassaId, ts:Date.now(), per:monthPerNow(), kind:'issue', project:'BORZO',
-    amount: money(amount), category:'Выдано снабженцу', who:'ruslan', supplyIssue:true, supplyTxId:kassaId });
+    amount: money(amount), category:'Выдано снабженцу', who:'ruslan', supplyIssue:true, supplyTxId:kassaId }, db);
 }
 
 // ---------- касса ----------
@@ -237,68 +252,91 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   if(amount<=0) return res.status(400).json({error:'укажите сумму'});
   // документ обязателен снабженцу; руководитель (свой закуп) может без чека/накладной
   if(actRole==='sup' && !invoice && !receipt) return res.status(400).json({error:'нужен документ: накладная или чек'});
-  // ограничение «не больше кассы» — для снабженца (его подотчёт). Руководитель при своём закупе тратит из котла.
-  if(actRole==='sup' && amount > await balance()) return res.status(400).json({error:'нельзя списать больше, чем в кассе снабженца'});
   const id = crypto.randomUUID(), now = Date.now();
+  const reqId = (String(req.body.reqId||'').trim().slice(0,64)) || null;   // ключ идемпотентности: один клик = одна запись, даже если запрос ушёл дважды
   const norm = v => String(v==null?'':v).replace(',','.');  // 25,2 → 25.2 для склада
   const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||req.body.category}));
-  // защита от дублей: та же накладная (позиции+сумма+категория) ИЛИ тот же № накладной уже проводились?
   const invNo = String(req.body.invNo||'').trim().slice(0,40);
   const recNo = String(req.body.recNo||'').trim().slice(0,40);
   let docDate = String(req.body.docDate||'').trim().slice(0,10);
   if(docDate && !/^\d{4}-\d{2}-\d{2}$/.test(docDate)) docDate = '';
   const sig = sigOf(cleanItems, amount, req.body.category);
-  // dubl: same inv_no; OR same items+amount+category AND same doc date (if present)
-  const dupR = await pool.query("SELECT to_timestamp(ts/1000) t FROM kassa_tx WHERE kind='expense' AND ((COALESCE(inv_no,'')<>'' AND inv_no=$2) OR (sig=$1 AND ($3='' OR COALESCE(doc_date,'')=$3))) ORDER BY ts DESC LIMIT 1",[sig, invNo||' ', docDate]);
-  const isDup = dupR.rowCount>0;
-  await pool.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by,sig,dup,inv_no,rec_no,doc_date) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-    [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, creator, sig, isDup, invNo, recNo, docDate]);
-  for(const i of cleanItems){
-    await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
-  }
-  // любой закуп (снабженец или руководитель) → расход из котла в аналитику Финансов (не в ленту)
-  const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
   const who = actRole==='mgr' ? 'ruslan' : 'snab';
+  const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
   const noteTxt = (actRole==='mgr'?'закуп Руслана':'закуп снабженца')+(names?': '+names:'');
-  const potBooked = await bookSupplyExpense(amount, req.body.category, noteTxt, id, who);
-  res.json({ ok:true, id, potBooked, dup:isDup, dupDate: isDup ? dupR.rows[0].t : null });
+  try{
+    const out = await withTx(async (c)=>{
+      await c.query('SELECT pg_advisory_xact_lock($1)',[KASSA_LOCK]);   // сериализуем: два одновременных закупа не пройдут проверку баланса «мимо друг друга»
+      // идемпотентность: этот клик уже проведён? вернуть тот же результат, не списывать повторно
+      if(reqId){ const ex = await c.query('SELECT id, dup FROM kassa_tx WHERE req_id=$1',[reqId]); if(ex.rowCount) return { id:ex.rows[0].id, dup:ex.rows[0].dup, potBooked:true, idem:true }; }
+      // ограничение «не больше кассы» — для снабженца (его подотчёт), теперь под замком → без гонки перерасхода
+      if(actRole==='sup'){ const bal = await balance(c); if(amount > bal) throw httpErr(400,'нельзя списать больше, чем в кассе снабженца (сейчас '+bal+')'); }
+      // защита от дублей: тот же № накладной ИЛИ те же позиции+сумма+категория в ту же дату документа
+      const dupR = await c.query("SELECT to_timestamp(ts/1000) t FROM kassa_tx WHERE kind='expense' AND ((COALESCE(inv_no,'')<>'' AND inv_no=$2) OR (sig=$1 AND ($3='' OR COALESCE(doc_date,'')=$3))) ORDER BY ts DESC LIMIT 1",[sig, invNo||' ', docDate]);
+      const isDup = dupR.rowCount>0;
+      await c.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by,sig,dup,inv_no,rec_no,doc_date,req_id) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, creator, sig, isDup, invNo, recNo, docDate, reqId]);
+      for(const i of cleanItems){
+        await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
+      }
+      const potBooked = await bookSupplyExpense(amount, req.body.category, noteTxt, id, who, c);
+      return { id, dup:isDup, dupDate: isDup ? dupR.rows[0].t : null, potBooked };
+    });
+    res.json({ ok:true, id:out.id, potBooked:out.potBooked, dup:out.dup, dupDate:out.dupDate||null, idem:out.idem||false });
+  }catch(e){
+    // гонка по одинаковому reqId (UNIQUE) — вернуть уже проведённую запись как успех
+    if(e && e.code==='23505' && reqId){ const ex=await pool.query('SELECT id,dup FROM kassa_tx WHERE req_id=$1',[reqId]); if(ex.rowCount) return res.json({ ok:true, id:ex.rows[0].id, potBooked:true, dup:ex.rows[0].dup, idem:true }); }
+    if(e && e.httpCode) return res.status(e.httpCode).json({error:e.message});
+    console.error('expense error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'});
+  }
 });
 
 // удаление СВОЕГО закупа руководителем — без согласования (только expense, созданный mgr)
 app.post('/api/kassa/expense/:id/delete', auth, requireRole('mgr'), async (req,res)=>{
-  const r = await pool.query('SELECT * FROM kassa_tx WHERE id=$1',[req.params.id]);
-  const tx = r.rows[0];
-  if(!tx || tx.kind!=='expense') return res.status(404).json({error:'не найдено'});
-  if(tx.created_by !== req.user.id) return res.status(403).json({error:'можно удалять только свой закуп'});
-  await pool.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
-  await pool.query('DELETE FROM kassa_tx WHERE id=$1',[tx.id]);
-  await unbookPot('supx_'+tx.id);   // снять расход из котла
-  res.json({ ok:true });
+  try{
+    await withTx(async (c)=>{
+      await c.query('SELECT pg_advisory_xact_lock($1)',[KASSA_LOCK]);
+      const r = await c.query('SELECT * FROM kassa_tx WHERE id=$1 FOR UPDATE',[req.params.id]);
+      const tx = r.rows[0];
+      if(!tx || tx.kind!=='expense') throw httpErr(404,'не найдено');
+      if(tx.created_by !== req.user.id) throw httpErr(403,'можно удалять только свой закуп');
+      await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
+      await c.query('DELETE FROM kassa_tx WHERE id=$1',[tx.id]);
+      await unbookPot('supx_'+tx.id, c);   // снять расход из котла — в той же транзакции
+    });
+    res.json({ ok:true });
+  }catch(e){ if(e&&e.httpCode) return res.status(e.httpCode).json({error:e.message}); console.error('route error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'}); }
 });
 // прямая правка СВОЕГО закупа руководителем — без согласования
 app.post('/api/kassa/expense/:id/edit', auth, requireRole('mgr'), async (req,res)=>{
-  const r = await pool.query('SELECT * FROM kassa_tx WHERE id=$1',[req.params.id]);
-  const tx = r.rows[0];
-  if(!tx || tx.kind!=='expense') return res.status(404).json({error:'не найдено'});
-  if(tx.created_by !== req.user.id) return res.status(403).json({error:'можно править только свой закуп'});
   const amount = money(req.body.amount);
   if(amount<=0) return res.status(400).json({error:'укажите сумму'});
   const items = Array.isArray(req.body.items)? req.body.items : [];
   const norm = v => String(v==null?'':v).replace(',','.');
-  const cat = req.body.category || tx.category;
-  const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||cat}));
-  await pool.query('UPDATE kassa_tx SET amount=$1, category=$2, items=$3 WHERE id=$4',[amount, cat, JSON.stringify(cleanItems), tx.id]);
-  await pool.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
-  for(const i of cleanItems){
-    await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, tx.id]);
-  }
-  // перепровести в котле: снять старую, записать новую
-  await unbookPot('supx_'+tx.id);
-  const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
-  await bookSupplyExpense(amount, cat, 'закуп Руслана'+(names?': '+names:''), tx.id, 'ruslan');
-  res.json({ ok:true });
+  try{
+    await withTx(async (c)=>{
+      await c.query('SELECT pg_advisory_xact_lock($1)',[KASSA_LOCK]);
+      const r = await c.query('SELECT * FROM kassa_tx WHERE id=$1 FOR UPDATE',[req.params.id]);
+      const tx = r.rows[0];
+      if(!tx || tx.kind!=='expense') throw httpErr(404,'не найдено');
+      if(tx.created_by !== req.user.id) throw httpErr(403,'можно править только свой закуп');
+      const cat = req.body.category || tx.category;
+      const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||cat}));
+      await c.query('UPDATE kassa_tx SET amount=$1, category=$2, items=$3 WHERE id=$4',[amount, cat, JSON.stringify(cleanItems), tx.id]);
+      await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
+      for(const i of cleanItems){
+        await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, tx.id]);
+      }
+      // перепровести в котле: снять старую, записать новую — СОХРАНЯЯ месяц исходной операции (аудит #18: правка не переносит расход в текущий месяц)
+      await unbookPot('supx_'+tx.id, c);
+      const origPer = new Date(new Date(Number(tx.ts)).getFullYear(), new Date(Number(tx.ts)).getMonth(), 1).getTime();
+      const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
+      await bookSupplyExpense(amount, cat, 'закуп Руслана'+(names?': '+names:''), tx.id, 'ruslan', c, origPer);
+    });
+    res.json({ ok:true });
+  }catch(e){ if(e&&e.httpCode) return res.status(e.httpCode).json({error:e.message}); console.error('route error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'}); }
 });
 
 // правка выдачи ДО подтверждения (руководитель, напрямую)
@@ -347,35 +385,63 @@ app.post('/api/kassa/:id/unpropose', auth, async (req,res)=>{
 });
 // одобрить изменение (противоположная сторона)
 app.post('/api/kassa/:id/approve', auth, async (req,res)=>{
-  const r = await pool.query('SELECT * FROM kassa_tx WHERE id=$1',[req.params.id]);
-  const tx = r.rows[0];
-  if(!tx || !tx.pending) return res.status(400).json({error:'нечего одобрять'});
-  if(tx.pending.by===req.user.role) return res.status(403).json({error:'изменение одобряет вторая сторона'});
-  // удаление по согласованию
-  if(tx.pending.del){
-    await pool.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
-    await pool.query('DELETE FROM kassa_tx WHERE id=$1',[tx.id]);
-    await unbookPot('supx_'+tx.id);   // если закуп — снять расход из котла
-    return res.json({ ok:true, deleted:true });
-  }
-  const next = tx.pending.next;
-  const entry = { t:Date.now(), by:tx.pending.by, approver:req.user.role, changes:genericDiff(tx,next), note:tx.pending.note };
-  const log = (tx.log||[]).concat([entry]);
-  const fields=[], vals=[]; let n=1;
-  ['amount','source','category','items'].forEach(k=>{ if(k in next){ fields.push(k+'=$'+n); vals.push(k==='items'?JSON.stringify(next[k]):next[k]); n++; } });
-  fields.push('pending=NULL'); fields.push('log=$'+n); vals.push(JSON.stringify(log)); n++;
-  vals.push(tx.id);
-  await pool.query(`UPDATE kassa_tx SET ${fields.join(', ')} WHERE id=$${n}`, vals);
-  // если у расхода изменились позиции — пересобрать приход на склад
-  if(tx.kind==='expense' && ('items' in next)){
-    await pool.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
-    const items = next.items||[];
-    for(const i of items){
-      await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum!=null?i.sum:rowSum(i), i.cat||next.category||tx.category, tx.id]);
-    }
-  }
-  res.json({ ok:true });
+  const norm = v => String(v==null?'':v).replace(',','.');
+  try{
+    const result = await withTx(async (c)=>{
+      await c.query('SELECT pg_advisory_xact_lock($1)',[KASSA_LOCK]);
+      const r = await c.query('SELECT * FROM kassa_tx WHERE id=$1 FOR UPDATE',[req.params.id]);
+      const tx = r.rows[0];
+      if(!tx || !tx.pending) throw httpErr(400,'нечего одобрять');
+      if(tx.pending.by===req.user.role) throw httpErr(403,'изменение одобряет вторая сторона');
+      // удаление по согласованию
+      if(tx.pending.del){
+        await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
+        await c.query('DELETE FROM kassa_tx WHERE id=$1',[tx.id]);
+        if(tx.kind==='expense') await unbookPot('supx_'+tx.id, c);   // закуп — снять расход из котла
+        if(tx.kind==='issue')   await unbookPot('supi_'+tx.id, c);   // выдача — снять строку выдачи из ленты
+        return { deleted:true };
+      }
+      const next = tx.pending.next;
+      // нормализация чисел (аудит #12,#16): суммы конечны и положительны, кол-во/цена без запятой
+      if('amount' in next){ const a=money(next.amount); if(!(a>0)) throw httpErr(400,'сумма должна быть больше нуля'); next.amount=a; }
+      if('items' in next && Array.isArray(next.items)){
+        next.items = next.items.filter(i=>i&&(i.name||'').toString().trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:(i.sum!=null?money(i.sum):rowSum(i)),cat:i.cat||next.category||tx.category}));
+      }
+      const entry = { t:Date.now(), by:tx.pending.by, approver:req.user.role, changes:genericDiff(tx,next), note:tx.pending.note };
+      const log = (tx.log||[]).concat([entry]);
+      const fields=[], vals=[]; let n=1;
+      ['amount','source','category','items'].forEach(k=>{ if(k in next){ fields.push(k+'=$'+n); vals.push(k==='items'?JSON.stringify(next[k]):next[k]); n++; } });
+      fields.push('pending=NULL'); fields.push('log=$'+n); vals.push(JSON.stringify(log)); n++;
+      vals.push(tx.id);
+      await c.query(`UPDATE kassa_tx SET ${fields.join(', ')} WHERE id=$${n}`, vals);
+      // если у расхода изменились позиции — пересобрать приход на склад
+      if(tx.kind==='expense' && ('items' in next)){
+        await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
+        for(const i of (next.items||[])){
+          await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, tx.id]);
+        }
+      }
+      // ПЕРЕПРОВЕСТИ КОТЁЛ при согласованной правке закупа (аудит #5): иначе supx_ остаётся на старой сумме/категории
+      if(tx.kind==='expense' && (('amount' in next) || ('category' in next))){
+        const newAmount = ('amount' in next) ? next.amount : money(tx.amount);
+        const newCat = ('category' in next) ? next.category : tx.category;
+        const origPer = new Date(new Date(Number(tx.ts)).getFullYear(), new Date(Number(tx.ts)).getMonth(), 1).getTime();
+        const ur = await c.query('SELECT role FROM users WHERE id=$1',[tx.created_by]);
+        const who = (ur.rows[0] && ur.rows[0].role==='sup') ? 'snab' : 'ruslan';
+        await unbookPot('supx_'+tx.id, c);
+        const nm = (next.items||tx.items||[]).map(i=>i&&i.name).filter(Boolean).slice(0,3).join(', ');
+        await bookSupplyExpense(newAmount, newCat, 'закуп (правка согласована)'+(nm?': '+nm:''), tx.id, who, c, origPer);
+      }
+      // ПЕРЕПРОВЕСТИ выдачу при согласованной правке суммы (аудит #5): supi_ должна совпасть
+      if(tx.kind==='issue' && tx.status==='accepted' && ('amount' in next)){
+        await unbookPot('supi_'+tx.id, c);
+        await bookSupplyIssue(next.amount, tx.id, c);
+      }
+      return { ok:true };
+    });
+    res.json(Object.assign({ ok:true }, result));
+  }catch(e){ if(e&&e.httpCode) return res.status(e.httpCode).json({error:e.message}); console.error('route error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'}); }
 });
 // отклонить изменение
 app.post('/api/kassa/:id/reject', auth, async (req,res)=>{
@@ -523,6 +589,11 @@ app.post('/api/push/subscribe', auth, async (req,res)=>{
 });
 
 app.get('/api/health', (req,res)=> res.json({ ok:true }));
+
+// глобальный обработчик ошибок Express (аудит #14): любая ошибка → 500, а не зависший запрос
+app.use((err, req, res, next)=>{ console.error('unhandled route error', err&&err.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'}); });
+// подстраховка: необработанный промис не должен ронять процесс (systemd перезапустит, но лучше логировать и жить)
+process.on('unhandledRejection', (reason)=>{ console.error('unhandledRejection', reason && (reason.message||reason)); });
 
 initSchema().then(()=>{
   if(!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive:true });
