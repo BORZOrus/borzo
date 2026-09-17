@@ -36,6 +36,8 @@ window.API = (function(){
     issueCancel: function(id){ return req('POST','/kassa/issue/'+id+'/cancel'); },
     propose:     function(id,b){ return req('POST','/kassa/'+id+'/propose', b); },
     unpropose:   function(id){ return req('POST','/kassa/'+id+'/unpropose'); },
+    pushKey:       function(){ return req('GET','/push/pubkey'); },
+    pushSubscribe: function(sub){ return req('POST','/push/subscribe',{sub:sub}); },
     approve:     function(id){ return req('POST','/kassa/'+id+'/approve'); },
     reject:      function(id){ return req('POST','/kassa/'+id+'/reject'); },
     finGet:      function(){ return req('GET','/fin'); },

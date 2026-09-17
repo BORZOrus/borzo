@@ -6,6 +6,10 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const webpush = require('web-push');
+if(process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE){
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT||'mailto:admin@borzopult.com', process.env.VAPID_PUBLIC, process.env.VAPID_PRIVATE);
+}
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -53,7 +57,32 @@ async function initSchema() {
       updated_by INTEGER,
       updated_at BIGINT
     );
+    CREATE TABLE IF NOT EXISTS push_subs (
+      endpoint TEXT PRIMARY KEY,
+      user_id INTEGER,
+      role TEXT,
+      sub JSONB NOT NULL
+    );
+    ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS sig TEXT;
+    ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS dup BOOLEAN DEFAULT false;
   `);
+}
+// подпись накладной (для защиты от дублей): позиции+сумма+категория, устойчива к перезаливке того же
+function sigOf(items, amount, category){
+  const norm = (items||[]).map(i=>({n:String(i.name||'').trim().toLowerCase(), q:numf(i.qty), p:numf(i.price)}))
+    .sort((a,b)=> a.n<b.n?-1:(a.n>b.n?1:0));
+  const s = norm.map(i=>i.n+'|'+i.q+'|'+i.p).join(';')+'#'+money(amount)+'#'+(category||'');
+  return crypto.createHash('md5').update(s).digest('hex');
+}
+
+// ---------- push-уведомления ----------
+async function sendPushToRole(role, payload){
+  if(!process.env.VAPID_PUBLIC) return;
+  const r = await pool.query('SELECT endpoint, sub FROM push_subs WHERE role=$1',[role]);
+  for(const row of r.rows){
+    try { await webpush.sendNotification(row.sub, JSON.stringify(payload)); }
+    catch(e){ if(e.statusCode===404||e.statusCode===410){ await pool.query('DELETE FROM push_subs WHERE endpoint=$1',[row.endpoint]); } }
+  }
 }
 
 // ---------- утилиты ----------
@@ -210,8 +239,12 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   const id = crypto.randomUUID(), now = Date.now();
   const norm = v => String(v==null?'':v).replace(',','.');  // 25,2 → 25.2 для склада
   const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||req.body.category}));
-  await pool.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8)`,
-    [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, creator]);
+  // защита от дублей: та же накладная (позиции+сумма+категория) уже проводилась?
+  const sig = sigOf(cleanItems, amount, req.body.category);
+  const dupR = await pool.query("SELECT to_timestamp(ts/1000) t FROM kassa_tx WHERE kind='expense' AND sig=$1 ORDER BY ts DESC LIMIT 1",[sig]);
+  const isDup = dupR.rowCount>0;
+  await pool.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by,sig,dup) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, creator, sig, isDup]);
   for(const i of cleanItems){
     await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
@@ -221,7 +254,7 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   const who = actRole==='mgr' ? 'ruslan' : 'snab';
   const noteTxt = (actRole==='mgr'?'закуп Руслана':'закуп снабженца')+(names?': '+names:'');
   const potBooked = await bookSupplyExpense(amount, req.body.category, noteTxt, id, who);
-  res.json({ ok:true, id, potBooked });
+  res.json({ ok:true, id, potBooked, dup:isDup, dupDate: isDup ? dupR.rows[0].t : null });
 });
 
 // удаление СВОЕГО закупа руководителем — без согласования (только expense, созданный mgr)
@@ -288,6 +321,11 @@ app.post('/api/kassa/:id/propose', auth, async (req,res)=>{
   const byRole = (req.user.role==='mgr' && req.body.actAs==='sup') ? 'sup' : req.user.role;
   const pending = { by:byRole, next, del, note:req.body.note||'', t:Date.now() };
   await pool.query('UPDATE kassa_tx SET pending=$1 WHERE id=$2',[JSON.stringify(pending), tx.id]);
+  // push второй стороне (кто должен согласовать)
+  const approver = byRole==='sup' ? 'mgr' : 'sup';
+  const who = byRole==='sup' ? 'Снабженец' : 'Руководитель';
+  const act = del ? 'удаление накладной' : 'изменение';
+  sendPushToRole(approver, { title:'BORZO · согласование', body:who+' просит '+act+' на '+money(tx.amount)+' ₸', url:'/kassa.html' }).catch(()=>{});
   res.json({ ok:true });
 });
 // отменить свой запрос (до решения второй стороны)
@@ -429,6 +467,16 @@ app.put('/api/fin', auth, requireAny(['mgr','fin']), async (req,res)=>{
     ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, rev=fin_state.rev+1, updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at
     RETURNING rev`, [JSON.stringify(data), req.user.id, Date.now()]);
   res.json({ ok:true, rev:r.rows[0].rev });
+});
+
+app.get('/api/push/pubkey', (req,res)=> res.json({ key: process.env.VAPID_PUBLIC||'' }));
+app.post('/api/push/subscribe', auth, async (req,res)=>{
+  const sub = req.body && req.body.sub;
+  if(!sub || !sub.endpoint) return res.status(400).json({error:'нет подписки'});
+  await pool.query(`INSERT INTO push_subs(endpoint,user_id,role,sub) VALUES($1,$2,$3,$4)
+    ON CONFLICT (endpoint) DO UPDATE SET user_id=EXCLUDED.user_id, role=EXCLUDED.role, sub=EXCLUDED.sub`,
+    [sub.endpoint, req.user.id, req.user.role, JSON.stringify(sub)]);
+  res.json({ ok:true });
 });
 
 app.get('/api/health', (req,res)=> res.json({ ok:true }));

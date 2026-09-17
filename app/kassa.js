@@ -139,6 +139,8 @@
     var pend = x.pending ? ' <span class="pill pill-wait">на согласовании</span>' : '';
     var mine = x.by_role==='mgr';   // закуп руководителя (не снабженца) — пометить
     var byPill = mine ? ' <span class="pill" style="background:rgba(59,130,246,.18);color:var(--k-blue)">закупал Руслан</span>' : '';
+    var dupPill = x.dup ? ' <span class="pill" style="background:rgba(240,85,92,.18);color:var(--k-red)">⚠ возможный дубль</span>' : '';
+    byPill += dupPill;
     var title = (x.items&&x.items.length) ? x.items[0].name+(x.items.length>1?' +'+(x.items.length-1):'') : 'Расход';
     return '<div class="op'+(mine?' op-mgr':'')+'" data-op="'+x.id+'"><div class="ic ic-out">🛒</div><div class="grow">'+
       '<div style="font-weight:600">'+title+byPill+'</div>'+
@@ -407,7 +409,8 @@
     $('cf-yes').onclick=function(){
       $('cf-yes').disabled=true;
       API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt,asSup:(viewRole==='sup'&&STATE.role==='mgr')})
-        .then(function(){ closeSheet(); return refresh(); }).catch(function(e){ $('cf-yes').disabled=false; fail(e); });
+        .then(function(r){ closeSheet(); if(r&&r.dup) alert('⚠ ВНИМАНИЕ: такая же накладная уже проводилась ранее — возможный дубль. Помечено, руководитель увидит.'); return refresh(); })
+        .catch(function(e){ $('cf-yes').disabled=false; fail(e); });
     };
   }
 
@@ -519,6 +522,23 @@
     renderCurrent();
   }
   var vtb=$('viewtoggle'); if(vtb) vtb.onclick=function(){ if(STATE.role!=='mgr')return; viewRole=(viewRole==='sup'?'mgr':'sup'); setView(); };
+  // ---------- push-уведомления ----------
+  function b64ToU8(b){ var pad='='.repeat((4-b.length%4)%4), s=(b+pad).replace(/-/g,'+').replace(/_/g,'/'); var raw=atob(s), a=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)a[i]=raw.charCodeAt(i); return a; }
+  function enablePush(){
+    if(!('serviceWorker' in navigator) || !('PushManager' in window)){ alert('Твой браузер не поддерживает push. На iPhone добавь приложение на домашний экран.'); return; }
+    Notification.requestPermission().then(function(perm){
+      if(perm!=='granted'){ alert('Уведомления не разрешены. Включи их в настройках браузера для этого сайта.'); return; }
+      navigator.serviceWorker.register('/sw.js').then(function(reg){
+        return API.pushKey().then(function(d){
+          if(!d.key){ alert('Push на сервере не настроен.'); return; }
+          return reg.pushManager.getSubscription().then(function(s){ return s || reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToU8(d.key) }); })
+            .then(function(sub){ return API.pushSubscribe(sub.toJSON?sub.toJSON():sub); })
+            .then(function(){ alert('Готово! Уведомления о согласованиях будут приходить сюда.'); });
+        });
+      }).catch(function(e){ alert('Не удалось включить уведомления: '+(e&&e.message||e)); });
+    });
+  }
+  var nb=$('notifbtn'); if(nb) nb.onclick=enablePush;
   $('logout').onclick=function(){ API.logout(); };
   $('passbtn').onclick=function(){
     openSheet('<h3>🔑 Смена пароля</h3>'+
