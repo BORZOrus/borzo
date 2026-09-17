@@ -390,9 +390,15 @@ app.get('/api/fin', auth, requireAny(['mgr','fin']), async (req,res)=>{
   if(!r.rowCount) return res.json({ data:null, rev:0 });
   res.json({ data:r.rows[0].data, rev:r.rows[0].rev, updated_at:Number(r.rows[0].updated_at)||0 });
 });
+// операция-связка со снабжением (сервер-авторитетна: касса ими управляет, финмодуль их не перезаписывает)
+function isSupplyOp(o){ return o && ((typeof o.id==='string' && (o.id.indexOf('supx_')===0 || o.id.indexOf('supi_')===0)) || o.supplyExpense===true || o.supplyIssue===true); }
 app.put('/api/fin', auth, requireAny(['mgr','fin']), async (req,res)=>{
   const data = req.body && req.body.data;
   if(!data || typeof data!=='object' || !Array.isArray(data.ops)) return res.status(400).json({error:'некорректные данные'});
+  // сохраняем ТЕКУЩИЕ серверные операции-связки (закупы/выдачи из кассы), игнорируя присланные клиентом — чтобы финмодуль их не затирал
+  const cur = await pool.query('SELECT data FROM fin_state WHERE id=1');
+  const serverSupply = (cur.rowCount && cur.rows[0].data && Array.isArray(cur.rows[0].data.ops)) ? cur.rows[0].data.ops.filter(isSupplyOp) : [];
+  data.ops = data.ops.filter(o=>!isSupplyOp(o)).concat(serverSupply).sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
   const r = await pool.query(`
     INSERT INTO fin_state(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3)
     ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, rev=fin_state.rev+1, updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at

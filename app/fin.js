@@ -857,8 +857,8 @@
       var sd=res&&res.data;
       var sc=(sd&&Array.isArray(sd.ops))?sd.ops.length:0;
       var lc=(DB&&Array.isArray(DB.ops))?DB.ops.length:0;
-      if(sc>lc){ DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); render(); }  // сервер богаче (напр. добавился закуп из снабжения) — берём сервер
-      else if(lc>sc){ doPush(); }                                                  // локально богаче — заливаем (защита от перезатирания)
+      if(sc>0){ DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); render(); }  // сервер — источник правды (удаления/связка/правки с других устройств доходят)
+      else if(lc>0){ doPush(); }                                                  // сервер пуст, локально есть — первичная миграция вверх
     }).catch(function(){});
   } else {
     setRole('ruslan');
