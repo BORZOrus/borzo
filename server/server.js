@@ -293,6 +293,7 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
       await c.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by,sig,dup,inv_no,rec_no,doc_date,req_id) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, creator, sig, isDup, invNo, recNo, docDate, reqId]);
       for(const i of cleanItems){
+        if((i.cat||'')!=='Сырьё') continue;   // на склад попадает ТОЛЬКО сырьё; операционка (ремонт, доставка, услуги) не складируется
         await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
       }
@@ -347,6 +348,7 @@ app.post('/api/kassa/expense/:id/edit', auth, requireRole('mgr'), async (req,res
       await c.query('UPDATE kassa_tx SET amount=$1, category=$2, items=$3, inv_no=$4, rec_no=$5, doc_date=$6 WHERE id=$7',[amount, cat, JSON.stringify(cleanItems), invNo, recNo, docDate, tx.id]);
       await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
       for(const i of cleanItems){
+        if((i.cat||'')!=='Сырьё') continue;   // склад — только сырьё; смена категории на операционку убирает позицию со склада
         await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, tx.id]);
       }
@@ -436,12 +438,15 @@ app.post('/api/kassa/:id/approve', auth, requireAny(['mgr','sup']), async (req,r
       fields.push('pending=NULL'); fields.push('log=$'+n); vals.push(JSON.stringify(log)); n++;
       vals.push(tx.id);
       await c.query(`UPDATE kassa_tx SET ${fields.join(', ')} WHERE id=$${n}`, vals);
-      // если у расхода изменились позиции — пересобрать приход на склад
-      if(tx.kind==='expense' && ('items' in next)){
+      // пересобрать приход на склад при изменении позиций ИЛИ категории (смена на операционку убирает со склада)
+      if(tx.kind==='expense' && (('items' in next) || ('category' in next))){
+        const effCat = ('category' in next) ? next.category : tx.category;
+        const rebuildItems = ('items' in next) ? (next.items||[]) : (tx.items||[]);
         await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
-        for(const i of (next.items||[])){
+        for(const i of rebuildItems){
+          if((i.cat||effCat)!=='Сырьё') continue;   // склад — только сырьё
           await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-            [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, tx.id]);
+            [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum!=null?i.sum:rowSum(i), (i.cat||effCat), tx.id]);
         }
       }
       // ПЕРЕПРОВЕСТИ КОТЁЛ при согласованной правке закупа (аудит #5): иначе supx_ остаётся на старой сумме/категории

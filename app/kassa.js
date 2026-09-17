@@ -388,6 +388,7 @@
     Array.prototype.forEach.call($('cat').querySelectorAll('button'),function(b){
       b.onclick=function(){
         buf.category=b.getAttribute('data-c');
+        buf.items.forEach(function(it){ it.cat=buf.category; });   // смена общей категории переносит все позиции (операционка → уходит со склада)
         Array.prototype.forEach.call($('cat').querySelectorAll('button'),function(x){ x.className=''; });
         b.className='on '+(buf.category==='Сырьё'?'syr':'gen');
         renderItems();
