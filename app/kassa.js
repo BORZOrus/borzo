@@ -60,6 +60,7 @@
   function readPhoto(file, cb){
     var r=new FileReader();
     r.onload=function(e){
+      if(file.type && file.type.indexOf('image/')!==0){ cb(e.target.result); return; } // PDF/файл — прикладываем как есть, без сжатия
       var img=new Image();
       img.onload=function(){
         var W=760, sc=Math.min(1,W/img.width), w=img.width*sc, h=img.height*sc;
@@ -169,7 +170,7 @@
         var per=i.price?money(i.price):'—', sm=(i.sum||rowSum(i));
         return '<tr><td>'+i.name+' '+pill+'</td><td style="text-align:right" class="muted">'+i.qty+' '+i.unit+' × '+per+'</td><td style="text-align:right;font-weight:600;white-space:nowrap">'+money(sm)+'</td></tr>';
       }).join('');
-      var ph=function(src,lbl){ return src?'<div class="fld"><label>'+lbl+'</label><img src="'+src+'" style="width:100%;border-radius:10px"></div>':''; };
+      var ph=function(src,lbl){ if(!src) return ''; var pdf=/\.pdf$/i.test(src)||/^data:application\/pdf/.test(src); return '<div class="fld"><label>'+lbl+'</label>'+(pdf?'<a href="'+src+'" target="_blank" style="color:var(--k-blue);font-weight:600">📄 Открыть документ</a>':'<img src="'+src+'" style="width:100%;border-radius:10px">')+'</div>'; };
       body='<h3>Детали накладной</h3>'+
         '<div class="bigsum" style="color:var(--k-red)">−'+money(x.amount)+'</div>'+
         '<div class="muted fz13" style="text-align:center;margin-bottom:14px">'+stamp(x.ts)+' · осн. категория: '+x.category+'</div>'+
@@ -244,14 +245,26 @@
     buf={invoice:x.invoice||null,receipt:x.receipt||null,items:clone(x.items&&x.items.length?x.items:[{name:'',qty:'',unit:'шт'}]),category:x.category,amount:x.amount};
     openSheet(buyHtml()); wireBuy();
   }
+  function isPdf(d){ return typeof d==='string' && d.indexOf('data:application/pdf')===0; }
+  // слот документа: пусто → стандартный выбор (камера/галерея/файл, вкл. PDF); приложено → превью + крестик удалить
+  function photoSlot(kind,label){
+    var data = kind==='inv'?buf.invoice:buf.receipt;
+    var base='flex:1;margin:0;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;min-height:70px';
+    if(data){
+      var prev = isPdf(data)?'<div style="margin-top:6px;font-size:12px">📄 документ</div>':'<img src="'+data+'" style="max-height:44px;margin-top:6px">';
+      return '<div class="photo has" style="'+base+'">✓ '+label+prev+
+        '<button type="button" class="ph-x" data-clr="'+kind+'" style="position:absolute;top:3px;right:5px;background:var(--k-red);color:#fff;border:none;border-radius:50%;width:23px;height:23px;font-size:15px;line-height:1;cursor:pointer">×</button></div>';
+    }
+    return '<label class="photo" style="'+base+'">'+label+'<input type="file" accept="image/*,application/pdf" id="ph-'+kind+'"></label>';
+  }
   function buyHtml(){
     var ed=!!editingId, sy=buf.category==='Сырьё';
     return '<h3>'+(ed?'✏️ Изменить накладную':'🛒 Закуп')+'</h3>'+
       '<div class="muted fz12" style="margin-bottom:12px">'+(ed?(editDirect?'Твой закуп — правки применяются сразу, без согласования.':'Правки уйдут второй стороне на согласование — молча ничего не меняется.'):'Кнопка «Распознать» сама сфотографирует накладную, приложит её и заполнит позиции. Если распознаёт долго/криво — приложи фото кнопками ниже и впиши вручную. '+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Снабженцу — обязательно приложить накладную или чек.'))+'</div>'+
-      (ed?'':'<label class="photo" style="display:block;margin:0 0 10px;padding:14px;border-style:solid;border-color:var(--k-green);color:var(--k-green);font-weight:700">🔍 Сфотографировать и распознать<input type="file" accept="image/*" capture="environment" id="ph-scan"></label>')+
+      (ed?'':'<label class="photo" style="display:block;margin:0 0 10px;padding:14px;border-style:solid;border-color:var(--k-green);color:var(--k-green);font-weight:700">🔍 Сфотографировать / выбрать и распознать<input type="file" accept="image/*" id="ph-scan"></label>')+
       '<div style="display:flex;gap:10px;margin-bottom:12px;align-items:stretch">'+
-        '<label class="photo'+(buf.invoice?' has':'')+'" style="flex:1;margin:0;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center">'+(buf.invoice?'✓ Накладная<img src="'+buf.invoice+'" style="max-height:48px">':'📎 Накладная')+'<input type="file" accept="image/*" capture="environment" id="ph-inv"></label>'+
-        '<label class="photo'+(buf.receipt?' has':'')+'" style="flex:1;margin:0;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center">'+(buf.receipt?'✓ Чек<img src="'+buf.receipt+'" style="max-height:48px">':'🧾 Чек')+'<input type="file" accept="image/*" id="ph-rec"></label>'+
+        photoSlot('inv','📎 Накладная')+
+        photoSlot('rec','🧾 Чек')+
       '</div>'+
       (buf.scanning?'<div class="scanning">🔎 Распознаю накладную…</div>':'')+
       '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· «шт» — единица, «цена/ед» — цена за штуку, точка С/О — категория</span></label><div id="items"></div>'+
@@ -323,9 +336,11 @@
         refreshBuy();
       }).catch(function(){ buf.scanning=false; refreshBuy(); alert('Распознавание не сработало — фото накладной приложено, впиши позиции вручную.'); });
     }); };
-    // «Накладная» — просто прикрепить фото, без распознавания
-    $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; refreshBuy(); }); };
-    $('ph-rec').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.receipt=d; refreshBuy(); }); };
+    // «Накладная»/«Чек» — прикрепить фото ИЛИ файл (стандартный выбор: камера/галерея/файл, вкл. PDF)
+    if($('ph-inv')) $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; refreshBuy(); }); };
+    if($('ph-rec')) $('ph-rec').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.receipt=d; refreshBuy(); }); };
+    // крестик — удалить приложенный документ и приложить заново
+    Array.prototype.forEach.call(sheetBody.querySelectorAll('.ph-x'),function(b){ b.onclick=function(){ var k=b.getAttribute('data-clr'); if(k==='inv')buf.invoice=null; else buf.receipt=null; refreshBuy(); }; });
     $('additem').onclick=function(){ buf.items.push({name:'',qty:'',unit:'шт'}); renderItems(); };
     Array.prototype.forEach.call($('cat').querySelectorAll('button'),function(b){
       b.onclick=function(){

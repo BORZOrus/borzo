@@ -70,9 +70,10 @@ function numf(v){ return parseFloat(String(v==null?'':v).replace(',','.'))||0; }
 function rowSum(i){ return Math.round(numf(i.qty)*numf(i.price)); }  // сумма позиции — до целого тенге
 function savePhoto(dataUrl){
   if(!dataUrl || typeof dataUrl!=='string' || dataUrl.indexOf('data:')!==0) return null;
-  const m = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+  // фото (image/*) или документ (application/pdf) — например чек/накладная из Kaspi
+  const m = dataUrl.match(/^data:(image\/\w+|application\/pdf);base64,(.+)$/);
   if(!m) return null;
-  const ext = m[1].split('/')[1].replace('jpeg','jpg');
+  const ext = m[1]==='application/pdf' ? 'pdf' : m[1].split('/')[1].replace('jpeg','jpg');
   const name = crypto.randomUUID()+'.'+ext;
   fs.writeFileSync(path.join(UPLOAD_DIR, name), Buffer.from(m[2],'base64'));
   return '/uploads/'+name;
