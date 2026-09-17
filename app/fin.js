@@ -30,7 +30,11 @@
   var CLOUD = !!(window.API && window.API.token && window.API.finPut);
   var pushT=null, pushing=false, pendAgain=false;
   function doPush(){ if(!CLOUD)return; if(pushing){pendAgain=true;return;} pushing=true;
-    window.API.finPut(DB).then(function(){pushing=false; if(pendAgain){pendAgain=false;doPush();}}).catch(function(){pushing=false;}); }
+    window.API.finPut(DB).then(function(){pushing=false; if(pendAgain){pendAgain=false;doPush();}})
+      .catch(function(e){ pushing=false;
+        // сервер отклонил как затирание → подтянуть серверную правду и заменить локальную (самолечение)
+        if(e&&/сокращени|409/.test(e.message||'')){ window.API.finGet().then(function(res){ var sd=res&&res.data; if(sd&&Array.isArray(sd.ops)&&sd.ops.length>((DB&&DB.ops&&DB.ops.length)||0)){ DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); if(typeof render==='function')render(); } }).catch(function(){}); }
+      }); }
   function cloudPush(){ if(!CLOUD)return; clearTimeout(pushT); pushT=setTimeout(doPush,800); }
   function save(){ localStorage.setItem(KEY,JSON.stringify(DB)); cloudPush(); }
   if(/[?&]reset=1/.test(location.search)){ try{localStorage.removeItem(KEY);}catch(e){} try{history.replaceState({},'',location.pathname);}catch(e){} }

@@ -463,9 +463,16 @@ function isSupplyOp(o){ return o && ((typeof o.id==='string' && (o.id.indexOf('s
 app.put('/api/fin', auth, requireAny(['mgr','fin']), async (req,res)=>{
   const data = req.body && req.body.data;
   if(!data || typeof data!=='object' || !Array.isArray(data.ops)) return res.status(400).json({error:'некорректные данные'});
-  // сохраняем ТЕКУЩИЕ серверные операции-связки (закупы/выдачи из кассы), игнорируя присланные клиентом — чтобы финмодуль их не затирал
   const cur = await pool.query('SELECT data FROM fin_state WHERE id=1');
-  const serverSupply = (cur.rowCount && cur.rows[0].data && Array.isArray(cur.rows[0].data.ops)) ? cur.rows[0].data.ops.filter(isSupplyOp) : [];
+  const curOps = (cur.rowCount && cur.rows[0].data && Array.isArray(cur.rows[0].data.ops)) ? cur.rows[0].data.ops : [];
+  // ЗАЩИТА ОТ ЗАТИРАНИЯ: не даём резко обрушить базу (пустой/подозрительно маленький клиент не должен стереть историю)
+  const incNonSupply = data.ops.filter(o=>!isSupplyOp(o)).length;
+  const curNonSupply = curOps.filter(o=>!isSupplyOp(o)).length;
+  if(curNonSupply >= 20 && incNonSupply < curNonSupply*0.5){
+    return res.status(409).json({ error:'отклонено: подозрительное сокращение данных (защита от потери). На сервере '+curNonSupply+', прислано '+incNonSupply+'.' });
+  }
+  // сохраняем ТЕКУЩИЕ серверные операции-связки (закупы/выдачи из кассы), игнорируя присланные клиентом — чтобы финмодуль их не затирал
+  const serverSupply = curOps.filter(isSupplyOp);
   data.ops = data.ops.filter(o=>!isSupplyOp(o)).concat(serverSupply).sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
   const r = await pool.query(`
     INSERT INTO fin_state(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3)
