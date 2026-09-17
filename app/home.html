@@ -66,8 +66,7 @@
     $('hi').textContent='Что открываем?';
     $('tiles').innerHTML =
       tile('ic-fin','💳','Финансы','Деньги, продажи, кредиты, аналитика','fin.html')+
-      tile('ic-kassa','🛒','Касса снабжения','Выдачи, закупы, склад','kassa.html')+
-      tile('ic-pult','📊','Пульт (обзор)','Сводный экран · демо-данные','index.html');
+      tile('ic-kassa','🛒','Касса снабжения','Выдачи, закупы, склад','kassa.html');
   }).catch(function(){ location.replace('login.html'); });
   $('logout').onclick=function(){ API.logout(); };
   $('passbtn').onclick=function(){
