@@ -56,6 +56,8 @@
 
   function fail(e){ alert((e&&e.message)||'Ошибка. Проверьте связь.'); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // ГГГГ-ММ-ДД → ДД.ММ.ГГГГ (для показа); некорректное — как есть
+  function fmtDate(s){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||'')); return m?(m[3]+'.'+m[2]+'.'+m[1]):String(s||''); }
   function refresh(){ return API.kassa().then(function(d){ STATE.balance=d.balance; STATE.tx=d.tx; renderCurrent(); }).catch(function(e){ if((e&&e.message)!=='401') console.warn(e); }); }
   var viewRole=null;
   function renderCurrent(){ if(viewRole==='sup') renderSup(); else renderMgr(); }
@@ -183,7 +185,8 @@
       body='<h3>Детали накладной</h3>'+
         '<div class="bigsum" style="color:var(--k-red)">−'+money(x.amount)+'</div>'+
         '<div class="muted fz13" style="text-align:center;margin-bottom:6px">'+stamp(x.ts)+' · осн. категория: '+x.category+'</div>'+
-        ((x.inv_no||x.rec_no)?'<div class="muted fz12" style="text-align:center;margin-bottom:12px">'+(x.inv_no?'№ накладной: <b>'+esc(x.inv_no)+'</b>':'')+(x.inv_no&&x.rec_no?' · ':'')+(x.rec_no?'№ чека: <b>'+esc(x.rec_no)+'</b>':'')+'</div>':'')+
+        ((x.inv_no||x.rec_no)?'<div class="muted fz12" style="text-align:center;margin-bottom:'+(x.doc_date?'2px':'12px')+'">'+(x.inv_no?'№ накладной: <b>'+esc(x.inv_no)+'</b>':'')+(x.inv_no&&x.rec_no?' · ':'')+(x.rec_no?'№ чека: <b>'+esc(x.rec_no)+'</b>':'')+'</div>':'')+
+        (x.doc_date?'<div class="muted fz12" style="text-align:center;margin-bottom:12px">Дата документа: <b>'+esc(fmtDate(x.doc_date))+'</b></div>':'')+
         (x.dup?'<div style="text-align:center;color:var(--k-red);font-weight:700;margin-bottom:12px">⚠ Возможный дубль — такая накладная уже проводилась</div>':'')+
         (items?'<table class="sk" style="margin-bottom:14px"><thead><tr><th>Позиция</th><th style="text-align:right">Кол-во × цена</th><th style="text-align:right">Сумма</th></tr></thead><tbody>'+items+'</tbody></table>':'')+
         ph(x.invoice,'Накладная')+ph(x.receipt,'Чек');
@@ -251,14 +254,14 @@
   var editingId=null;
   function openBuy(){
     editingId=null; editDirect=false;
-    buf={invoice:null,receipt:null,items:[{name:'',qty:'',unit:'шт'}],category:'Сырьё',amount:'',invNo:'',recNo:''};
+    buf={invoice:null,receipt:null,items:[{name:'',qty:'',unit:'шт'}],category:'Сырьё',amount:'',invNo:'',recNo:'',docDate:''};
     openSheet(buyHtml()); wireBuy();
   }
   var editDirect=false;
   function openEdit(id,direct){
     var x=txs().filter(function(t){return t.id===id;})[0]; if(!x) return;
     editingId=id; editDirect=!!direct;
-    buf={invoice:x.invoice||null,receipt:x.receipt||null,items:clone(x.items&&x.items.length?x.items:[{name:'',qty:'',unit:'шт'}]),category:x.category,amount:x.amount,invNo:x.inv_no||'',recNo:x.rec_no||''};
+    buf={invoice:x.invoice||null,receipt:x.receipt||null,items:clone(x.items&&x.items.length?x.items:[{name:'',qty:'',unit:'шт'}]),category:x.category,amount:x.amount,invNo:x.inv_no||'',recNo:x.rec_no||'',docDate:x.doc_date||''};
     openSheet(buyHtml()); wireBuy();
   }
   function isPdf(d){ return typeof d==='string' && d.indexOf('data:application/pdf')===0; }
@@ -291,6 +294,8 @@
         '<div style="flex:1">'+photoSlot('inv','📎 Накладная')+numRow('inv')+'</div>'+
         '<div style="flex:1">'+photoSlot('rec','🧾 Чек')+numRow('rec')+'</div>'+
       '</div>'+
+      '<div class="fld"><label>Дата документа <span style="color:var(--k-mut)">· распознаётся 🪄, можно поправить</span></label>'+
+        '<input type="date" id="docdate" value="'+esc(buf.docDate||'')+'" style="width:100%"></div>'+
       (buf.scanning?'<div class="scanning">🔎 Распознаю накладную…</div>':'')+
       '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· «шт» — единица, «цена/ед» — цена за штуку, точка С/О — категория</span></label><div id="items"></div>'+
         '<button class="btn-ghost" id="additem" style="border:1px dashed var(--k-line);border-radius:10px">+ Добавить позицию</button></div>'+
@@ -361,17 +366,20 @@
         buf.scanning=false;
         if(res.items && res.items.length) buf.items=res.items.map(function(i){return {name:i.name,qty:i.qty,unit:i.unit||'шт',price:i.price};});
         if(res.number) buf.invNo=res.number;
+        if(res.date) buf.docDate=res.date;
         if(!(res.items&&res.items.length)&&!res.number) alert('Ничего не распозналось — впиши вручную.');
         refreshBuy();
       }).catch(function(){ buf.scanning=false; refreshBuy(); alert('Распознавание не сработало — впиши позиции вручную.'); });
     }; });
     // ввод номеров вручную
     Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-num]'),function(inp){ inp.oninput=function(){ if(inp.getAttribute('data-num')==='inv')buf.invNo=inp.value; else buf.recNo=inp.value; }; });
+    // дата документа вручную
+    if($('docdate')) $('docdate').onchange=function(){ buf.docDate=$('docdate').value; };
     // 🪄 определить № чека
     Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-scannum]'),function(b){ b.onclick=function(){
       if(!buf.receipt){ alert('Сначала приложи фото чека.'); return; }
       buf.scanning=true; refreshBuy();
-      API.scan(buf.receipt).then(function(res){ buf.scanning=false; if(res.number)buf.recNo=res.number; else alert('Номер чека не распознан — впиши вручную.'); refreshBuy(); })
+      API.scan(buf.receipt).then(function(res){ buf.scanning=false; if(res.number)buf.recNo=res.number; if(res.date&&!buf.docDate)buf.docDate=res.date; if(!res.number)alert('Номер чека не распознан — впиши вручную.'); refreshBuy(); })
         .catch(function(){ buf.scanning=false; refreshBuy(); alert('Не удалось распознать — впиши вручную.'); });
     }; });
     // крестик — удалить приложенный документ и приложить заново
@@ -412,14 +420,17 @@
     }
     if(!isMgr && amt>balance()){ alert('В кассе только '+money(balance())+' — нельзя списать больше'); return; }
     if(!items.length && !confirm('Ты не заполнил позиции (что закуплено). Тогда закуп НЕ попадёт на склад — спишется только суммой. Всё равно продолжить?')) return;
+    if($('docdate')) buf.docDate=$('docdate').value;
     // контрольное окно — сводка перед списанием
     var doc = buf.invoice&&buf.receipt ? 'накладная + чек' : (buf.invoice?'накладная':(buf.receipt?'чек':'без документа'));
+    var dateRow = buf.docDate ? '<div class="row" style="justify-content:space-between;margin-top:6px"><span class="muted">Дата документа</span><b>'+esc(fmtDate(buf.docDate))+'</b></div>' : '';
     var lines = items.length ? items.map(function(i){ return '• '+esc(i.name)+' — '+(i.qty||'?')+' '+i.unit+(i.price?(' × '+money(i.price)):'')+' = '+money(i.sum); }).join('<br>') : '<span class="muted">позиции не заполнены</span>';
     openSheet('<h3>Проверьте списание</h3>'+
       '<div class="card" style="margin-bottom:14px">'+
         '<div class="row" style="justify-content:space-between"><span class="muted">Сумма</span><b style="font-size:18px;color:var(--k-red)">−'+money(amt)+'</b></div>'+
         '<div class="row" style="justify-content:space-between;margin-top:6px"><span class="muted">Направление</span><b>'+buf.category+'</b></div>'+
         '<div class="row" style="justify-content:space-between;margin-top:6px"><span class="muted">Документ</span><b>'+doc+'</b></div>'+
+        dateRow+
         '<div class="row" style="justify-content:space-between;margin-top:6px"><span class="muted">Откуда</span><b>'+(isMgr?'котёл (наша касса)':'касса снабженца')+'</b></div>'+
         '<div style="border-top:1px solid var(--k-line);margin-top:10px;padding-top:10px;font-size:13px">'+lines+'</div>'+
       '</div>'+
@@ -428,7 +439,7 @@
     $('cf-no').onclick=function(){ openSheet(buyHtml()); wireBuy(); };   // buf сохранён — вернёт с данными
     $('cf-yes').onclick=function(){
       $('cf-yes').disabled=true;
-      API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt,invNo:buf.invNo||'',recNo:buf.recNo||'',asSup:(viewRole==='sup'&&STATE.role==='mgr')})
+      API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt,invNo:buf.invNo||'',recNo:buf.recNo||'',docDate:buf.docDate||'',asSup:(viewRole==='sup'&&STATE.role==='mgr')})
         .then(function(r){ closeSheet(); if(r&&r.dup) alert('⚠ ВНИМАНИЕ: такая же накладная уже проводилась ранее — возможный дубль. Помечено, руководитель увидит.'); return refresh(); })
         .catch(function(e){ $('cf-yes').disabled=false; fail(e); });
     };
