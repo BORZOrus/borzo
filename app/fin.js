@@ -358,10 +358,10 @@
       pr();
       b._get=function(){ var parts=[cat]; if(mg())parts.push(mg()); if(sg())parts.push(sg()); if(cg())parts.push(cg()); var ex=($('c-extra')&&$('c-extra').value||'').trim(); if(ex)parts.push(ex);
         var price=parseInt($('c-price').value)||0; if(price>0){ cfg.price[pkey()]=price; save(); }
-        return {name:parts.join(' '), qty:parseInt($('c-qty').value)||1, price:price}; };
+        return {name:parts.join(' '), qty:parseInt($('c-qty').value,10), price:price}; };
     }
     cons();
-    $('s-add').onclick=function(){ var it=$('s-cons')._get(); if(it.price<=0){alert('Укажите цену');return;} it.sum=it.qty*it.price; saleItems.push(it); window._saleDirty=false; renderSaleList(); };
+    $('s-add').onclick=function(){ var it=$('s-cons')._get(); if(it.price<=0){alert('Укажите цену');return;} if(!(it.qty>0)){alert('Количество должно быть целым числом больше нуля');return;} it.sum=it.qty*it.price; saleItems.push(it); window._saleDirty=false; renderSaleList(); };
     renderSaleList();
   }
   function renderSaleList(){ var el=$('s-list'); if(!el)return; var tot=saleItems.reduce(function(s,i){return s+i.sum;},0);
@@ -369,7 +369,7 @@
     Array.prototype.forEach.call(el.querySelectorAll('[data-del]'),function(b){b.onclick=function(){saleItems.splice(+b.getAttribute('data-del'),1);renderSaleList();};});
   }
   function submitSale(who){
-    if(window._saleDirty && $('s-cons') && $('s-cons')._get){ var cur=$('s-cons')._get(); if(cur && cur.price>0){ cur.sum=cur.qty*cur.price; saleItems.push(cur); window._saleDirty=false; renderSaleList(); } }
+    if(window._saleDirty && $('s-cons') && $('s-cons')._get){ var cur=$('s-cons')._get(); if(cur && cur.price>0 && cur.qty>0){ cur.sum=cur.qty*cur.price; saleItems.push(cur); window._saleDirty=false; renderSaleList(); } }
     if(!saleItems.length){alert('Добавьте хотя бы одну позицию');return;}
     var tot=saleItems.reduce(function(s,i){return s+i.sum;},0);
     var comm=parseInt($('s-comm').value)||0, deliv=parseInt($('s-deliv').value)||0;
@@ -568,14 +568,18 @@
       var plist=anProjs||PROJECTS;
       if(plist.indexOf(anProj)<0) anProj=plist[0];
       var chipsH=plist.length>1?('<div class="chips" style="margin-bottom:12px">'+plist.map(function(p){return '<button data-bp="'+p+'"'+(p===anProj?' class="on"':'')+'>'+p+'</button>';}).join('')+'</div>'):'';
-      var sIn=sumOps(DB.ops.filter(function(o){return o.kind==='in'&&o.project===anProj&&inRangeS(o,r);}));
+      // доход = операционный приход БЕЗ кредитных поступлений (кредит — это долг, не доход, аудит #22), МИНУС возвраты покупателям (аудит #21)
+      var grossIn=sumOps(DB.ops.filter(function(o){return o.kind==='in'&&!isCreditFlow(o)&&o.project===anProj&&inRangeS(o,r);}));
+      var retSum=sumOps(DB.ops.filter(function(o){return o.kind==='return'&&o.project===anProj&&inRangeS(o,r);}));
+      var sIn=grossIn-retSum;
       var sOut=sumOps(DB.ops.filter(function(o){return inRangeS(o,r)&&isProjExp(o)&&o.project===anProj;}));
       var sRes=sIn-sOut;
-      var summaryH='<div class="split" style="margin-bottom:12px"><div class="s"><div class="l">Доход</div><div class="v" style="color:var(--blue);font-size:14px">'+money(sIn)+'</div></div><div class="s"><div class="l">Расход</div><div class="v" style="color:var(--red);font-size:14px">'+money(sOut)+'</div></div><div class="s"><div class="l">Результат</div><div class="v" style="color:'+(sRes>=0?'var(--green)':'var(--red)')+';font-size:14px">'+(sRes>=0?'+':'')+money(sRes)+'</div></div></div>';
+      var summaryH='<div class="split" style="margin-bottom:'+(retSum?'4px':'12px')+'"><div class="s"><div class="l">Доход</div><div class="v" style="color:var(--blue);font-size:14px">'+money(sIn)+'</div></div><div class="s"><div class="l">Расход</div><div class="v" style="color:var(--red);font-size:14px">'+money(sOut)+'</div></div><div class="s"><div class="l">Результат</div><div class="v" style="color:'+(sRes>=0?'var(--green)':'var(--red)')+';font-size:14px">'+(sRes>=0?'+':'')+money(sRes)+'</div></div></div>'+
+        (retSum?'<div style="font-size:11px;color:var(--mut);margin-bottom:12px;text-align:center">доход уже за вычетом возвратов '+money(retSum)+'; кредитные поступления в доход не входят</div>':'');
       var innerH='<div class="antabs">'+[['in','Приход'],['out','Расход'],['sal','Зарплаты']].map(function(t){return '<button data-in="'+t[0]+'"'+(anInner===t[0]?' class="on"':'')+'>'+t[1]+'</button>';}).join('')+'</div>';
       var body='';
       if(anInner==='in'){
-        var ins=DB.ops.filter(function(o){return o.kind==='in'&&o.project===anProj&&inRangeS(o,r);});
+        var ins=DB.ops.filter(function(o){return o.kind==='in'&&!isCreditFlow(o)&&o.project===anProj&&inRangeS(o,r);});   // приход без кредитных поступлений (аудит #22)
         var prod={},pq=0;
         ins.forEach(function(o){ if(o.sale&&o.sale.items){ o.sale.items.forEach(function(i){ if(i.returned)return; if(!prod[i.name])prod[i.name]={q:0,s:0}; prod[i.name].q+=parseInt(i.qty)||1; prod[i.name].s+=i.sum||0; pq+=parseInt(i.qty)||1; }); } });
         var pk=Object.keys(prod).sort(function(a,b){return prod[b].s-prod[a].s;});

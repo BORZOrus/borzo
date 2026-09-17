@@ -335,7 +335,12 @@ app.post('/api/kassa/expense/:id/edit', auth, requireRole('mgr'), async (req,res
       if(tx.created_by !== req.user.id) throw httpErr(403,'можно править только свой закуп');
       const cat = req.body.category || tx.category;
       const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||cat}));
-      await c.query('UPDATE kassa_tx SET amount=$1, category=$2, items=$3 WHERE id=$4',[amount, cat, JSON.stringify(cleanItems), tx.id]);
+      // реквизиты документа сохраняем при правке (аудит #27): если поле прислано — обновляем, иначе оставляем прежнее
+      const invNo = (req.body.invNo!=null) ? String(req.body.invNo).trim().slice(0,40) : (tx.inv_no||'');
+      const recNo = (req.body.recNo!=null) ? String(req.body.recNo).trim().slice(0,40) : (tx.rec_no||'');
+      let docDate = (req.body.docDate!=null) ? String(req.body.docDate).trim().slice(0,10) : (tx.doc_date||'');
+      if(docDate && !/^\d{4}-\d{2}-\d{2}$/.test(docDate)) docDate = '';
+      await c.query('UPDATE kassa_tx SET amount=$1, category=$2, items=$3, inv_no=$4, rec_no=$5, doc_date=$6 WHERE id=$7',[amount, cat, JSON.stringify(cleanItems), invNo, recNo, docDate, tx.id]);
       await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
       for(const i of cleanItems){
         await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,

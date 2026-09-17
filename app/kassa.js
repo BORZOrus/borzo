@@ -407,8 +407,9 @@
     if(!isMgr && !buf.invoice && !buf.receipt){ alert('Прикрепите накладную или чек — без документа нельзя'); return; }
     var items=buf.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:i.unit||'шт',price:i.price||'',sum:rowSum(i),cat:i.cat||buf.category};});
     if(editingId){
+      if($('docdate')) buf.docDate=$('docdate').value;
       if(editDirect){
-        API.expenseEdit(editingId,{amount:amt,category:buf.category,items:items}).then(function(){
+        API.expenseEdit(editingId,{amount:amt,category:buf.category,items:items,invNo:buf.invNo||'',recNo:buf.recNo||'',docDate:buf.docDate||''}).then(function(){
           editingId=null; editDirect=false; closeSheet(); return refresh();
         }).catch(fail);
       } else {

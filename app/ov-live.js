@@ -23,6 +23,7 @@
     data.ops.forEach(function(o){ var t=o.per||o.ts; if(t<s||t>=e) return;
       var proj=PROJ.indexOf(o.project)>=0;
       if(o.kind==='in' && proj && !isCredit(o)) vin+=o.amount;
+      else if(o.kind==='return' && proj) vin-=o.amount;   // возврат покупателю уменьшает выручку (аудит #21)
       else if(proj && !isCredit(o) && (o.kind==='out' || (o.salary&&o.kind==='transfer'))) vout+=o.amount;
     });
     set('ov-fin-in', mln(vin));
