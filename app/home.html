@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BORZO">
+<meta name="theme-color" content="#0f1115">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<title>BORZO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0f1115;--card:#181b21;--card2:#20242c;--ink:#eef0f3;--mut:#9aa0a8;--line:#2a2e37;--blue:#3b82f6;--green:#28c07a;--red:#f0555c}
+  *{box-sizing:border-box}
+  html{overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;width:100%}
+  .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:0 0 40px}
+  .top{display:flex;align-items:center;gap:10px;padding:16px 16px 8px}
+  .top .logo{width:36px;height:36px;border-radius:9px;background:var(--blue);display:grid;place-items:center;font-weight:800;color:#fff;font-size:18px;flex:0 0 auto}
+  .top .who{flex:1;min-width:0}
+  .top .who .nm{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top .who .rl{font-size:12px;color:var(--mut)}
+  .top button{flex:0 0 auto;padding:8px 11px;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer}
+  .hi{padding:6px 16px 14px;color:var(--mut);font-size:13px}
+  .tiles{display:flex;flex-direction:column;gap:12px;padding:0 16px}
+  .tile{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;cursor:pointer;text-decoration:none;color:var(--ink);transition:border-color .15s}
+  .tile:active{border-color:var(--blue)}
+  .tile .ic{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;font-size:24px;flex:0 0 auto}
+  .tile .t{flex:1;min-width:0}
+  .tile .t .n{font-weight:700;font-size:16px}
+  .tile .t .d{font-size:12.5px;color:var(--mut);margin-top:2px}
+  .tile .arr{color:var(--mut);font-size:20px}
+  .ic-fin{background:rgba(59,130,246,.15)}.ic-kassa{background:rgba(40,192,122,.15)}.ic-pult{background:rgba(167,139,250,.15)}
+  .loading{text-align:center;color:var(--mut);padding:40px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <span class="logo">B</span>
+    <div class="who"><div class="nm" id="nm">…</div><div class="rl" id="rl"></div></div>
+    <button id="passbtn" title="Сменить пароль">🔑</button>
+    <button id="logout">Выйти</button>
+  </div>
+  <div class="hi" id="hi"></div>
+  <div class="tiles" id="tiles"><div class="loading">Загрузка…</div></div>
+</div>
+<script src="api.js?v=6"></script>
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i);};
+  if(!API.token){ location.replace('login.html'); return; }
+  function tile(cls,ic,name,desc,href){
+    return '<a class="tile" href="'+href+'"><span class="ic '+cls+'">'+ic+'</span>'+
+      '<span class="t"><span class="n">'+name+'</span><span class="d">'+desc+'</span></span><span class="arr">›</span></a>';
+  }
+  API.me().then(function(d){
+    var u=d.user||{};
+    // одиночные роли ведём сразу в их модуль — прихожая для них не нужна
+    if(u.role==='fin'){ location.replace('fin.html'); return; }
+    if(u.role==='sup'){ location.replace('kassa.html'); return; }
+    // руководитель — показываем прихожую с плитками
+    $('nm').textContent=u.name||'—'; $('rl').textContent='Руководитель';
+    $('hi').textContent='Что открываем?';
+    $('tiles').innerHTML =
+      tile('ic-fin','💳','Финансы','Деньги, продажи, кредиты, аналитика','fin.html')+
+      tile('ic-kassa','🛒','Касса снабжения','Выдачи, закупы, склад','kassa.html')+
+      tile('ic-pult','📊','Пульт (обзор)','Сводный экран · демо-данные','index.html');
+  }).catch(function(){ location.replace('login.html'); });
+  $('logout').onclick=function(){ API.logout(); };
+  $('passbtn').onclick=function(){
+    var oldp=prompt('Текущий пароль:'); if(oldp===null)return;
+    var np=prompt('Новый пароль (минимум 5 символов):'); if(np===null)return;
+    if((np||'').length<5){ alert('Новый пароль — минимум 5 символов'); return; }
+    API.password({old_pass:oldp,new_pass:np}).then(function(){ alert('Пароль изменён'); }).catch(function(e){ alert((e&&e.message)||'Ошибка'); });
+  };
+})();
+</script>
+</body>
+</html>

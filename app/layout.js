@@ -55,6 +55,7 @@
          '<svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;flex:0 0 16px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>'+
          '<input placeholder="Поиск по системе"></div>';
       t+='<div class="tb-right">'+
+         '<a href="home.html" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--line);color:var(--ink2);border-radius:9px;font-weight:600;font-size:13px;text-decoration:none">🏠 Домой</a>'+
          '<a href="kassa.html" style="display:inline-flex;align-items:center;gap:6px;padding:8px 13px;background:#2f66f6;color:#fff;border-radius:9px;font-weight:600;font-size:13px;text-decoration:none">💰 Касса снабжения</a>'+
          '<span class="profile"><span class="avatar"></span><span><div class="nm">'+((_user&&_user.name)||'—')+'</div><div class="rl">Руководитель</div></span></span>'+
          '<button id="tb-pass" title="Сменить пароль" style="padding:8px 11px;border:1px solid var(--line);background:#fff;color:var(--ink2);border-radius:9px;font-weight:600;font-size:14px;cursor:pointer">🔑</button>'+
