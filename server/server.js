@@ -217,11 +217,40 @@ async function unbookPot(id, db){
   await q.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
   return true;
 }
-// ЗАКУП (снабженец или руководитель) → реальный расход из котла, падает в АНАЛИТИКУ (Сырьё/Операционка), НЕ в ленту (hideFeed).
-async function bookSupplyExpense(amount, category, note, kassaId, who, db, per){
-  const cat = (category==='Сырьё') ? 'Сырьё' : 'Операционка';
-  return bookPot({ id:'supx_'+kassaId, ts:Date.now(), per:per||monthPerNow(), kind:'out', acc:'BORZO', project:'BORZO',
-    amount: money(amount), category: cat, who: who||'snab', note: note||'закуп снабжения', supplyExpense:true, hideFeed:true, supplyTxId:kassaId }, db);
+// снять ВСЕ расходные проводки закупа из котла по supplyTxId (закуп может быть разбит на Сырьё+Операционка — аудит #17)
+async function unbookPotTx(kassaId, db){
+  const q = db||pool;
+  const r = await q.query('SELECT data FROM fin_state WHERE id=1 FOR UPDATE');
+  if(!r.rowCount) return false;
+  const data = r.rows[0].data || {};
+  if(!Array.isArray(data.ops)) return false;
+  const before = data.ops.length;
+  data.ops = data.ops.filter(x=> !(x && x.supplyExpense===true && x.supplyTxId===kassaId));
+  if(data.ops.length===before) return false;
+  await q.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
+  return true;
+}
+// ЗАКУП → реальный расход из котла в АНАЛИТИКУ, НЕ в ленту (hideFeed). Если переданы позиции — сумма разбивается по их категориям Сырьё/Операционка (аудит #17).
+async function bookSupplyExpense(amount, category, note, kassaId, who, db, per, items){
+  const P = per||monthPerNow();
+  let parts = null;
+  if(Array.isArray(items) && items.length){
+    const byCat = {};
+    items.forEach(i=>{ const c=((i.cat||category)==='Сырьё')?'Сырьё':'Операционка'; byCat[c]=(byCat[c]||0)+(i.sum!=null?money(i.sum):rowSum(i)); });
+    parts = Object.keys(byCat).filter(c=>byCat[c]!==0).map(c=>({cat:c, amt:byCat[c]}));
+    // выровнять сумму частей к общей сумме закупа (округления/доставка вне позиций) — разницу на первую часть
+    const partSum = parts.reduce((s,p)=>s+p.amt,0);
+    if(parts.length && partSum!==money(amount)) parts[0].amt += money(amount)-partSum;
+  }
+  if(!parts || !parts.length) parts = [{cat:(category==='Сырьё')?'Сырьё':'Операционка', amt:money(amount)}];
+  let ok = true;
+  for(const p of parts){
+    const idp = (parts.length>1) ? ('supx_'+kassaId+'_'+(p.cat==='Сырьё'?'s':'o')) : ('supx_'+kassaId);
+    const r = await bookPot({ id:idp, ts:Date.now(), per:P, kind:'out', acc:'BORZO', project:'BORZO',
+      amount: money(p.amt), category: p.cat, who: who||'snab', note: note||'закуп снабжения', supplyExpense:true, hideFeed:true, supplyTxId:kassaId }, db);
+    ok = ok && r;
+  }
+  return ok;
 }
 // ВЫДАЧА снабженцу → видимая строка в ленте Финансов (Руслан+Ульяна), НЕ расход (котёл не трогает, из аналитики исключена).
 async function bookSupplyIssue(amount, kassaId, db){
@@ -297,7 +326,7 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
         await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
       }
-      const potBooked = await bookSupplyExpense(amount, req.body.category, noteTxt, id, who, c);
+      const potBooked = await bookSupplyExpense(amount, req.body.category, noteTxt, id, who, c, undefined, cleanItems);
       return { id, dup:isDup, dupDate: isDup ? dupR.rows[0].t : null, potBooked };
     });
     res.json({ ok:true, id:out.id, potBooked:out.potBooked, dup:out.dup, dupDate:out.dupDate||null, idem:out.idem||false });
@@ -320,7 +349,7 @@ app.post('/api/kassa/expense/:id/delete', auth, requireRole('mgr'), async (req,r
       if(tx.created_by !== req.user.id) throw httpErr(403,'можно удалять только свой закуп');
       await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
       await c.query('DELETE FROM kassa_tx WHERE id=$1',[tx.id]);
-      await unbookPot('supx_'+tx.id, c);   // снять расход из котла — в той же транзакции
+      await unbookPotTx(tx.id, c);   // снять ВСЕ части расхода закупа из котла — в той же транзакции
     });
     res.json({ ok:true });
   }catch(e){ if(e&&e.httpCode) return res.status(e.httpCode).json({error:e.message}); console.error('route error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'}); }
@@ -353,10 +382,10 @@ app.post('/api/kassa/expense/:id/edit', auth, requireRole('mgr'), async (req,res
           [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, tx.id]);
       }
       // перепровести в котле: снять старую, записать новую — СОХРАНЯЯ месяц исходной операции (аудит #18: правка не переносит расход в текущий месяц)
-      await unbookPot('supx_'+tx.id, c);
+      await unbookPotTx(tx.id, c);
       const origPer = new Date(new Date(Number(tx.ts)).getFullYear(), new Date(Number(tx.ts)).getMonth(), 1).getTime();
       const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
-      await bookSupplyExpense(amount, cat, 'закуп Руслана'+(names?': '+names:''), tx.id, 'ruslan', c, origPer);
+      await bookSupplyExpense(amount, cat, 'закуп Руслана'+(names?': '+names:''), tx.id, 'ruslan', c, origPer, cleanItems);
     });
     res.json({ ok:true });
   }catch(e){ if(e&&e.httpCode) return res.status(e.httpCode).json({error:e.message}); console.error('route error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'}); }
@@ -421,7 +450,7 @@ app.post('/api/kassa/:id/approve', auth, requireAny(['mgr','sup']), async (req,r
       if(tx.pending.del){
         await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
         await c.query('DELETE FROM kassa_tx WHERE id=$1',[tx.id]);
-        if(tx.kind==='expense') await unbookPot('supx_'+tx.id, c);   // закуп — снять расход из котла
+        if(tx.kind==='expense') await unbookPotTx(tx.id, c);   // закуп — снять все части расхода из котла
         if(tx.kind==='issue')   await unbookPot('supi_'+tx.id, c);   // выдача — снять строку выдачи из ленты
         return { deleted:true };
       }
@@ -456,9 +485,10 @@ app.post('/api/kassa/:id/approve', auth, requireAny(['mgr','sup']), async (req,r
         const origPer = new Date(new Date(Number(tx.ts)).getFullYear(), new Date(Number(tx.ts)).getMonth(), 1).getTime();
         const ur = await c.query('SELECT role FROM users WHERE id=$1',[tx.created_by]);
         const who = (ur.rows[0] && ur.rows[0].role==='sup') ? 'snab' : 'ruslan';
-        await unbookPot('supx_'+tx.id, c);
-        const nm = (next.items||tx.items||[]).map(i=>i&&i.name).filter(Boolean).slice(0,3).join(', ');
-        await bookSupplyExpense(newAmount, newCat, 'закуп (правка согласована)'+(nm?': '+nm:''), tx.id, who, c, origPer);
+        await unbookPotTx(tx.id, c);
+        const bItems = (next.items||tx.items||[]);
+        const nm = bItems.map(i=>i&&i.name).filter(Boolean).slice(0,3).join(', ');
+        await bookSupplyExpense(newAmount, newCat, 'закуп (правка согласована)'+(nm?': '+nm:''), tx.id, who, c, origPer, bItems);
       }
       // ПЕРЕПРОВЕСТИ выдачу при согласованной правке суммы (аудит #5): supi_ должна совпасть
       if(tx.kind==='issue' && tx.status==='accepted' && ('amount' in next)){
