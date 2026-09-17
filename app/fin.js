@@ -856,8 +856,9 @@
       if((np||'').length<5){ alert('Новый пароль — минимум 5 символов'); return; }
       window.API.password({old_pass:oldp,new_pass:np}).then(function(){ alert('Пароль изменён'); }).catch(function(e){ alert(e.message||'Ошибка'); });
     };
-    if(!owner){ var rs=document.querySelector('.roleswitch'); if(rs)rs.style.display='none';
-      if(impBtn&&impBtn.parentNode)impBtn.parentNode.style.display='none'; }
+    var rsw=document.querySelector('.roleswitch');
+    if(owner){ if(rsw)rsw.classList.add('show'); }   // переключатель кабинетов — только руководителю
+    else { if(rsw)rsw.classList.remove('show'); if(impBtn&&impBtn.parentNode)impBtn.parentNode.style.display='none'; }
     setRole(owner?'ruslan':'ulyana');
     loadPot();
     window.API.finGet().then(function(res){
@@ -868,6 +869,7 @@
       else if(lc>0){ doPush(); }                                                  // сервер пуст, локально есть — первичная миграция вверх
     }).catch(function(){});
   } else {
+    var rsd=document.querySelector('.roleswitch'); if(rsd)rsd.classList.add('show');   // демо без логина — переключатель нужен
     setRole('ruslan');
   }
 })();

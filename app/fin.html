@@ -14,7 +14,8 @@
   html{overflow-x:hidden}
   body{margin:0;background:var(--page);color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;width:100%;-webkit-overflow-scrolling:touch}
   .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:0 0 40px}
-  .roleswitch{display:flex;gap:6px;padding:10px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--line)}
+  .roleswitch{display:none;gap:6px;padding:10px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--line)}
+  .roleswitch.show{display:flex}
   .roleswitch button{flex:1;padding:9px;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:10px;font-weight:600;font-size:13px;cursor:pointer}
   .roleswitch button.on{background:var(--card2);color:var(--ink);border-color:#3a3f4a}
   .demo-note{font-size:11px;color:var(--mut);text-align:center;padding:6px 14px 0}
@@ -218,6 +219,6 @@
 <div class="sheet" id="sheet"><div id="sheet-body"></div></div>
 
 <script src="api.js?v=6"></script>
-<script src="fin.js?v=32"></script>
+<script src="fin.js?v=33"></script>
 </body>
 </html>
