@@ -190,7 +190,11 @@ function httpErr(code, msg){ const e=new Error(msg); e.httpCode=code; return e; 
 async function bookPot(op, db){
   const q = db||pool;
   const r = await q.query('SELECT data FROM fin_state WHERE id=1 FOR UPDATE');
-  if(!r.rowCount) return false;
+  if(!r.rowCount){
+    // финансовая база ещё не создана — создаём с этой проводкой, чтобы расход не потерялся (аудит #6)
+    await q.query("INSERT INTO fin_state(id,data,rev,updated_at) VALUES(1,$1,1,$2) ON CONFLICT (id) DO NOTHING",[JSON.stringify({ops:[op],employees:['Руслан','Ульяна','Азамат','Данияр']}), Date.now()]);
+    return true;
+  }
   const data = r.rows[0].data || {};
   if(!Array.isArray(data.ops)) return false;
   // идемпотентность: не дублируем по supplyTxId+вид

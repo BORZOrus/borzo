@@ -226,7 +226,9 @@
     $('f-cancel').onclick=function(){formSalaryHub(cfg);};
     if($('emp-close'))$('emp-close').onclick=function(){formCloseAdvance(emp,function(){formEmployee(emp,cfg);});};
     Array.prototype.forEach.call(document.querySelectorAll('#emp-proj button'),function(b){b.onclick=function(){ Array.prototype.forEach.call(document.querySelectorAll('#emp-proj button'),function(x){x.className='';}); b.className='on'; var v=b.getAttribute('data-v'); if(!DB.empMeta[emp])DB.empMeta[emp]={}; DB.empMeta[emp].proj=(v==='Все'?'':v); save(); };});
-    $('emp-rename').onclick=function(){ var v=(prompt('Новое имя:',emp)||'').trim(); if(!v||v===emp)return; if(DB.empMeta[emp]){DB.empMeta[v]=DB.empMeta[emp];delete DB.empMeta[emp];} renameEmp(emp,v); render(); formEmployee(v,cfg); };
+    $('emp-rename').onclick=function(){
+      if(EMP_ACCT[emp]){ alert('«'+emp+'» — владелец личного кошелька, переименование разорвёт привязку зарплаты к кошельку. Имя защищено.'); return; }   // аудит #28
+      var v=(prompt('Новое имя:',emp)||'').trim(); if(!v||v===emp)return; if(DB.empMeta[emp]){DB.empMeta[v]=DB.empMeta[emp];delete DB.empMeta[emp];} renameEmp(emp,v); render(); formEmployee(v,cfg); };
     $('emp-del').onclick=function(){ if(empHasOps(emp)){ if(!confirm('У «'+emp+'» есть история начислений. Убрать из активного списка? История в аналитике сохранится.'))return; } else if(!confirm('Удалить «'+emp+'»?'))return; removeEmp(emp); render(); formSalaryHub(cfg); };
   }
 
@@ -448,7 +450,7 @@
   // ---------- кредиты (остатки + платёж/мес + шкала + дата погашения) ----------
   function creditsList(){ return DB.ops.filter(function(o){return o.credit;}); }
   function creditPaid(id){ return sumW(function(o){return o.creditId===id && o.kind==='out';}); }
-  function creditTotal(o){ return (o.credit&&o.credit.total)||o.amount; }
+  function creditTotal(o){ return (o.credit && o.credit.total!=null) ? o.credit.total : o.amount; }   // total может быть 0 (закрыт досрочно без остатка) — раньше 0 ошибочно воспринимался как «нет значения» (аудит #24)
   function creditLeft(o){ return Math.max(0, creditTotal(o) - creditPaid(o.id)); }
   function daysTo(ts){ if(!ts)return null; return Math.ceil((ts-Date.now())/86400000); }
   function addMonthTs(ts){ var d=new Date(ts); d.setMonth(d.getMonth()+1); return d.getTime(); }
@@ -658,7 +660,35 @@
     if('category' in next && next.category!==o.category) d.push({label:'Категория',from:o.category||'—',to:next.category});
     if('per' in next && (next.per||0)!==(o.per||0)) d.push({label:'Месяц',from:perName(o.per),to:perName(next.per)});
     return d; }
-  function deleteOp(id){ var ids={}; ids[id]=1; DB.ops.forEach(function(o){ if(o.relSale===id||o.creditId===id)ids[o.id]=1; }); DB.ops=DB.ops.filter(function(o){return !ids[o.id];}); save(); }
+  function deleteOp(id){
+    var target=DB.ops.filter(function(x){return x.id===id;})[0];
+    // удаляем ВОЗВРАТ → вернуть проданные позиции в «не возвращено» и восстановить комиссию/доставку (аудит #20)
+    if(target && target.kind==='return' && target.relSale){
+      var sale=DB.ops.filter(function(x){return x.id===target.relSale;})[0];
+      if(sale && sale.sale){
+        var its=sale.sale.items||[];
+        if(Array.isArray(target.retIdx)) target.retIdx.forEach(function(i){ if(its[i])its[i].returned=false; });
+        else its.forEach(function(it){ it.returned=false; });   // старые возвраты без индексов — снять со всех позиций
+        sale.returned=false;
+        if(target.retComm){ var cm=DB.ops.filter(function(x){return x.relSale===sale.id&&x.relKind==='comm';})[0]; if(cm)cm.amount+=target.retComm; }
+        if(target.retDeliv){ var dl=DB.ops.filter(function(x){return x.relSale===sale.id&&x.relKind==='deliv';})[0]; if(dl)dl.amount+=target.retDeliv; }
+      }
+    }
+    var ids={}; ids[id]=1; DB.ops.forEach(function(o){ if(o.relSale===id||o.creditId===id)ids[o.id]=1; });
+    // удаляем АВАНС → закрытия этого сотрудника могут повиснуть; срезаем лишние закрытия, чтобы не осталась ложная зарплата (аудит #29)
+    if(target && target.salary && target.salary.type==='advance' && target.salary.emp){
+      var emp=target.salary.emp, advSum=0, closes=[];
+      DB.ops.forEach(function(o){ if(ids[o.id])return;
+        if(o.salary&&o.salary.type==='advance'&&o.salary.emp===emp) advSum+=o.amount;
+        else if(o.kind==='close'&&o.emp===emp) closes.push(o); });
+      var excess=closes.reduce(function(s,o){return s+o.amount;},0)-advSum;   // закрыто больше, чем осталось авансов
+      closes.sort(function(a,b){return (b.ts||0)-(a.ts||0);});               // срезаем с самых свежих
+      for(var ci=0; ci<closes.length && excess>0; ci++){ var cl=closes[ci];
+        if(cl.amount<=excess){ excess-=cl.amount; ids[cl.id]=1; }            // закрытие целиком лишнее — убрать
+        else { cl.amount-=excess; excess=0; } }                             // частично — уменьшить
+    }
+    DB.ops=DB.ops.filter(function(o){return !ids[o.id];}); save();
+  }
   function diffRows(d){ return '<div class="diff">'+d.map(function(c){return '<div class="diffrow"><div class="dl">'+esc(c.label)+'</div><div class="dv"><span class="from">'+esc(c.from)+'</span> <span class="arr">→</span> <span class="to">'+esc(c.to)+'</span></div></div>';}).join('')+'</div>'; }
   // кто может править напрямую: Руслан — свои; Ульяна — только личное (её кошелёк). Остальное Ульяны — через согласование Руслана.
   function canDirect(o){ if(role()==='ruslan') return true; return o.acc==='zpUlyana'; }
@@ -726,12 +756,19 @@
       var idx=[]; Array.prototype.forEach.call(document.querySelectorAll('.ret-it'),function(c){ if(c.checked)idx.push(+c.getAttribute('data-i')); });
       var names=idx.map(function(i){return items[i].name;}).join(', ');
       var cr=comm?(parseInt($('f-comm').value)||0):0, dr=deliv?(parseInt($('f-deliv').value)||0):0;
-      commit([{kind:'return',acc:'BORZO',project:'BORZO',amount:p.v,relSale:o.id,who:role(),note:'возврат: '+names}],function(){
+      commit([{kind:'return',acc:'BORZO',project:'BORZO',amount:p.v,relSale:o.id,who:role(),note:'возврат: '+names,retIdx:idx.slice(),retComm:cr,retDeliv:dr}],function(){
         idx.forEach(function(i){ items[i].returned=true; });
         if(items.every(function(it){return it.returned;})) o.returned=true;
         if(comm&&cr>0){ comm.amount-=cr; if(comm.amount<=0)deleteOp(comm.id); }
         if(deliv&&dr>0){ deliv.amount-=dr; if(deliv.amount<=0)deleteOp(deliv.id); }
         save(); close(); render(); },'Оформить возврат?'); }); }
+  // пропорционально пересчитать позиции продажи при изменении её суммы (аудит #19: иначе sale.items рассинхронятся с amount и возврат посчитается неверно)
+  function rescaleSaleItems(o,newAmt){
+    if(!o.sale||!Array.isArray(o.sale.items)||!o.sale.items.length)return;
+    var old=o.amount||o.sale.items.reduce(function(s,i){return s+(i.sum||0);},0); if(!old)return;
+    var k=newAmt/old;
+    o.sale.items.forEach(function(i){ if(i.sum!=null)i.sum=Math.round(i.sum*k); if(i.price!=null)i.price=Math.round(i.price*k); });
+  }
   function formEdit(o){
     var ctx=ctxOf(o);
     var showMonth=o.kind==='close'||(o.salary&&o.salary.type==='salary')||(o.kind==='out'&&!(o.salary&&o.salary.type==='advance'));
@@ -742,7 +779,7 @@
     var ct=ctx?wireCatField('f-cat',ctx):function(){return o.category;};
     wireActs(function(){ var a=parseInt($('f-amt').value)||0; if(a<=0){alert('Укажите сумму');return;} var next={amount:a}; if(ctx)next.category=ct(); if(showMonth)next.per=monthPer('f-mon');
       if(needsApproval(o)){ proposeChange(o.id,next); close(); render(); alert('Изменение отправлено Руслану на согласование.'); }
-      else { for(var k in next)o[k]=next[k]; save(); close(); render(); } });
+      else { if(o.sale && ('amount' in next)) rescaleSaleItems(o, next.amount); for(var k in next)o[k]=next[k]; save(); close(); render(); } });
   }
 
   // ---------- операции (рендер строк) ----------
