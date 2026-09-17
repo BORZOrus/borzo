@@ -254,7 +254,9 @@
     var base='flex:1;margin:0;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;min-height:70px';
     if(data){
       var prev = isPdf(data)?'<div style="margin-top:6px;font-size:12px">📄 документ</div>':'<img src="'+data+'" style="max-height:44px;margin-top:6px">';
-      return '<div class="photo has" style="'+base+'">✓ '+label+prev+
+      // на накладной (не PDF) слева — значок распознавания
+      var ai = (kind==='inv'&&!isPdf(data)) ? '<button type="button" class="ph-ai" data-scan="1" title="Распознать позиции" style="position:absolute;top:3px;left:5px;background:var(--k-blue);color:#fff;border:none;border-radius:50%;width:23px;height:23px;font-size:12px;line-height:1;cursor:pointer">🤖</button>' : '';
+      return '<div class="photo has" style="'+base+'">'+ai+'✓ '+label+prev+
         '<button type="button" class="ph-x" data-clr="'+kind+'" style="position:absolute;top:3px;right:5px;background:var(--k-red);color:#fff;border:none;border-radius:50%;width:23px;height:23px;font-size:15px;line-height:1;cursor:pointer">×</button></div>';
     }
     return '<label class="photo" style="'+base+'">'+label+'<input type="file" accept="image/*,application/pdf" id="ph-'+kind+'"></label>';
@@ -262,8 +264,7 @@
   function buyHtml(){
     var ed=!!editingId, sy=buf.category==='Сырьё';
     return '<h3>'+(ed?'✏️ Изменить накладную':'🛒 Закуп')+'</h3>'+
-      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?(editDirect?'Твой закуп — правки применяются сразу, без согласования.':'Правки уйдут второй стороне на согласование — молча ничего не меняется.'):'Кнопка «Распознать» сама сфотографирует накладную, приложит её и заполнит позиции. Если распознаёт долго/криво — приложи фото кнопками ниже и впиши вручную. '+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Снабженцу — обязательно приложить накладную или чек.'))+'</div>'+
-      (ed?'':'<label class="photo" style="display:block;margin:0 0 10px;padding:14px;border-style:solid;border-color:var(--k-green);color:var(--k-green);font-weight:700">🔍 Сфотографировать / выбрать и распознать<input type="file" accept="image/*" id="ph-scan"></label>')+
+      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?(editDirect?'Твой закуп — правки применяются сразу, без согласования.':'Правки уйдут второй стороне на согласование — молча ничего не меняется.'):'Приложи накладную или чек (фото, скриншот или файл/PDF). На приложенной накладной слева значок 🤖 — нажми, чтобы распознать позиции автоматически, или заполни вручную. '+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Снабженцу документ обязателен.'))+'</div>'+
       '<div style="display:flex;gap:10px;margin-bottom:12px;align-items:stretch">'+
         photoSlot('inv','📎 Накладная')+
         photoSlot('rec','🧾 Чек')+
@@ -327,20 +328,20 @@
   }
   function wireBuy(){
     renderItems();
-    // «Сфотографировать и распознать»: фото → это же фото становится накладной + ИИ заполняет позиции
-    if($('ph-scan')) $('ph-scan').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){
-      buf.invoice=d;                       // фото распознавания = документ-накладная
-      buf.scanning=true; refreshBuy();
-      API.scan(d).then(function(res){
-        buf.scanning=false;
-        if(res.items && res.items.length) buf.items=res.items.map(function(i){return {name:i.name,qty:i.qty,unit:i.unit||'шт',price:i.price};});
-        else alert('Ничего не распозналось — впиши позиции вручную (фото накладной уже приложено).');
-        refreshBuy();
-      }).catch(function(){ buf.scanning=false; refreshBuy(); alert('Распознавание не сработало — фото накладной приложено, впиши позиции вручную.'); });
-    }); };
     // «Накладная»/«Чек» — прикрепить фото ИЛИ файл (стандартный выбор: камера/галерея/файл, вкл. PDF)
     if($('ph-inv')) $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; refreshBuy(); }); };
     if($('ph-rec')) $('ph-rec').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.receipt=d; refreshBuy(); }); };
+    // 🤖 на накладной — распознать позиции (по желанию)
+    Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-scan]'),function(b){ b.onclick=function(){
+      if(!buf.invoice) return;
+      buf.scanning=true; refreshBuy();
+      API.scan(buf.invoice).then(function(res){
+        buf.scanning=false;
+        if(res.items && res.items.length) buf.items=res.items.map(function(i){return {name:i.name,qty:i.qty,unit:i.unit||'шт',price:i.price};});
+        else alert('Ничего не распозналось — впиши позиции вручную.');
+        refreshBuy();
+      }).catch(function(){ buf.scanning=false; refreshBuy(); alert('Распознавание не сработало — впиши позиции вручную.'); });
+    }; });
     // крестик — удалить приложенный документ и приложить заново
     Array.prototype.forEach.call(sheetBody.querySelectorAll('.ph-x'),function(b){ b.onclick=function(){ var k=b.getAttribute('data-clr'); if(k==='inv')buf.invoice=null; else buf.receipt=null; refreshBuy(); }; });
     $('additem').onclick=function(){ buf.items.push({name:'',qty:'',unit:'шт'}); renderItems(); };
