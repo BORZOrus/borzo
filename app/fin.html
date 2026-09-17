@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
 <title>BORZO · Финансы</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,7 +11,8 @@
   :root{--bg:#0f1115;--page:#0f1115;--card:#181b21;--card2:#20242c;--ink:#eef0f3;--mut:#9aa0a8;--line:#2a2e37;
     --green:#28c07a;--blue:#3b82f6;--amber:#f0a621;--red:#f0555c;--violet:#a78bfa}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--page);color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  html{overflow-x:hidden}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;overscroll-behavior:none;width:100%;touch-action:pan-y}
   .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:0 0 40px}
   .roleswitch{display:flex;gap:6px;padding:10px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--line)}
   .roleswitch button{flex:1;padding:9px;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:10px;font-weight:600;font-size:13px;cursor:pointer}

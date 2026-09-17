@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="BORZO Касса">
 <meta name="theme-color" content="#0f1115">
@@ -18,7 +18,8 @@
     --k-line:#2a2e37; --k-green:#28c07a; --k-blue:#3b82f6; --k-amber:#f0a621; --k-red:#f0555c;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--k-bg);color:var(--k-ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  html{overflow-x:hidden}
+  body{margin:0;background:var(--k-bg);color:var(--k-ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;overscroll-behavior:none;width:100%;touch-action:pan-y}
   .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:0 0 40px;position:relative}
   /* демо-переключатель ролей */
   .userbar{display:flex;align-items:center;gap:10px;padding:11px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--k-line)}
@@ -178,6 +179,6 @@
 <div class="sheet" id="sheet"><div id="sheet-body"></div></div>
 
 <script src="api.js?v=4"></script>
-<script src="kassa.js?v=9"></script>
+<script src="kassa.js?v=10"></script>
 </body>
 </html>
