@@ -284,8 +284,19 @@ app.post('/api/kassa/:id/propose', auth, async (req,res)=>{
   const del = req.body.del===true;
   const next = req.body.next||{};
   if(!del && !genericDiff(tx,next).length) return res.status(400).json({error:'нет изменений'});
-  const pending = { by:req.user.role, next, del, note:req.body.note||'', t:Date.now() };
+  // руководитель в режиме «как снабженец» → запрос уходит от снабженца (actAs), одобряет вторая сторона
+  const byRole = (req.user.role==='mgr' && req.body.actAs==='sup') ? 'sup' : req.user.role;
+  const pending = { by:byRole, next, del, note:req.body.note||'', t:Date.now() };
   await pool.query('UPDATE kassa_tx SET pending=$1 WHERE id=$2',[JSON.stringify(pending), tx.id]);
+  res.json({ ok:true });
+});
+// отменить свой запрос (до решения второй стороны)
+app.post('/api/kassa/:id/unpropose', auth, async (req,res)=>{
+  const r = await pool.query('SELECT * FROM kassa_tx WHERE id=$1',[req.params.id]);
+  const tx = r.rows[0];
+  if(!tx || !tx.pending) return res.status(400).json({error:'нечего отменять'});
+  if(!(req.user.role==='mgr' || tx.pending.by===req.user.role)) return res.status(403).json({error:'нет прав'});
+  await pool.query('UPDATE kassa_tx SET pending=NULL WHERE id=$1',[tx.id]);
   res.json({ ok:true });
 });
 // одобрить изменение (противоположная сторона)

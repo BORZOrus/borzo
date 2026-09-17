@@ -170,7 +170,7 @@
 
   function showOp(id){
     var x=txs().filter(function(t){return t.id===id;})[0]; if(!x) return;
-    var R=STATE.role, body='';
+    var R=viewRole||STATE.role, body='';   // действующая роль (в режиме «как снабженец» = sup)
     if(x.kind==='expense'){
       var items=(x.items||[]).map(function(i){
         var c=i.cat||x.category, pill=c==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Операционка</span>';
@@ -200,7 +200,8 @@
         body+='<button class="btn btn-ok" id="op-appr" style="margin-bottom:8px">'+(isDel?'✓ Одобрить удаление':'✓ Одобрить изменение')+'</button>'+
               '<button class="btn btn-ghost" id="op-rej" style="margin-bottom:8px">Отклонить</button>';
       } else {
-        body+='<div class="muted fz13" style="text-align:center;margin-bottom:10px">Ждёт согласования второй стороны</div>';
+        body+='<div class="muted fz13" style="text-align:center;margin:4px 0 10px">📤 Отправлено на согласование '+roleName(x.pending.by==='sup'?'mgr':'sup')+'. Ждёт решения.</div>'+
+              '<button class="btn btn-ghost" id="op-unprop" style="margin-bottom:8px;color:var(--k-red)">Отменить запрос</button>';
       }
     } else {
       if(x.kind==='expense'){
@@ -236,7 +237,8 @@
     if($('op-rej')) $('op-rej').onclick=function(){ API.reject(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
     if($('op-edit')) $('op-edit').onclick=function(){ if(x.kind==='expense') openEdit(id, (R==='mgr'&&x.by_role==='mgr')); else openEditIssue(id); };
     if($('op-del')) $('op-del').onclick=function(){ if(confirm('Удалить этот закуп? Он уйдёт из склада и из расходов котла.')) API.expenseDelete(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
-    if($('op-del-req')) $('op-del-req').onclick=function(){ if(confirm('Запросить удаление этой накладной? Уйдёт на согласование второй стороне.')) API.propose(id,{del:true}).then(function(){ closeSheet(); return refresh(); }).then(function(){ alert('Запрос на удаление отправлен на согласование.'); }).catch(fail); };
+    if($('op-del-req')) $('op-del-req').onclick=function(){ if(confirm('Запросить удаление этой накладной? Уйдёт на согласование второй стороне.')) API.propose(id,{del:true,actAs:viewRole}).then(function(){ closeSheet(); return refresh(); }).then(function(){ alert('Запрос на удаление отправлен на согласование.'); }).catch(fail); };
+    if($('op-unprop')) $('op-unprop').onclick=function(){ if(confirm('Отменить свой запрос на согласование?')) API.unpropose(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
     if($('op-cancel')) $('op-cancel').onclick=function(){ if(confirm('Отменить эту выдачу?')) API.issueCancel(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
   }
 
@@ -380,7 +382,7 @@
           editingId=null; editDirect=false; closeSheet(); return refresh();
         }).catch(fail);
       } else {
-        API.propose(editingId,{next:{amount:amt,category:buf.category,items:items}}).then(function(){
+        API.propose(editingId,{next:{amount:amt,category:buf.category,items:items},actAs:viewRole}).then(function(){
           editingId=null; closeSheet(); return refresh();
         }).then(function(){ alert('Изменение отправлено на согласование второй стороне.'); }).catch(fail);
       }

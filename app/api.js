@@ -35,6 +35,7 @@ window.API = (function(){
     expenseEdit:   function(id,b){ return req('POST','/kassa/expense/'+id+'/edit', b); },
     issueCancel: function(id){ return req('POST','/kassa/issue/'+id+'/cancel'); },
     propose:     function(id,b){ return req('POST','/kassa/'+id+'/propose', b); },
+    unpropose:   function(id){ return req('POST','/kassa/'+id+'/unpropose'); },
     approve:     function(id){ return req('POST','/kassa/'+id+'/approve'); },
     reject:      function(id){ return req('POST','/kassa/'+id+'/reject'); },
     finGet:      function(){ return req('GET','/fin'); },
