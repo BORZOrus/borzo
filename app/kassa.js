@@ -155,8 +155,9 @@
     var reqs=txs().filter(function(x){ return x.pending && x.pending.by===byRole; });
     return reqs.map(function(x){
       var what = x.kind==='expense' ? 'накладной' : 'выдаче';
+      var head = x.pending.del ? '🗑 Запрос на удаление накладной' : ('✏️ Запрос на изменение в '+what);
       return '<div class="card notif" style="border-color:rgba(240,166,33,.5);background:rgba(240,166,33,.07)">'+
-        '<div style="font-weight:700">✏️ Запрос на изменение в '+what+'</div>'+
+        '<div style="font-weight:700">'+head+'</div>'+
         '<div class="muted fz12" style="margin:3px 0 10px">от: '+roleName(byRole)+' · '+stamp(x.pending.t)+'</div>'+
         '<button class="btn btn-ok" data-req="'+x.id+'">Посмотреть и решить</button></div>';
     }).join('');
@@ -190,12 +191,13 @@
     }
 
     if(x.pending){
-      var d=genericDiff(x,x.pending.next);
-      body+='<div class="pend"><div class="ph">✏️ Запрос на изменение · от: '+roleName(x.pending.by)+'</div>'+
-        diffRows(d)+
+      var isDel=x.pending.del;
+      var d=isDel?[]:genericDiff(x,x.pending.next);
+      body+='<div class="pend"><div class="ph">'+(isDel?'🗑 Запрос на УДАЛЕНИЕ накладной':'✏️ Запрос на изменение')+' · от: '+roleName(x.pending.by)+'</div>'+
+        (isDel?'<div class="fz13" style="margin:4px 0">Накладная на '+money(x.amount)+' будет удалена (уйдёт со склада и из расходов).</div>':diffRows(d))+
         (x.pending.note?'<div class="muted fz12" style="margin-top:6px">Комментарий: '+x.pending.note+'</div>':'')+'</div>';
       if(x.pending.by!==R){
-        body+='<button class="btn btn-ok" id="op-appr" style="margin-bottom:8px">✓ Одобрить изменение</button>'+
+        body+='<button class="btn btn-ok" id="op-appr" style="margin-bottom:8px">'+(isDel?'✓ Одобрить удаление':'✓ Одобрить изменение')+'</button>'+
               '<button class="btn btn-ghost" id="op-rej" style="margin-bottom:8px">Отклонить</button>';
       } else {
         body+='<div class="muted fz13" style="text-align:center;margin-bottom:10px">Ждёт согласования второй стороны</div>';
@@ -206,7 +208,8 @@
           body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Изменить</button>'+
                 '<button class="btn btn-ghost" id="op-del" style="margin-bottom:8px;color:var(--k-red)">🗑 Удалить закуп</button>';
         } else {
-          body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Изменить (через согласование)</button>';
+          body+='<button class="btn btn-ghost" id="op-edit" style="margin-bottom:8px">✏️ Изменить (через согласование)</button>'+
+                '<button class="btn btn-ghost" id="op-del-req" style="margin-bottom:8px;color:var(--k-red)">🗑 Удалить (через согласование)</button>';
         }
       } else if(x.kind==='issue'){
         if(x.status==='wait' && R==='mgr'){
@@ -233,6 +236,7 @@
     if($('op-rej')) $('op-rej').onclick=function(){ API.reject(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
     if($('op-edit')) $('op-edit').onclick=function(){ if(x.kind==='expense') openEdit(id, (R==='mgr'&&x.by_role==='mgr')); else openEditIssue(id); };
     if($('op-del')) $('op-del').onclick=function(){ if(confirm('Удалить этот закуп? Он уйдёт из склада и из расходов котла.')) API.expenseDelete(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
+    if($('op-del-req')) $('op-del-req').onclick=function(){ if(confirm('Запросить удаление этой накладной? Уйдёт на согласование второй стороне.')) API.propose(id,{del:true}).then(function(){ closeSheet(); return refresh(); }).then(function(){ alert('Запрос на удаление отправлен на согласование.'); }).catch(fail); };
     if($('op-cancel')) $('op-cancel').onclick=function(){ if(confirm('Отменить эту выдачу?')) API.issueCancel(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
   }
 
