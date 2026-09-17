@@ -507,7 +507,11 @@
   var anTabs=['proj'], anTab='proj', anScope='month', anOff=0, anProj=null, anSalOpen={}, anInner='in', anProjs=null, anInProd=false;
   var AN_TITLE={sales:'Продажи',proj:'Проекты',salary:'Зарплаты',wallet:'Личное',upers:'Мои траты',ufam:'Семейное'};
   // личные/семейные траты с зарплаты — это часть зарплаты, в разбивке расходов сворачиваем в «Зарплата» (детализация — в разделе 💰 Зарплаты)
-  function catNorm(c){ return (c==='Личное/семья'||c==='Личное'||c==='Семейное'||c==='Семья'||c==='ЗП Ульяна'||c==='ЗП прочее')?'Зарплата':(c||'—'); }
+  function catNorm(c){
+    if(c==='Личное/семья'||c==='Личное'||c==='Семейное'||c==='Семья'||c==='ЗП Ульяна'||c==='ЗП прочее') return 'Зарплата';
+    if(c==='Общие'||c==='Операционка цеха'||c==='Операционные'||c==='Операционка') return 'Операционка';   // общие расходы цеха — одной строкой
+    return c||'—';
+  }
   function catBars(ops){ var by={},tot=0; ops.forEach(function(o){var k=catNorm(o.category||o.project);by[k]=(by[k]||0)+o.amount;tot+=o.amount;});
     var ks=Object.keys(by).sort(function(a,b){return by[b]-by[a];}); var mx=ks.length?by[ks[0]]:1;
     return (ks.length?ks.map(function(k){return '<div class="anrow"><span>'+esc(k)+'</span><b>'+money(by[k])+'</b></div><div class="bar" style="width:'+Math.max(4,by[k]/mx*100)+'%"></div>';}).join(''):'<div class="empty">Нет операций</div>')+(tot?'<div class="anrow" style="border:none;margin-top:6px"><span><b>Итого</b></span><b>'+money(tot)+'</b></div>':''); }

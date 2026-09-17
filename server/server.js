@@ -154,9 +154,9 @@ async function unbookPot(id){
   await pool.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
   return true;
 }
-// ЗАКУП (снабженец или руководитель) → реальный расход из котла, падает в АНАЛИТИКУ (Сырьё/Общие), НЕ в ленту (hideFeed).
+// ЗАКУП (снабженец или руководитель) → реальный расход из котла, падает в АНАЛИТИКУ (Сырьё/Операционка), НЕ в ленту (hideFeed).
 async function bookSupplyExpense(amount, category, note, kassaId, who){
-  const cat = (category==='Сырьё') ? 'Сырьё' : 'Общие';
+  const cat = (category==='Сырьё') ? 'Сырьё' : 'Операционка';
   return bookPot({ id:'supx_'+kassaId, ts:Date.now(), per:monthPerNow(), kind:'out', acc:'BORZO', project:'BORZO',
     amount: money(amount), category: cat, who: who||'snab', note: note||'закуп снабжения', supplyExpense:true, hideFeed:true, supplyTxId:kassaId });
 }
@@ -197,24 +197,29 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   const items = Array.isArray(req.body.items)? req.body.items : [];
   const invoice = savePhoto(req.body.invoice);
   const receipt = savePhoto(req.body.receipt);
+  // руководитель может действовать «как снабженец» (режим просмотра): закуп идёт из подотчёта снабженца, по его правилам
+  const asSup = req.user.role==='mgr' && req.body.asSup===true;
+  const actRole = asSup ? 'sup' : req.user.role;
+  let creator = req.user.id;
+  if(asSup){ const su = await pool.query("SELECT id FROM users WHERE role='sup' ORDER BY id LIMIT 1"); if(su.rowCount) creator = su.rows[0].id; }
   if(amount<=0) return res.status(400).json({error:'укажите сумму'});
-  // документ обязателен снабженцу; руководитель может закупаться без чека/накладной
-  if(req.user.role==='sup' && !invoice && !receipt) return res.status(400).json({error:'нужен документ: накладная или чек'});
-  // ограничение «не больше кассы» — только для снабженца (его подотчёт). Руководитель тратит свои/общие деньги.
-  if(req.user.role==='sup' && amount > await balance()) return res.status(400).json({error:'нельзя списать больше, чем в кассе'});
+  // документ обязателен снабженцу; руководитель (свой закуп) может без чека/накладной
+  if(actRole==='sup' && !invoice && !receipt) return res.status(400).json({error:'нужен документ: накладная или чек'});
+  // ограничение «не больше кассы» — для снабженца (его подотчёт). Руководитель при своём закупе тратит из котла.
+  if(actRole==='sup' && amount > await balance()) return res.status(400).json({error:'нельзя списать больше, чем в кассе снабженца'});
   const id = crypto.randomUUID(), now = Date.now();
   const norm = v => String(v==null?'':v).replace(',','.');  // 25,2 → 25.2 для склада
   const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||req.body.category}));
   await pool.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8)`,
-    [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, req.user.id]);
+    [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, creator]);
   for(const i of cleanItems){
     await pool.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
   }
   // любой закуп (снабженец или руководитель) → расход из котла в аналитику Финансов (не в ленту)
   const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
-  const who = req.user.role==='mgr' ? 'ruslan' : 'snab';
-  const noteTxt = (req.user.role==='mgr'?'закуп Руслана':'закуп снабженца')+(names?': '+names:'');
+  const who = actRole==='mgr' ? 'ruslan' : 'snab';
+  const noteTxt = (actRole==='mgr'?'закуп Руслана':'закуп снабженца')+(names?': '+names:'');
   const potBooked = await bookSupplyExpense(amount, req.body.category, noteTxt, id, who);
   res.json({ ok:true, id, potBooked });
 });

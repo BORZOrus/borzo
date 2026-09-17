@@ -51,6 +51,8 @@
   function openSheet(html){ sheetBody.innerHTML=html; sheetBg.classList.add('on'); sheet.classList.add('on'); sheetOpen=true; }
   function closeSheet(){ sheetBg.classList.remove('on'); sheet.classList.remove('on'); sheetOpen=false; }
   sheetBg.addEventListener('click',closeSheet);
+  // клавиатура не должна перекрывать поле — подскроллить активное поле в видимую зону
+  sheet.addEventListener('focusin',function(e){ var t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA')){ setTimeout(function(){ try{ t.scrollIntoView({block:'center',behavior:'smooth'}); }catch(_){} },250); } });
 
   function fail(e){ alert((e&&e.message)||'Ошибка. Проверьте связь.'); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -107,7 +109,7 @@
     var mon=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'][d.getMonth()];
     el.innerHTML='<div class="kpi3" style="margin-bottom:12px">'+
       '<div class="k"><div class="l">Сырьё · '+mon+'</div><div class="v" style="color:#a78bfa">'+money(syr)+'</div></div>'+
-      '<div class="k"><div class="l">Общие · '+mon+'</div><div class="v" style="color:var(--k-amber)">'+money(gen)+'</div></div>'+
+      '<div class="k"><div class="l">Операционка · '+mon+'</div><div class="v" style="color:var(--k-amber)">'+money(gen)+'</div></div>'+
       '<div class="k"><div class="l">Закупок</div><div class="v">'+n+'</div></div></div>';
   }
   function renderSupSklad(){
@@ -117,7 +119,7 @@
       var it=d.items||[];
       box.innerHTML = it.length ?
         '<div class="h1">📦 Склад (накопительно)</div><table class="sk"><thead><tr><th>Позиция</th><th style="text-align:right">Всего</th><th style="text-align:right">Сумма</th></tr></thead><tbody>'+
-        it.map(function(a){ var pill=a.cat==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>';
+        it.map(function(a){ var pill=a.cat==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Операционка</span>';
           return '<tr><td>'+a.name+' '+pill+'</td><td style="text-align:right;font-weight:600">'+(Math.round(a.qty*100)/100)+' '+a.unit+'</td><td style="text-align:right" class="muted">'+money(a.sum)+'</td></tr>';
         }).join('')+'</tbody></table>' :
         '<div class="empty">Склад пуст. Позиции появятся после закупок.</div>';
@@ -132,12 +134,14 @@
         '<div class="muted fz12">'+x.source+' · '+stamp(x.ts)+' '+st+'</div></div>'+
         '<div class="amt amt-in">+'+money(x.amount)+'</div></div>';
     }
-    var cat = x.category==='Сырьё' ? '<span class="pill pill-syr">Сырьё</span>' : '<span class="pill pill-gen">Общие</span>';
+    var cat = x.category==='Сырьё' ? '<span class="pill pill-syr">Сырьё</span>' : '<span class="pill pill-gen">Операционка</span>';
     var doc = (x.invoice||x.receipt) ? '<span class="pill pill-doc">📎 док</span>' : '<span class="pill pill-nodoc">нет док</span>';
     var pend = x.pending ? ' <span class="pill pill-wait">на согласовании</span>' : '';
+    var mine = x.by_role==='mgr';   // закуп руководителя (не снабженца) — пометить
+    var byPill = mine ? ' <span class="pill" style="background:rgba(59,130,246,.18);color:var(--k-blue)">закупал Руслан</span>' : '';
     var title = (x.items&&x.items.length) ? x.items[0].name+(x.items.length>1?' +'+(x.items.length-1):'') : 'Расход';
-    return '<div class="op" data-op="'+x.id+'"><div class="ic ic-out">🛒</div><div class="grow">'+
-      '<div style="font-weight:600">'+title+'</div>'+
+    return '<div class="op'+(mine?' op-mgr':'')+'" data-op="'+x.id+'"><div class="ic ic-out">🛒</div><div class="grow">'+
+      '<div style="font-weight:600">'+title+byPill+'</div>'+
       '<div class="muted fz12" style="margin-top:2px">'+stamp(x.ts)+' '+cat+' '+doc+pend+'</div></div>'+
       '<div class="amt amt-out">−'+money(x.amount)+'</div></div>';
   }
@@ -168,7 +172,7 @@
     var R=STATE.role, body='';
     if(x.kind==='expense'){
       var items=(x.items||[]).map(function(i){
-        var c=i.cat||x.category, pill=c==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>';
+        var c=i.cat||x.category, pill=c==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Операционка</span>';
         var per=i.price?money(i.price):'—', sm=(i.sum||rowSum(i));
         return '<tr><td>'+i.name+' '+pill+'</td><td style="text-align:right" class="muted">'+i.qty+' '+i.unit+' × '+per+'</td><td style="text-align:right;font-weight:600;white-space:nowrap">'+money(sm)+'</td></tr>';
       }).join('');
@@ -273,7 +277,7 @@
       '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· «шт» — единица, «цена/ед» — цена за штуку, точка С/О — категория</span></label><div id="items"></div>'+
         '<button class="btn-ghost" id="additem" style="border:1px dashed var(--k-line);border-radius:10px">+ Добавить позицию</button></div>'+
       '<div class="fld"><label>Направление расхода</label><div class="seg" id="cat">'+
-        '<button data-c="Сырьё" class="'+(sy?'on syr':'')+'">Сырьё</button><button data-c="Общие" class="'+(sy?'':'on gen')+'">Общие</button></div></div>'+
+        '<button data-c="Сырьё" class="'+(sy?'on syr':'')+'">Сырьё</button><button data-c="Операционка" class="'+(sy?'':'on gen')+'">Операционка</button></div></div>'+
       '<div class="fld"><label>Сумма расхода, ₸ <span style="color:var(--k-mut)">· считается из позиций</span></label><input type="number" inputmode="numeric" id="amt" placeholder="0" value="'+(buf.amount||'')+'"></div>'+
       (ed?'':(STATE.role==='mgr'
         ? '<div class="muted fz12" style="text-align:center;margin-bottom:10px">🛒 Прямой закуп — спишется <b style="color:var(--k-ink)">с котла (наша касса)</b>, не с кассы снабженца</div>'
@@ -316,7 +320,7 @@
       b.onclick=function(){ var i=+b.getAttribute('data-un'); var cur=buf.items[i].unit||'шт'; var n=(UNITS.indexOf(cur)+1)%UNITS.length; buf.items[i].unit=UNITS[n]; renderItems(); };
     });
     Array.prototype.forEach.call($('items').querySelectorAll('[data-cat]'),function(b){
-      b.onclick=function(){ var i=+b.getAttribute('data-cat'); buf.items[i].cat=(catOf(buf.items[i])==='Сырьё')?'Общие':'Сырьё'; renderItems(); };
+      b.onclick=function(){ var i=+b.getAttribute('data-cat'); buf.items[i].cat=(catOf(buf.items[i])==='Сырьё')?'Операционка':'Сырьё'; renderItems(); };
     });
     Array.prototype.forEach.call($('items').querySelectorAll('[data-del]'),function(b){
       b.onclick=function(){ buf.items.splice(+b.getAttribute('data-del'),1); renderItems(); recalcTotal(); };
@@ -396,7 +400,7 @@
     $('cf-no').onclick=function(){ openSheet(buyHtml()); wireBuy(); };   // buf сохранён — вернёт с данными
     $('cf-yes').onclick=function(){
       $('cf-yes').disabled=true;
-      API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt})
+      API.expense({amount:amt,category:buf.category,items:items,invoice:buf.invoice,receipt:buf.receipt,asSup:(viewRole==='sup'&&STATE.role==='mgr')})
         .then(function(){ closeSheet(); return refresh(); }).catch(function(e){ $('cf-yes').disabled=false; fail(e); });
     };
   }
@@ -446,7 +450,7 @@
       var it=d.items||[];
       $('mgr-sklad').innerHTML = it.length ?
         '<table class="sk"><thead><tr><th>Позиция</th><th style="text-align:right">Всего</th><th style="text-align:right">Сумма</th></tr></thead><tbody>'+
-        it.map(function(a){ var pill=a.cat==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Общие</span>';
+        it.map(function(a){ var pill=a.cat==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Операционка</span>';
           return '<tr><td>'+a.name+' '+pill+'</td><td style="text-align:right;font-weight:600">'+(Math.round(a.qty*100)/100)+' '+a.unit+'</td><td style="text-align:right" class="muted">'+money(a.sum)+'</td></tr>';
         }).join('')+'</tbody></table>' :
         '<div class="empty">Склад пуст. Позиции появятся после закупок снабженца.</div>';

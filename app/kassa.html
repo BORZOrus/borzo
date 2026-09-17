@@ -19,7 +19,7 @@
   }
   *{box-sizing:border-box}
   html{overflow-x:hidden}
-  body{margin:0;background:var(--k-bg);color:var(--k-ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;overscroll-behavior:none;width:100%;touch-action:pan-y}
+  body{margin:0;background:var(--k-bg);color:var(--k-ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;width:100%;-webkit-overflow-scrolling:touch}
   .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:0 0 40px;position:relative}
   /* демо-переключатель ролей */
   .userbar{padding:10px 14px;background:#0b0d10;position:sticky;top:0;z-index:20;border-bottom:1px solid var(--k-line)}
@@ -54,6 +54,7 @@
   .btn-ok{background:var(--k-green);color:#04140b;font-size:14px;padding:11px}
   .op{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--k-line)}
   .op:last-child{border-bottom:none}
+  .op-mgr{background:rgba(59,130,246,.06);border-left:3px solid var(--k-blue);padding-left:8px;border-radius:8px}
   .op .ic{width:38px;height:38px;border-radius:10px;flex:0 0 38px;display:flex;align-items:center;justify-content:center;font-size:18px}
   .ic-in{background:rgba(59,130,246,.15)}
   .ic-out{background:rgba(240,85,92,.13)}
@@ -190,6 +191,6 @@
 <div class="sheet" id="sheet"><div id="sheet-body"></div></div>
 
 <script src="api.js?v=4"></script>
-<script src="kassa.js?v=14"></script>
+<script src="kassa.js?v=15"></script>
 </body>
 </html>
