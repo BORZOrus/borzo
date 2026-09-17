@@ -9,7 +9,7 @@
   function clone(o){ return JSON.parse(JSON.stringify(o)); }
   function roleName(r){ return r==='mgr'?'управленец':'снабженец'; }
   function numf(v){ return parseFloat(String(v==null?'':v).replace(',','.'))||0; }  // 25,2 → 25.2
-  function rowSum(i){ return numf(i.qty)*numf(i.price); }
+  function rowSum(i){ return Math.round(numf(i.qty)*numf(i.price)); }  // сумма позиции — до целого тенге (без тиынов)
 
   var STATE={ balance:0, tx:[], role:null, user:null };
   function txs(){ return STATE.tx; }
@@ -268,7 +268,7 @@
   function catOf(it){ return it.cat||buf.category; }
   function itemsTotal(){ return buf.items.reduce(function(a,it){return a+rowSum(it);},0); }
   function recalcTotal(){
-    var t=itemsTotal();
+    var t=Math.round(itemsTotal());
     if(t>0){ buf.amount=t; if($('amt')){ $('amt').value=t; $('amt').readOnly=true; $('amt').style.opacity=.75; } }
     else if($('amt')){ $('amt').readOnly=false; $('amt').style.opacity=1; }
   }

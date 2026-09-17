@@ -67,7 +67,7 @@ async function balance() {
   return money(r.rows[0].b);
 }
 function numf(v){ return parseFloat(String(v==null?'':v).replace(',','.'))||0; }  // 25,2 → 25.2
-function rowSum(i){ return numf(i.qty)*numf(i.price); }
+function rowSum(i){ return Math.round(numf(i.qty)*numf(i.price)); }  // сумма позиции — до целого тенге
 function savePhoto(dataUrl){
   if(!dataUrl || typeof dataUrl!=='string' || dataUrl.indexOf('data:')!==0) return null;
   const m = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
