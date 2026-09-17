@@ -291,11 +291,11 @@
     return '<h3>'+(ed?'✏️ Изменить накладную':'🛒 Закуп')+'</h3>'+
       '<div class="muted fz12" style="margin-bottom:12px">'+(ed?(editDirect?'Твой закуп — правки применяются сразу, без согласования.':'Правки уйдут второй стороне на согласование — молча ничего не меняется.'):'Приложи накладную или чек (фото, скриншот или файл/PDF). На приложенной накладной слева значок 🪄 — нажми, чтобы распознать позиции и № накладной, или заполни вручную. Номера — под кнопками.'+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Снабженцу документ обязателен.'))+'</div>'+
       '<div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">'+
-        '<div style="flex:1">'+photoSlot('inv','📎 Накладная')+numRow('inv')+'</div>'+
-        '<div style="flex:1">'+photoSlot('rec','🧾 Чек')+numRow('rec')+'</div>'+
+        '<div style="flex:1 1 0;min-width:0">'+photoSlot('inv','📎 Накладная')+numRow('inv')+'</div>'+
+        '<div style="flex:1 1 0;min-width:0">'+photoSlot('rec','🧾 Чек')+numRow('rec')+'</div>'+
       '</div>'+
       '<div class="fld"><label>Дата документа <span style="color:var(--k-mut)">· распознаётся 🪄, можно поправить</span></label>'+
-        '<input type="date" id="docdate" value="'+esc(buf.docDate||'')+'" style="width:100%"></div>'+
+        '<input type="date" id="docdate" value="'+esc(buf.docDate||'')+'" style="width:100%;max-width:100%;min-width:0;box-sizing:border-box"></div>'+
       (buf.scanning?'<div class="scanning">🔎 Распознаю накладную…</div>':'')+
       '<div class="fld"><label>Что закуплено <span style="color:var(--k-mut)">· «шт» — единица, «цена/ед» — цена за штуку, точка С/О — категория</span></label><div id="items"></div>'+
         '<button class="btn-ghost" id="additem" style="border:1px dashed var(--k-line);border-radius:10px">+ Добавить позицию</button></div>'+
