@@ -164,10 +164,11 @@
 
   <!-- КАБИНЕТ УПРАВЛЕНЦА -->
   <div id="view-mgr" class="pad" style="display:none">
+    <div id="mgr-mon" style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px"></div>
     <div class="kpi3">
-      <div class="k"><div class="l">Выдано</div><div class="v" id="mgr-given">0</div></div>
-      <div class="k"><div class="l">Потрачено</div><div class="v" id="mgr-spent">0</div></div>
-      <div class="k"><div class="l">Остаток</div><div class="v" id="mgr-left" style="color:var(--k-green)">0</div></div>
+      <div class="k"><div class="l">Выдал за месяц</div><div class="v" id="mgr-given">0</div></div>
+      <div class="k"><div class="l">Потратил за месяц</div><div class="v" id="mgr-spent">0</div></div>
+      <div class="k"><div class="l">Сейчас в кассе</div><div class="v" id="mgr-left" style="color:var(--k-green)">0</div></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px">
       <button class="btn btn-give" id="btn-give" style="flex:1">💸 Выдать снабженцу</button>
@@ -191,6 +192,6 @@
 <div class="sheet" id="sheet"><div id="sheet-body"></div></div>
 
 <script src="api.js?v=4"></script>
-<script src="kassa.js?v=15"></script>
+<script src="kassa.js?v=16"></script>
 </body>
 </html>

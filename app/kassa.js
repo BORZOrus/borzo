@@ -425,9 +425,18 @@
   }
 
   // ================= КАБИНЕТ УПРАВЛЕНЦА =================
+  var mgrMon=0;  // 0 = текущий месяц, -1 = прошлый и т.д.
+  var MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  function monthLabel(off){ var d=new Date(), m=new Date(d.getFullYear(),d.getMonth()+off,1); return MONTHS[m.getMonth()]+' '+m.getFullYear(); }
+  function sumsMonth(off){ var d=new Date(), s=new Date(d.getFullYear(),d.getMonth()+off,1).getTime(), e=new Date(d.getFullYear(),d.getMonth()+off+1,1).getTime(), given=0,spent=0;
+    STATE.tx.forEach(function(x){ var t=+x.ts; if(t<s||t>=e)return; if(x.kind==='issue'&&x.status==='accepted')given+=(+x.amount); if(x.kind==='expense'&&x.by_role!=='mgr')spent+=(+x.amount); }); return {given:given,spent:spent}; }
   function renderMgr(){
-    var s=sums();
-    $('mgr-given').textContent=money(s.given); $('mgr-spent').textContent=money(s.spent); $('mgr-left').textContent=money(s.left);
+    var sm=sumsMonth(mgrMon);
+    $('mgr-given').textContent=money(sm.given); $('mgr-spent').textContent=money(sm.spent); $('mgr-left').textContent=money(balance());
+    var nb='padding:4px 12px;border:1px solid var(--k-line);background:var(--k-card2);color:var(--k-ink);border-radius:8px;font-weight:700;cursor:pointer';
+    $('mgr-mon').innerHTML='<button id="mgr-prev" style="'+nb+'">‹</button><span style="font-weight:700;font-size:13px;min-width:120px;text-align:center">'+monthLabel(mgrMon)+'</span><button id="mgr-next" style="'+nb+(mgrMon>=0?';opacity:.4':'')+'">›</button>';
+    $('mgr-prev').onclick=function(){ mgrMon--; renderMgr(); };
+    $('mgr-next').onclick=function(){ if(mgrMon<0){ mgrMon++; renderMgr(); } };
     $('mgr-notifs').innerHTML = reqPlates('sup');
     bindReqPlates($('mgr-notifs'));
 
