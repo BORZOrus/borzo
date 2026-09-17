@@ -1,7 +1,8 @@
 /* BORZO — клиент API кассы. Токен в localStorage, все запросы с Bearer. */
 window.API = (function(){
   var token = localStorage.getItem('borzo_token');
-  function clearAuth(){ localStorage.removeItem('borzo_token'); localStorage.removeItem('borzo_user'); }
+  // при выходе стираем и токен/профиль, и кэш финансов — на общем браузере следующий не увидит чужие деньги (аудит #25)
+  function clearAuth(){ localStorage.removeItem('borzo_token'); localStorage.removeItem('borzo_user'); localStorage.removeItem('borzo_fin_v2'); }
   function logout(){ clearAuth(); location.replace('login.html'); }
   // токен протух → на вход, но с памятью, куда возвращаться
   function expired(){ clearAuth(); var here=location.pathname.replace(/^\//,'')||'index.html'; location.replace('login.html?next='+encodeURIComponent(here)); }
@@ -24,7 +25,7 @@ window.API = (function(){
     demoToken:   function(role){ return req('POST','/demo/token',{role:role}); },
     scan:        function(image){ return req('POST','/scan',{image:image}); },
     me:          function(){ return req('GET','/me'); },
-    password:    function(b){ return req('POST','/auth/password', b); },
+    password:    function(b){ return req('POST','/auth/password', b).then(function(d){ if(d&&d.token) self.setToken(d.token); return d; }); },
     kassa:       function(){ return req('GET','/kassa'); },
     sklad:       function(){ return req('GET','/sklad'); },
     issue:       function(b){ return req('POST','/kassa/issue', b); },

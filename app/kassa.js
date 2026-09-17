@@ -87,7 +87,7 @@
     var notifHtml=pend.map(function(x){
       return '<div class="card notif"><div class="row"><div class="grow">'+
         '<div style="font-weight:700">💰 Вам выдано '+money(x.amount)+'</div>'+
-        '<div class="muted fz12" style="margin-top:2px">Источник: '+x.source+' · '+stamp(x.ts)+'</div></div></div>'+
+        '<div class="muted fz12" style="margin-top:2px">Источник: '+esc(x.source)+' · '+stamp(x.ts)+'</div></div></div>'+
         '<button class="btn btn-ok" style="margin-top:11px" data-accept="'+x.id+'">✓ Подтвердить получение</button></div>';
     }).join('') + reqPlates('mgr');
     $('sup-notifs').innerHTML=notifHtml;
@@ -133,7 +133,7 @@
       var st = x.status==='accepted' ? '' : '<span class="pill pill-wait">ждёт подтверждения</span>';
       return '<div class="op" data-op="'+x.id+'"><div class="ic ic-in">⬇</div><div class="grow">'+
         '<div style="font-weight:600">Приход в кассу</div>'+
-        '<div class="muted fz12">'+x.source+' · '+stamp(x.ts)+' '+st+'</div></div>'+
+        '<div class="muted fz12">'+esc(x.source)+' · '+stamp(x.ts)+' '+st+'</div></div>'+
         '<div class="amt amt-in">+'+money(x.amount)+'</div></div>';
     }
     var cat = x.category==='Сырьё' ? '<span class="pill pill-syr">Сырьё</span>' : '<span class="pill pill-gen">Операционка</span>';
@@ -143,7 +143,7 @@
     var byPill = mine ? ' <span class="pill" style="background:rgba(59,130,246,.18);color:var(--k-blue)">закупал Руслан</span>' : '';
     var dupPill = x.dup ? ' <span class="pill" style="background:rgba(240,85,92,.18);color:var(--k-red)">⚠ возможный дубль</span>' : '';
     byPill += dupPill;
-    var title = (x.items&&x.items.length) ? x.items[0].name+(x.items.length>1?' +'+(x.items.length-1):'') : 'Расход';
+    var title = (x.items&&x.items.length) ? esc(x.items[0].name)+(x.items.length>1?' +'+(x.items.length-1):'') : 'Расход';
     return '<div class="op'+(mine?' op-mgr':'')+'" data-op="'+x.id+'"><div class="ic ic-out">🛒</div><div class="grow">'+
       '<div style="font-weight:600">'+title+byPill+'</div>'+
       '<div class="muted fz12" style="margin-top:2px">'+stamp(x.ts)+' '+cat+' '+doc+pend+'</div></div>'+
@@ -179,7 +179,7 @@
       var items=(x.items||[]).map(function(i){
         var c=i.cat||x.category, pill=c==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Операционка</span>';
         var per=i.price?money(i.price):'—', sm=(i.sum||rowSum(i));
-        return '<tr><td>'+i.name+' '+pill+'</td><td style="text-align:right" class="muted">'+i.qty+' '+i.unit+' × '+per+'</td><td style="text-align:right;font-weight:600;white-space:nowrap">'+money(sm)+'</td></tr>';
+        return '<tr><td>'+esc(i.name)+' '+pill+'</td><td style="text-align:right" class="muted">'+esc(i.qty)+' '+esc(i.unit)+' × '+per+'</td><td style="text-align:right;font-weight:600;white-space:nowrap">'+money(sm)+'</td></tr>';
       }).join('');
       var ph=function(src,lbl){ if(!src) return ''; var pdf=/\.pdf$/i.test(src)||/^data:application\/pdf/.test(src); return '<div class="fld"><label>'+lbl+'</label>'+(pdf?'<a href="'+src+'" target="_blank" style="color:var(--k-blue);font-weight:600">📄 Открыть документ</a>':'<img src="'+src+'" style="width:100%;border-radius:10px">')+'</div>'; };
       body='<h3>Детали накладной</h3>'+
@@ -194,7 +194,7 @@
       var st = x.status==='accepted' ? '<span class="pill pill-doc">получено</span>' : '<span class="pill pill-wait">ждёт подтверждения</span>';
       body='<h3>Выдача денег</h3>'+
         '<div class="bigsum" style="color:var(--k-blue)">+'+money(x.amount)+'</div>'+
-        '<div class="muted fz13" style="text-align:center;margin-bottom:14px">'+x.source+' · '+stamp(x.ts)+' '+st+'</div>';
+        '<div class="muted fz13" style="text-align:center;margin-bottom:14px">'+esc(x.source)+' · '+stamp(x.ts)+' '+st+'</div>';
     }
 
     if(x.pending){
@@ -202,7 +202,7 @@
       var d=isDel?[]:genericDiff(x,x.pending.next);
       body+='<div class="pend"><div class="ph">'+(isDel?'🗑 Запрос на УДАЛЕНИЕ накладной':'✏️ Запрос на изменение')+' · от: '+roleName(x.pending.by)+'</div>'+
         (isDel?'<div class="fz13" style="margin:4px 0">Накладная на '+money(x.amount)+' будет удалена (уйдёт со склада и из расходов).</div>':diffRows(d))+
-        (x.pending.note?'<div class="muted fz12" style="margin-top:6px">Комментарий: '+x.pending.note+'</div>':'')+'</div>';
+        (x.pending.note?'<div class="muted fz12" style="margin-top:6px">Комментарий: '+esc(x.pending.note)+'</div>':'')+'</div>';
       if(x.pending.by!==R){
         body+='<button class="btn btn-ok" id="op-appr" style="margin-bottom:8px">'+(isDel?'✓ Одобрить удаление':'✓ Одобрить изменение')+'</button>'+
               '<button class="btn btn-ghost" id="op-rej" style="margin-bottom:8px">Отклонить</button>';
@@ -486,7 +486,7 @@
       var st = x.status==='accepted' ? '<span class="pill pill-doc">получено</span>' : '<span class="pill pill-wait">ждёт подтверждения</span>';
       var pend = x.pending ? ' <span class="pill pill-wait">на согласовании</span>' : '';
       return '<div class="op" data-op="'+x.id+'"><div class="ic ic-in">⬇</div><div class="grow">'+
-        '<div style="font-weight:600">'+x.source+'</div>'+
+        '<div style="font-weight:600">'+esc(x.source)+'</div>'+
         '<div class="muted fz12" style="margin-top:2px">'+stamp(x.ts)+' '+st+pend+'</div></div>'+
         '<div class="amt amt-in">+'+money(x.amount)+'</div></div>';
     }).join('') : '<div class="empty">Выдач ещё не было. Нажмите «Выдать деньги снабженцу».</div>';

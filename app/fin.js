@@ -655,7 +655,7 @@
     if('per' in next && (next.per||0)!==(o.per||0)) d.push({label:'Месяц',from:perName(o.per),to:perName(next.per)});
     return d; }
   function deleteOp(id){ var ids={}; ids[id]=1; DB.ops.forEach(function(o){ if(o.relSale===id||o.creditId===id)ids[o.id]=1; }); DB.ops=DB.ops.filter(function(o){return !ids[o.id];}); save(); }
-  function diffRows(d){ return '<div class="diff">'+d.map(function(c){return '<div class="diffrow"><div class="dl">'+c.label+'</div><div class="dv"><span class="from">'+c.from+'</span> <span class="arr">→</span> <span class="to">'+c.to+'</span></div></div>';}).join('')+'</div>'; }
+  function diffRows(d){ return '<div class="diff">'+d.map(function(c){return '<div class="diffrow"><div class="dl">'+esc(c.label)+'</div><div class="dv"><span class="from">'+esc(c.from)+'</span> <span class="arr">→</span> <span class="to">'+esc(c.to)+'</span></div></div>';}).join('')+'</div>'; }
   // кто может править напрямую: Руслан — свои; Ульяна — только личное (её кошелёк). Остальное Ульяны — через согласование Руслана.
   function canDirect(o){ if(role()==='ruslan') return true; return o.acc==='zpUlyana'; }
   function needsApproval(o){ return role()==='ulyana' && o.who==='ulyana' && o.acc!=='zpUlyana'; }
@@ -667,9 +667,9 @@
   function ctxOf(o){ if(o.salary||o.kind==='close'||o.kind==='transfer'||o.sale||o.credit||o.creditId)return null; if(o.acc==='zpRuslan')return 'pers_ruslan'; if(o.acc==='zpUlyana')return 'pers_ulyana'; if(o.family)return 'family'; if(o.kind==='in')return 'in'; return 'work'; }
   function showOp(id){
     var o=DB.ops.filter(function(x){return x.id===id;})[0]; if(!o)return;
-    var t=o.salary?((o.salary.type==='advance'?'Аванс':'Зарплата')+' · '+o.salary.emp):(o.kind==='close'?('Закрыт аванс · '+o.emp):(o.kind==='transfer'?('Перевод '+(o.note||'')):(o.category||'—')));
+    var t=o.salary?((o.salary.type==='advance'?'Аванс':'Зарплата')+' · '+esc(o.salary.emp)):(o.kind==='close'?('Закрыт аванс · '+esc(o.emp)):(o.kind==='transfer'?('Перевод '+esc(o.note||'')):esc(o.category||'—')));
     var h='<h3>'+t+'</h3><div class="bigsum" style="text-align:center;font-size:26px;font-weight:800;margin:4px 0">'+money(o.amount)+'</div>'+
-      '<div style="text-align:center;color:var(--mut);font-size:13px;margin-bottom:14px">'+((o.salary||o.kind==='close')?('Выдано '+fdate2(o.ts)+(o.per?' · зачтено в '+perName(o.per):'')):fdate2(o.ts))+' · '+(o.project||'')+(o.who==='ulyana'?' · Ульяна':'')+(o.note&&o.kind!=='close'?' · '+o.note:'')+'</div>';
+      '<div style="text-align:center;color:var(--mut);font-size:13px;margin-bottom:14px">'+((o.salary||o.kind==='close')?('Выдано '+fdate2(o.ts)+(o.per?' · зачтено в '+perName(o.per):'')):fdate2(o.ts))+' · '+esc(o.project||'')+(o.who==='ulyana'?' · Ульяна':'')+(o.note&&o.kind!=='close'?' · '+esc(o.note):'')+'</div>';
     if(o.pending){
       var pinner=o.pending.del?'<div style="font-weight:700;margin-bottom:4px;color:var(--red)">🗑 Запрос на удаление · от Ульяны</div>':('<div style="font-weight:700;margin-bottom:8px">✏️ Запрос на изменение · от Ульяны</div>'+diffRows(genericDiff(o,o.pending.next)));
       h+='<div class="pend" style="background:rgba(240,166,33,.08);border:1px solid rgba(240,166,33,.4);border-radius:12px;padding:12px;margin-bottom:12px">'+pinner+'</div>';
@@ -759,10 +759,12 @@
     var ret=o.returned?' <span class="pill" style="background:rgba(240,85,92,.15);color:var(--red)">возвращено</span>':'';
     var permo=((o.salary||o.kind==='close')&&o.per)?(' · за '+perName(o.per)):'';
     var whoLbl=o.who?(' · '+(o.who==='ulyana'?'Ульяна':'Руслан')):'';
-    var sub=fdate(o.ts)+' · '+(o.project||'')+permo+(o.sale?(' · '+o.sale.qty+' шт · '+(o.sale.pay||'')+(o.sale.client?' · '+o.sale.client:'')):'')+whoLbl+(o.note&&!o.salary&&!o.sale&&(o.kind==='out'||o.kind==='return'||o.kind==='in')?' · '+o.note:'')+pend+ret;
+    var saleBit=o.sale?(' · '+o.sale.qty+' шт · '+(o.sale.pay||'')+(o.sale.client?' · '+o.sale.client:'')):'';
+    var noteBit=(o.note&&!o.salary&&!o.sale&&(o.kind==='out'||o.kind==='return'||o.kind==='in'))?' · '+o.note:'';
+    var sub=esc(fdate(o.ts)+' · '+(o.project||'')+permo+saleBit+whoLbl+noteBit)+pend+ret;   // текст экранируем, плашки (pend/ret) — готовый HTML
     var burning=o.salary&&o.salary.type==='advance'&&advBurning(o.salary.emp)>0;
     var amt=o.kind==='close'?'<span class="pill">−'+money(o.amount)+' аванс</span>':'<div class="amt '+cls+(burning?' adv':'')+'">'+sign+money(o.amount)+'</div>';
-    return '<div class="op" data-op="'+o.id+'" style="cursor:pointer">'+ic+'<div style="flex:1"><div class="main-t"'+(burning?' style="color:var(--red)"':'')+'>'+title+'</div><div class="sub-t">'+sub+'</div></div>'+amt+'</div>';
+    return '<div class="op" data-op="'+o.id+'" style="cursor:pointer">'+ic+'<div style="flex:1"><div class="main-t"'+(burning?' style="color:var(--red)"':'')+'>'+esc(title)+'</div><div class="sub-t">'+sub+'</div></div>'+amt+'</div>';
   }
   function listInto(el,ops,empty){ el.innerHTML=ops.length?ops.map(opRow).join(''):'<div class="empty">'+empty+'</div>';
     Array.prototype.forEach.call(el.querySelectorAll('[data-op]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-op'));};}); }

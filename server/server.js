@@ -70,6 +70,7 @@ async function initSchema() {
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS doc_date TEXT DEFAULT '';
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS req_id TEXT;
     CREATE UNIQUE INDEX IF NOT EXISTS kassa_tx_req_id_uidx ON kassa_tx(req_id) WHERE req_id IS NOT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS token_ver INTEGER NOT NULL DEFAULT 0;
   `);
 }
 // подпись накладной (для защиты от дублей): позиции+сумма+категория, устойчива к перезаливке того же
@@ -132,13 +133,23 @@ function genericDiff(tx, next){
 }
 
 // ---------- auth ----------
-function sign(u){ return jwt.sign({ id:u.id, role:u.role, name:u.name, login:u.login }, JWT_SECRET, { expiresIn:'30d' }); }
-function auth(req,res,next){
+function sign(u){ return jwt.sign({ id:u.id, role:u.role, name:u.name, login:u.login, tv:u.token_ver||0 }, JWT_SECRET, { expiresIn:'30d' }); }
+async function auth(req,res,next){
   const h = req.headers.authorization||'';
   const t = h.indexOf('Bearer ')===0 ? h.slice(7) : null;
   if(!t) return res.status(401).json({error:'нет токена'});
-  try { req.user = jwt.verify(t, JWT_SECRET); next(); }
+  let payload;
+  try { payload = jwt.verify(t, JWT_SECRET); }
   catch(e){ return res.status(401).json({error:'токен недействителен'}); }
+  try{
+    // проверяем актуальность: аккаунт существует, версия сессии совпадает (смена пароля/роли отзывает старые токены)
+    const r = await pool.query('SELECT id, role, name, login, token_ver FROM users WHERE id=$1',[payload.id]);
+    const u = r.rows[0];
+    if(!u) return res.status(401).json({error:'аккаунт не найден — войдите заново'});
+    if((payload.tv||0) !== (u.token_ver||0)) return res.status(401).json({error:'сессия завершена — войдите заново'});
+    req.user = { id:u.id, role:u.role, name:u.name, login:u.login };  // роль берём из БД, не из токена → смена роли действует сразу
+    next();
+  }catch(e){ console.error('auth error', e&&e.message); return res.status(500).json({error:'ошибка авторизации'}); }
 }
 function requireRole(role){ return (req,res,next)=> req.user.role===role ? next() : res.status(403).json({error:'нет прав'}); }
 function requireAny(roles){ return (req,res,next)=> roles.indexOf(req.user.role)>=0 ? next() : res.status(403).json({error:'нет прав'}); }
@@ -159,8 +170,9 @@ app.post('/api/auth/password', auth, async (req,res)=>{
   const r = await pool.query('SELECT * FROM users WHERE id=$1',[req.user.id]);
   const u = r.rows[0];
   if(!u || !bcrypt.compareSync(old_pass||'', u.pass_hash)) return res.status(401).json({error:'текущий пароль неверный'});
-  await pool.query('UPDATE users SET pass_hash=$1 WHERE id=$2',[bcrypt.hashSync(new_pass,10), u.id]);
-  res.json({ ok:true });
+  // смена пароля отзывает все прежние токены (token_ver++), но текущему устройству выдаём свежий, чтобы не разлогинить
+  const upd = await pool.query('UPDATE users SET pass_hash=$1, token_ver=token_ver+1 WHERE id=$2 RETURNING id,role,name,login,token_ver',[bcrypt.hashSync(new_pass,10), u.id]);
+  res.json({ ok:true, token: sign(upd.rows[0]) });
 });
 
 // ---------- транзакции: всё-или-ничего для денежных операций ----------
@@ -356,7 +368,7 @@ app.post('/api/kassa/issue/:id/cancel', auth, requireRole('mgr'), async (req,res
 });
 
 // предложить изменение (любая роль) → на согласование второй стороне
-app.post('/api/kassa/:id/propose', auth, async (req,res)=>{
+app.post('/api/kassa/:id/propose', auth, requireAny(['mgr','sup']), async (req,res)=>{
   const r = await pool.query('SELECT * FROM kassa_tx WHERE id=$1',[req.params.id]);
   const tx = r.rows[0];
   if(!tx) return res.status(404).json({error:'не найдено'});
@@ -365,7 +377,7 @@ app.post('/api/kassa/:id/propose', auth, async (req,res)=>{
   if(!del && !genericDiff(tx,next).length) return res.status(400).json({error:'нет изменений'});
   // руководитель в режиме «как снабженец» → запрос уходит от снабженца (actAs), одобряет вторая сторона
   const byRole = (req.user.role==='mgr' && req.body.actAs==='sup') ? 'sup' : req.user.role;
-  const pending = { by:byRole, next, del, note:req.body.note||'', t:Date.now() };
+  const pending = { by:byRole, byId:req.user.id, next, del, note:req.body.note||'', t:Date.now() };
   await pool.query('UPDATE kassa_tx SET pending=$1 WHERE id=$2',[JSON.stringify(pending), tx.id]);
   // push второй стороне (кто должен согласовать)
   const approver = byRole==='sup' ? 'mgr' : 'sup';
@@ -375,7 +387,7 @@ app.post('/api/kassa/:id/propose', auth, async (req,res)=>{
   res.json({ ok:true });
 });
 // отменить свой запрос (до решения второй стороны)
-app.post('/api/kassa/:id/unpropose', auth, async (req,res)=>{
+app.post('/api/kassa/:id/unpropose', auth, requireAny(['mgr','sup']), async (req,res)=>{
   const r = await pool.query('SELECT * FROM kassa_tx WHERE id=$1',[req.params.id]);
   const tx = r.rows[0];
   if(!tx || !tx.pending) return res.status(400).json({error:'нечего отменять'});
@@ -384,7 +396,7 @@ app.post('/api/kassa/:id/unpropose', auth, async (req,res)=>{
   res.json({ ok:true });
 });
 // одобрить изменение (противоположная сторона)
-app.post('/api/kassa/:id/approve', auth, async (req,res)=>{
+app.post('/api/kassa/:id/approve', auth, requireAny(['mgr','sup']), async (req,res)=>{
   const norm = v => String(v==null?'':v).replace(',','.');
   try{
     const result = await withTx(async (c)=>{
@@ -393,6 +405,7 @@ app.post('/api/kassa/:id/approve', auth, async (req,res)=>{
       const tx = r.rows[0];
       if(!tx || !tx.pending) throw httpErr(400,'нечего одобрять');
       if(tx.pending.by===req.user.role) throw httpErr(403,'изменение одобряет вторая сторона');
+      if(tx.pending.byId!=null && tx.pending.byId===req.user.id) throw httpErr(403,'нельзя одобрить собственный запрос');
       // удаление по согласованию
       if(tx.pending.del){
         await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
@@ -444,11 +457,12 @@ app.post('/api/kassa/:id/approve', auth, async (req,res)=>{
   }catch(e){ if(e&&e.httpCode) return res.status(e.httpCode).json({error:e.message}); console.error('route error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'}); }
 });
 // отклонить изменение
-app.post('/api/kassa/:id/reject', auth, async (req,res)=>{
+app.post('/api/kassa/:id/reject', auth, requireAny(['mgr','sup']), async (req,res)=>{
   const r = await pool.query('SELECT * FROM kassa_tx WHERE id=$1',[req.params.id]);
   const tx = r.rows[0];
   if(!tx || !tx.pending) return res.status(400).json({error:'нечего отклонять'});
   if(tx.pending.by===req.user.role) return res.status(403).json({error:'решает вторая сторона'});
+  if(tx.pending.byId!=null && tx.pending.byId===req.user.id) return res.status(403).json({error:'нельзя решать собственный запрос'});
   const entry = { t:Date.now(), by:tx.pending.by, approver:req.user.role, rejected:true, changes:(tx.pending.del?[{label:'Удаление накладной', from:'удалить', to:'оставить'}]:genericDiff(tx,tx.pending.next)), note:tx.pending.note };
   await pool.query('UPDATE kassa_tx SET pending=NULL, log=$1 WHERE id=$2',[JSON.stringify((tx.log||[]).concat([entry])), tx.id]);
   res.json({ ok:true });
