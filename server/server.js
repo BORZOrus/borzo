@@ -470,22 +470,46 @@ function isSupplyOp(o){ return o && ((typeof o.id==='string' && (o.id.indexOf('s
 app.put('/api/fin', auth, requireAny(['mgr','fin']), async (req,res)=>{
   const data = req.body && req.body.data;
   if(!data || typeof data!=='object' || !Array.isArray(data.ops)) return res.status(400).json({error:'некорректные данные'});
-  const cur = await pool.query('SELECT data FROM fin_state WHERE id=1');
+  // защита от битых данных (аудит #12): выкидываем null/не-объекты из ops, чтобы клиентские расчёты не падали
+  data.ops = data.ops.filter(o=> o && typeof o==='object');
+  const baseRev = (req.body.baseRev==null) ? null : Number(req.body.baseRev);
+  const cur = await pool.query('SELECT data, rev FROM fin_state WHERE id=1');
   const curOps = (cur.rowCount && cur.rows[0].data && Array.isArray(cur.rows[0].data.ops)) ? cur.rows[0].data.ops : [];
+  const curRev = cur.rowCount ? Number(cur.rows[0].rev)||0 : 0;
+  // СРАВНЕНИЕ ВЕРСИЙ (compare-and-swap): клиент прислал baseRev — версию, на которой он строил правку.
+  // Если на сервере уже более свежая версия — конфликт: не затираем, отдаём серверную правду, клиент сольёт и повторит.
+  if(cur.rowCount && curRev>0 && baseRev!=null && baseRev!==curRev){
+    return res.status(409).json({ conflict:true, error:'версия устарела — подтяните свежие данные', data:cur.rows[0].data, rev:curRev });
+  }
   // ЗАЩИТА ОТ ЗАТИРАНИЯ: не даём резко обрушить базу (пустой/подозрительно маленький клиент не должен стереть историю)
   const incNonSupply = data.ops.filter(o=>!isSupplyOp(o)).length;
   const curNonSupply = curOps.filter(o=>!isSupplyOp(o)).length;
   if(curNonSupply >= 20 && incNonSupply < curNonSupply*0.5){
-    return res.status(409).json({ error:'отклонено: подозрительное сокращение данных (защита от потери). На сервере '+curNonSupply+', прислано '+incNonSupply+'.' });
+    return res.status(409).json({ conflict:true, error:'отклонено: подозрительное сокращение данных (защита от потери). На сервере '+curNonSupply+', прислано '+incNonSupply+'.', data:cur.rows[0].data, rev:curRev });
   }
   // сохраняем ТЕКУЩИЕ серверные операции-связки (закупы/выдачи из кассы), игнорируя присланные клиентом — чтобы финмодуль их не затирал
   const serverSupply = curOps.filter(isSupplyOp);
   data.ops = data.ops.filter(o=>!isSupplyOp(o)).concat(serverSupply).sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
-  const r = await pool.query(`
-    INSERT INTO fin_state(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3)
-    ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, rev=fin_state.rev+1, updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at
-    RETURNING rev`, [JSON.stringify(data), req.user.id, Date.now()]);
-  res.json({ ok:true, rev:r.rows[0].rev });
+  // атомарная запись: обновляем ТОЛЬКО если версия на сервере всё ещё curRev (никто не влез между SELECT и UPDATE)
+  if(cur.rowCount){
+    const r = await pool.query(
+      'UPDATE fin_state SET data=$1, rev=rev+1, updated_by=$2, updated_at=$3 WHERE id=1 AND rev=$4 RETURNING rev',
+      [JSON.stringify(data), req.user.id, Date.now(), curRev]);
+    if(!r.rowCount){
+      const fresh = await pool.query('SELECT data, rev FROM fin_state WHERE id=1');
+      return res.status(409).json({ conflict:true, error:'параллельная запись — подтяните свежие данные', data:fresh.rows[0].data, rev:Number(fresh.rows[0].rev)||0 });
+    }
+    return res.json({ ok:true, rev:Number(r.rows[0].rev) });
+  } else {
+    const r = await pool.query(
+      'INSERT INTO fin_state(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3) ON CONFLICT (id) DO NOTHING RETURNING rev',
+      [JSON.stringify(data), req.user.id, Date.now()]);
+    if(!r.rowCount){ // кто-то успел создать первым — это конфликт
+      const fresh = await pool.query('SELECT data, rev FROM fin_state WHERE id=1');
+      return res.status(409).json({ conflict:true, error:'параллельная запись — подтяните свежие данные', data:fresh.rows[0].data, rev:Number(fresh.rows[0].rev)||0 });
+    }
+    return res.json({ ok:true, rev:Number(r.rows[0].rev) });
+  }
 });
 
 app.get('/api/push/pubkey', (req,res)=> res.json({ key: process.env.VAPID_PUBLIC||'' }));

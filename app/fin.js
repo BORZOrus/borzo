@@ -29,11 +29,33 @@
   // облако: залогинен (есть токен) → сервер источник правды; нет токена → демо на localStorage как раньше
   var CLOUD = !!(window.API && window.API.token && window.API.finPut);
   var pushT=null, pushing=false, pendAgain=false;
-  function doPush(){ if(!CLOUD)return; if(pushing){pendAgain=true;return;} pushing=true;
-    window.API.finPut(DB).then(function(){pushing=false; if(pendAgain){pendAgain=false;doPush();}})
+  var synced=false;      // до завершения первого finGet НИЧЕГО не отправляем на сервер (защита от затирания истории пустой базой)
+  var curRev=0;          // версия, на которой построена локальная база (для сравнения версий на сервере)
+  var conflictTries=0;   // ограничитель повторов при конфликте
+  // слияние при конфликте: серверная база — основа, добавляем СВОИ операции, которых на сервере ещё нет (по id). Ничего не теряем.
+  function mergeDB(server, local){
+    var out = {}; for(var k in server){ if(Object.prototype.hasOwnProperty.call(server,k)) out[k]=server[k]; }
+    var sOps = Array.isArray(server.ops)?server.ops:[];
+    var lOps = Array.isArray(local.ops)?local.ops:[];
+    var seen={}; sOps.forEach(function(o){ if(o&&o.id!=null) seen[o.id]=true; });
+    var extra = lOps.filter(function(o){ return o && o.id!=null && !seen[o.id]; });   // мои новые, серверу неизвестные
+    out.ops = sOps.concat(extra).sort(function(a,b){ return (b&&b.ts||0)-(a&&a.ts||0); });
+    // сотрудники — объединяем, чтобы не потерять только что добавленного
+    var se=Array.isArray(server.employees)?server.employees:[], le=Array.isArray(local.employees)?local.employees:[];
+    out.employees = se.concat(le.filter(function(x){ return se.indexOf(x)<0; }));
+    return out;
+  }
+  function doPush(){ if(!CLOUD||!synced)return; if(pushing){pendAgain=true;return;} pushing=true;
+    window.API.finPut(DB,curRev).then(function(res){ pushing=false; conflictTries=0; if(res&&res.rev!=null)curRev=res.rev; if(pendAgain){pendAgain=false;doPush();}})
       .catch(function(e){ pushing=false;
-        // сервер отклонил как затирание → подтянуть серверную правду и заменить локальную (самолечение)
-        if(e&&/сокращени|409/.test(e.message||'')){ window.API.finGet().then(function(res){ var sd=res&&res.data; if(sd&&Array.isArray(sd.ops)&&sd.ops.length>((DB&&DB.ops&&DB.ops.length)||0)){ DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); if(typeof render==='function')render(); } }).catch(function(){}); }
+        // конфликт версий/защита от затирания → взять серверную правду, влить свои новые операции, повторить
+        var isConf = e && (e.status===409 || (e.body&&e.body.conflict) || /сокращени|409|устарел|параллельн/i.test(e.message||''));
+        if(isConf && conflictTries<5){ conflictTries++;
+          var sd = e.body && e.body.data;
+          var apply = function(server,rev){ if(!server||!Array.isArray(server.ops))return; DB=mergeDB(server,DB); curRev=rev||curRev; localStorage.setItem(KEY,JSON.stringify(DB)); if(typeof render==='function')render(); doPush(); };
+          if(sd){ apply(sd, e.body.rev); }
+          else { window.API.finGet().then(function(r){ apply(r&&r.data, r&&r.rev); }).catch(function(){}); }
+        }
       }); }
   function cloudPush(){ if(!CLOUD)return; clearTimeout(pushT); pushT=setTimeout(doPush,800); }
   function save(){ localStorage.setItem(KEY,JSON.stringify(DB)); cloudPush(); }
@@ -869,9 +891,11 @@
       var sd=res&&res.data;
       var sc=(sd&&Array.isArray(sd.ops))?sd.ops.length:0;
       var lc=(DB&&Array.isArray(DB.ops))?DB.ops.length:0;
+      curRev = (res&&res.rev!=null) ? res.rev : 0;
+      synced = true;                                                              // загрузка завершена — теперь запись на сервер разрешена
       if(sc>0){ DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); render(); }  // сервер — источник правды (удаления/связка/правки с других устройств доходят)
       else if(lc>0){ doPush(); }                                                  // сервер пуст, локально есть — первичная миграция вверх
-    }).catch(function(){});
+    }).catch(function(){ /* сеть недоступна: synced остаётся false — НЕ затираем сервер вслепую */ });
   } else {
     var rsd=document.querySelector('.roleswitch'); if(rsd)rsd.classList.add('show');   // демо без логина — переключатель нужен
     setRole('ruslan');

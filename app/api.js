@@ -12,7 +12,7 @@ window.API = (function(){
       body: body?JSON.stringify(body):undefined
     }).then(function(r){
       if(r.status===401){ expired(); throw new Error('401'); }
-      return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Ошибка'); return d; });
+      return r.json().then(function(d){ if(!r.ok){ var er=new Error(d.error||'Ошибка'); er.status=r.status; er.body=d; throw er; } return d; });
     });
   }
   var self;
@@ -41,7 +41,7 @@ window.API = (function(){
     approve:     function(id){ return req('POST','/kassa/'+id+'/approve'); },
     reject:      function(id){ return req('POST','/kassa/'+id+'/reject'); },
     finGet:      function(){ return req('GET','/fin'); },
-    finPut:      function(data){ return req('PUT','/fin',{data:data}); },
+    finPut:      function(data,baseRev){ return req('PUT','/fin',{data:data,baseRev:baseRev}); },
     logout: logout
   };
   return self;
