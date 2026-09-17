@@ -247,9 +247,10 @@
   function buyHtml(){
     var ed=!!editingId, sy=buf.category==='Сырьё';
     return '<h3>'+(ed?'✏️ Изменить накладную':'🛒 Закуп')+'</h3>'+
-      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?(editDirect?'Твой закуп — правки применяются сразу, без согласования.':'Правки уйдут второй стороне на согласование — молча ничего не меняется.'):'Сфотографируйте накладную — позиции и цены распознаются автоматически (🔴 демо-пример; реальный ИИ на сервере). Чек можно приложить отдельно. '+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Без документа списание нельзя.'))+'</div>'+
+      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?(editDirect?'Твой закуп — правки применяются сразу, без согласования.':'Правки уйдут второй стороне на согласование — молча ничего не меняется.'):'Кнопка «Распознать» сама сфотографирует накладную, приложит её и заполнит позиции. Если распознаёт долго/криво — приложи фото кнопками ниже и впиши вручную. '+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Снабженцу — обязательно приложить накладную или чек.'))+'</div>'+
+      (ed?'':'<label class="photo" style="margin:0 0 10px;border-style:solid;border-color:var(--k-green);color:var(--k-green);font-weight:700">🔍 Сфотографировать и распознать накладную<input type="file" accept="image/*" capture="environment" id="ph-scan"></label>')+
       '<div class="row" style="gap:10px;margin-bottom:12px">'+
-        '<label class="photo grow'+(buf.invoice?' has':'')+'" style="margin:0">'+(buf.invoice?'✓ Накладная<img src="'+buf.invoice+'">':'📄 Накладная')+'<input type="file" accept="image/*" capture="environment" id="ph-inv"></label>'+
+        '<label class="photo grow'+(buf.invoice?' has':'')+'" style="margin:0">'+(buf.invoice?'✓ Накладная<img src="'+buf.invoice+'">':'📎 Накладная<br><span style="font-size:11px;opacity:.7">(без распознавания)</span>')+'<input type="file" accept="image/*" capture="environment" id="ph-inv"></label>'+
         '<label class="photo grow'+(buf.receipt?' has':'')+'" style="margin:0">'+(buf.receipt?'✓ Чек<img src="'+buf.receipt+'">':'🧾 Чек')+'<input type="file" accept="image/*" id="ph-rec"></label>'+
       '</div>'+
       (buf.scanning?'<div class="scanning">🔎 Распознаю накладную…</div>':'')+
@@ -311,16 +312,19 @@
   }
   function wireBuy(){
     renderItems();
-    $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){
-      buf.invoice=d;
-      if(editingId){ refreshBuy(); return; }
+    // «Сфотографировать и распознать»: фото → это же фото становится накладной + ИИ заполняет позиции
+    if($('ph-scan')) $('ph-scan').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){
+      buf.invoice=d;                       // фото распознавания = документ-накладная
       buf.scanning=true; refreshBuy();
       API.scan(d).then(function(res){
         buf.scanning=false;
         if(res.items && res.items.length) buf.items=res.items.map(function(i){return {name:i.name,qty:i.qty,unit:i.unit||'шт',price:i.price};});
+        else alert('Ничего не распозналось — впиши позиции вручную (фото накладной уже приложено).');
         refreshBuy();
-      }).catch(function(){ buf.scanning=false; refreshBuy(); alert('Не удалось распознать накладную — введите позиции вручную'); });
+      }).catch(function(){ buf.scanning=false; refreshBuy(); alert('Распознавание не сработало — фото накладной приложено, впиши позиции вручную.'); });
     }); };
+    // «Накладная» — просто прикрепить фото, без распознавания
+    $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; refreshBuy(); }); };
     $('ph-rec').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.receipt=d; refreshBuy(); }); };
     $('additem').onclick=function(){ buf.items.push({name:'',qty:'',unit:'шт'}); renderItems(); };
     Array.prototype.forEach.call($('cat').querySelectorAll('button'),function(b){
