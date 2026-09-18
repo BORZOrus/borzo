@@ -29,7 +29,7 @@ BORZO (производство столов-трансформеров, Аст�
 ## Этап 1 — MVP (это задание)
 ### Таблицы (предложение, можно улучшить)
 - `crm_clients`: id, name, phone (нормализованный +7...), instagram, source, note, created_at, updated_at.
-- `crm_deals`: id, client_id, title, amount NUMERIC, stage_id, manager_id (users.id), source, note, created_at, updated_at, closed_at, lost_reason.
+- `crm_deals`: id, client_id, title, amount NUMERIC, stage_id, manager_id (users.id), source, note, created_at, updated_at, closed_at, lost_reason, items JSONB (что продано: [{name,qty,price}]), ship_date (плановая дата отгрузки).
 - `crm_stages`: id, name, ord, is_won, is_lost (сид: Новая заявка → В работе → Подбор решения → Договорились/Предоплата → Выполнено ✓won, Отказ ✗lost — уточнить у Руслана, это его текущая воронка в MindSales).
 - `crm_events`: id, deal_id, ts, kind (note/status/call/msg), text, author_id — лента событий сделки.
 - `crm_templates`: id, title, text — шаблоны ответов (копирование в буфер в MVP).
@@ -41,13 +41,17 @@ BORZO (производство столов-трансформеров, Аст�
 - Клиенты: список с поиском (имя/телефон), карточка с историей сделок.
 - Быстрое создание заявки: имя+телефон+источник одной формой.
 - Аналитика (простая, в этом же экране): сделок по этапам, конверсия в продажу, сумма продаж за месяц, источники заявок.
-- Плитка «CRM» в `app/home.html` для mgr и fin.
+- Плитка «CRM» в `app/home.html` для mgr и fin. ВАЖНО: сейчас роль fin из прихожей сразу редиректится в fin.html — это изменить: fin видит прихожую с ДВУМЯ плитками (Финансы и CRM), как mgr. Ульяна работает и в финансах, и в CRM.
+- Перевод сделки в этап «Выполнено» (is_won) обязательно запрашивает состав (items) и дату отгрузки (ship_date), если не заполнены — это мост к производству (этап 3).
 
 ### API (каркас)
 `GET/POST /api/crm/clients`, `GET/POST/PATCH /api/crm/deals`, `POST /api/crm/deals/:id/stage`, `GET/POST /api/crm/deals/:id/events`, `GET/POST/DELETE /api/crm/templates`, `GET /api/crm/analytics?from&to`. Все под `auth` + `requireAny(['mgr','fin'])`.
 
 ### Импорт из MindSales
 `POST /api/crm/import` (mgr): принимает JSON выгрузки MindSales (сделки: id, statusId, clientId, clientName, contacts; клиенты; этапы воронки). Маппинг этапов MindSales → crm_stages. Повторный импорт не дублирует (по внешнему id — колонка `ext_id`).
+
+## Этап 3 — производство и отгрузки (НЕ делать сейчас, но заложить в схему)
+Цель-цикл: менеджер нажал «продано» → автоматически создаётся заказ производства («собрать стол X к дате Y») → блок отгрузок видит дату и состав. Поэтому в MVP сделка уже хранит items и ship_date (см. схему). Демо-экраны production.html/shipments.html — референс дизайна для будущего этапа.
 
 ## Этап 2 — WhatsApp напрямую (НЕ делать сейчас, но заложить)
 Meta WhatsApp Business Cloud API, без посредников: входящие через webhook `POST /api/crm/wa/webhook` (verify-token GET), исходящие через Graph API. Входящее сообщение с неизвестного номера → авто-создание клиента+сделки в первом этапе. Ответы в 24-часовом окне бесплатны; шаблоны — платно по тарифам Meta для Казахстана. В MVP: заложить в crm_events kind='msg' и поле clients.phone в формате E.164, чтобы интеграция встала без переделки схемы.
@@ -60,6 +64,11 @@ Meta WhatsApp Business Cloud API, без посредников: входящи�
 5. В названиях клиентов/заметках HTML-код отображается текстом (XSS закрыт).
 6. Аналитика: цифры сходятся с ручным пересчётом на тестовых данных.
 7. Ни одна существующая функция кассы/финансов не изменилась (балансы и счётчики до/после идентичны).
+8. Роль fin видит прихожую с плитками Финансы + CRM и работает в обеих.
+9. Перевод в «Выполнено» без состава/даты отгрузки — запрашивает их.
+
+## Формат результата
+Pull request (или коммиты в отдельной ветке) в BORZOrus/borzo с описанием: что сделано, как проверялось, что осталось. Деплой на боевой сервер делает штаб — доступов к серверу у исполнителя нет и не нужно.
 
 ## Что НЕ делать
 - Не подключать WhatsApp/Instagram в этом этапе.
