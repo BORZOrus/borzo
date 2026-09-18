@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const webpush = require('web-push');
+const crm = require('./crm');
 if(process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE){
   webpush.setVapidDetails(process.env.VAPID_SUBJECT||'mailto:admin@borzopult.com', process.env.VAPID_PUBLIC, process.env.VAPID_PRIVATE);
 }
@@ -72,6 +73,7 @@ async function initSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS kassa_tx_req_id_uidx ON kassa_tx(req_id) WHERE req_id IS NOT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS token_ver INTEGER NOT NULL DEFAULT 0;
   `);
+  await crm.initSchema(pool);
 }
 // подпись накладной (для защиты от дублей): позиции+сумма+категория, устойчива к перезаливке того же
 function sigOf(items, amount, category){
@@ -645,6 +647,9 @@ app.post('/api/push/subscribe', auth, async (req,res)=>{
     [sub.endpoint, req.user.id, req.user.role, JSON.stringify(sub)]);
   res.json({ ok:true });
 });
+
+// CRM uses the existing helpers without modifying other modules.
+crm.register(app, {pool, auth, requireAny, requireRole, withTx, savePhoto, uploadDir:UPLOAD_DIR});
 
 app.get('/api/health', (req,res)=> res.json({ ok:true }));
 

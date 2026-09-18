@@ -47,7 +47,7 @@
   var $=function(i){return document.getElementById(i);};
   // маршрут по роли: руководитель → весь пульт, снабженец → касса
   function nextParam(){ try{ var n=(new URLSearchParams(location.search)).get('next'); return (n&&/^[a-z0-9_-]+\.html$/i.test(n))?n:null; }catch(e){ return null; } }
-  function go(user){ var n=nextParam(); if(n){ location.replace(n); return; } var r=user&&user.role; location.replace(r==='mgr'?'home.html':(r==='fin'?'fin.html':'kassa.html')); }
+  function go(user){ var n=nextParam(); if(n){ location.replace(n); return; } var r=user&&user.role; location.replace((r==='mgr'||r==='fin')?'home.html':'kassa.html'); }
   // если уже вошёл — сразу по назначению
   if(localStorage.getItem('borzo_token')){
     try{ go(JSON.parse(localStorage.getItem('borzo_user')||'null')); }catch(e){ location.replace('kassa.html'); }

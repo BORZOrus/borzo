@@ -1,88 +1,230 @@
-/* CRM — живая логика: канбан, drag&drop, добавление/удаление, поиск, карточка сделки */
+/* BORZO CRM — server-backed, vanilla JS. No local customer cache or demo data. */
 (function(){
-  var SRC={Instagram:'#dd2a7b',WhatsApp:'#25d366',Kaspi:'#f14635','Сайт':'#2f66f6','Дилеры':'#8b5cf6'};
-  var STAGE_BADGE={new:'b-blue',qual:'b-amber',measure:'b-violet',invoice:'b-gray',pay:'b-green'};
-  var STAGE_COLOR={new:'var(--blue)',qual:'var(--amber)',measure:'var(--violet)',invoice:'var(--ink2)',pay:'var(--green)'};
-  var q='', selected=null, dragId=null;
-
-  function mln(n){ return (n/1e6).toFixed(1).replace('.',',')+' млн ₸'; }
-  function match(d){ if(!q) return true; return (d.title+' '+d.spec+' '+(d.source||'')).toLowerCase().indexOf(q)>=0; }
-  function srcDot(s){ return '<span class="d" style="width:8px;height:8px;border-radius:50%;background:'+(SRC[s]||'#9aa0a8')+'"></span>'; }
-
-  function render(){
-    var stages=DB.all('dealStages'), deals=DB.all('deals').filter(match);
-    var kb=document.getElementById('kanban');
-    kb.innerHTML = stages.map(function(st){
-      var list=deals.filter(function(d){return d.stage===st.id;});
-      var sum=list.reduce(function(a,d){return a+(d.price||0);},0);
-      var cards=list.map(function(d){
-        return '<div class="deal'+(d.id===selected?' sel':'')+'" draggable="true" data-id="'+d.id+'">'+
-          '<div class="dt">'+d.title+'</div><div class="spec">'+d.spec+'</div><div class="price">'+(d.price||0).toLocaleString('ru-RU')+' ₸</div>'+
-          (d.flag?'<span class="badge '+(d.flagType==='green'?'b-green':'b-amber')+'" style="margin-top:6px;display:inline-block">'+d.flag+'</span>':'')+
-          '<div class="foot"><span class="src">'+srcDot(d.source)+(d.source||'')+'</span>'+(d.manager?'<span class="ava" style="margin-left:auto">'+d.manager+'</span>':'')+'</div></div>';
-      }).join('') || '<div class="muted" style="padding:8px 2px;font-size:11px">— пусто —</div>';
-      return '<div class="kcol" data-stage="'+st.id+'"><div class="kcol-h"><div><div class="t" style="color:'+STAGE_COLOR[st.id]+'">'+st.name+'</div>'+
-        '<div class="c">'+list.length+' сделок · '+mln(sum)+'</div></div><span class="dots">⋮</span></div><div class="kbody">'+cards+'</div></div>';
-    }).join('');
-
-    var tb=document.getElementById('deallist');
-    if(tb){ tb.innerHTML = deals.slice(0,8).map(function(d){
-      var stName=(stages.filter(function(s){return s.id===d.stage;})[0]||{}).name||'';
-      return '<tr data-id="'+d.id+'" style="cursor:pointer"><td style="font-weight:600">'+d.title+'</td><td><span class="badge '+(STAGE_BADGE[d.stage]||'b-gray')+'">'+stName+'</span></td>'+
-        '<td>'+(d.manager||'—')+'</td><td>'+(d.source||'')+'</td><td style="font-weight:600">'+(d.price||0).toLocaleString('ru-RU')+' ₸</td>'+
-        '<td class="muted">—</td><td class="muted">—</td></tr>';
-    }).join(''); }
-
-    var cnt=document.querySelector('.card .between .muted');
-    wire();
+  'use strict';
+  var $=function(id){return document.getElementById(id);};
+  var state={user:null,stages:[],managers:[],deals:[],clients:[],templates:[],tab:'deals',q:'',userId:null};
+  var sheet=$('sheet'), body=$('sheet-body'), focusBefore=null, toastTimer=null, sheetGeneration=0, loading=false;
+  var pendingMutation=false, uncertainMutation=false, refreshSequence=0;
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function money(v){return Number(v||0).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₸';}
+  function stamp(v){if(!v)return 'Дата неизвестна';return new Date(v).toLocaleString('ru-RU',{timeZone:'Asia/Almaty',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}
+  function day(v){return v?String(v).slice(0,10).split('-').reverse().join('.'): 'Не указана';}
+  function uid(){return crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');}
+  function api(method,url,b){return API.crm(method,url,b);}
+  function toast(msg){$('toast').textContent=msg;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(function(){$('toast').hidden=true;},3500);}
+  function error(e){return e&&e.message==='401'?'Сессия завершена. Войдите заново.':e&&e.message||'Нет связи с сервером. Повторите попытку.';}
+  function openSheet(title,html){
+    if(sheet.hidden) focusBefore=document.activeElement;
+    sheetGeneration++; $('sheet-title').textContent=title; body.innerHTML=html;
+    sheet.hidden=false;$('sheet-bg').hidden=false;$('app').inert=true;document.body.style.overflow='hidden';sheet.scrollTop=0;sheet.focus();
   }
-
-  function selectDeal(id){
-    selected=id; var d=DB.find('deals',id); if(!d) return;
-    var t=document.getElementById('dc-title'); if(t)t.textContent=d.title;
-    var s=document.getElementById('dc-source'); if(s)s.textContent=d.source||'—';
-    var p=document.getElementById('dc-product'); if(p)p.textContent='Стол-трансформер '+d.spec;
-    render();
+  function closeSheet(){
+    if(pendingMutation) return;
+    if(uncertainMutation&&!confirm('Сервер мог сохранить действие. Лучше повторить отправку с тем же ключом. Всё равно закрыть?')) return;
+    uncertainMutation=false;sheetGeneration++;sheet.hidden=true;$('sheet-bg').hidden=true;$('app').inert=false;document.body.style.overflow='';body.innerHTML='';
+    if(focusBefore&&focusBefore.isConnected) focusBefore.focus();
   }
-
-  function wire(){
-    document.querySelectorAll('.deal').forEach(function(c){
-      c.addEventListener('click',function(){ selectDeal(c.getAttribute('data-id')); });
-      c.addEventListener('dragstart',function(e){ dragId=c.getAttribute('data-id'); c.classList.add('drag'); });
-      c.addEventListener('dragend',function(){ c.classList.remove('drag'); document.querySelectorAll('.kcol').forEach(function(k){k.classList.remove('dragover');}); });
-    });
-    document.querySelectorAll('.kcol').forEach(function(col){
-      col.addEventListener('dragover',function(e){ e.preventDefault(); col.classList.add('dragover'); });
-      col.addEventListener('dragleave',function(){ col.classList.remove('dragover'); });
-      col.addEventListener('drop',function(e){ e.preventDefault(); col.classList.remove('dragover');
-        if(dragId){ var st=col.getAttribute('data-stage'); DB.update('deals',dragId,{stage:st}); UI.toast('Сделка перемещена','ok'); dragId=null; render(); } });
-    });
-    document.querySelectorAll('#deallist tr').forEach(function(r){ r.addEventListener('click',function(){ selectDeal(r.getAttribute('data-id')); }); });
+  $('sheet-close').onclick=closeSheet;$('sheet-bg').onclick=closeSheet;
+  sheet.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){e.preventDefault();closeSheet();}
+    if(e.key==='Tab'){
+      var nodes=Array.from(sheet.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')).filter(function(x){return x.getClientRects().length;});
+      if(!nodes.length){e.preventDefault();sheet.focus();return;}
+      var first=nodes[0],last=nodes[nodes.length-1];
+      if(e.shiftKey&&(document.activeElement===first||document.activeElement===sheet)){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&(document.activeElement===last||document.activeElement===sheet)){e.preventDefault();first.focus();}
+    }
+  });
+  sheet.addEventListener('focusin',function(e){if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) setTimeout(function(){e.target.scrollIntoView({block:'nearest'});},250);});
+  function field(label,name,value,type,extra){return '<label class="field">'+esc(label)+'<input name="'+esc(name)+'" type="'+(type||'text')+'" value="'+esc(value)+'" '+(extra||'')+'></label>';}
+  function area(label,name,value){return '<label class="field">'+esc(label)+'<textarea name="'+esc(name)+'" maxlength="10000">'+esc(value)+'</textarea></label>';}
+  function options(list,value){return list.map(function(x){return '<option value="'+esc(x.id)+'"'+(String(x.id)===String(value)?' selected':'')+'>'+esc(x.name)+'</option>';}).join('');}
+  function select(label,name,list,value){return '<label class="field">'+esc(label)+'<select aria-label="'+esc(label)+'" name="'+esc(name)+'">'+options(list,value)+'</select></label>';}
+  function source(value){return field('Источник','source',value,'text','list="sources" maxlength="100"')+'<datalist id="sources">'+['Instagram','WhatsApp','Kaspi','Сайт','Дилеры','Рекомендация','Другое'].map(function(s){return '<option value="'+esc(s)+'"></option>';}).join('')+'</datalist>';}
+  function submit(label){return '<p class="error" data-error role="alert"></p><button class="btn block" type="submit">'+esc(label||'Сохранить')+'</button>';}
+  function val(form,name){return form.elements.namedItem(name).value.trim();}
+  function mutation(form,method,url,read,onSuccess){
+    var pending=null,busy=false,disabledState=null;
+    var button=form.querySelector('[type=submit]'), label=button.textContent;
+    form.onsubmit=async function(e){
+      e.preventDefault();if(busy||pendingMutation||(!pending&&!form.reportValidity()))return;
+      busy=true;pendingMutation=true;button.disabled=true;button.textContent='Сохраняю…';
+      var errBox=form.querySelector('[data-error]');errBox.textContent='';
+      var appWasInert=$('app').inert;$('app').inert=true;sheet.inert=true;
+      try{
+        if(!pending) pending=Object.assign(await read(),{reqId:uid()});
+        var result=await api(method,url,pending);pending=null;uncertainMutation=false;pendingMutation=false;
+        sheet.inert=false;$('app').inert=appWasInert;
+        await onSuccess(result);
+      }catch(ex){
+        if(!pending || (ex.status && ex.status<500)){
+          pending=null;uncertainMutation=false;
+          if(disabledState){disabledState.forEach(function(x){x.el.disabled=x.disabled;});disabledState=null;}
+        }else {
+          uncertainMutation=true;
+          if(!disabledState)disabledState=Array.from(form.elements).filter(function(el){return el!==button;}).map(function(el){return {el:el,disabled:el.disabled};});
+          disabledState.forEach(function(x){x.el.disabled=true;});
+        }
+        errBox.textContent=error(ex)+(uncertainMutation?' Повторная отправка безопасна: используем тот же ключ.':'');
+      }finally{
+        busy=false;pendingMutation=false;sheet.inert=false;$('app').inert=!sheet.hidden;
+        button.disabled=false;button.textContent=pending?'Повторить сохранение':label;
+      }
+    };
   }
-
-  function addDeal(){
-    var stages=DB.all('dealStages');
-    UI.modal({title:'Новая сделка', submit:'Создать',
-      fields:[
-        {k:'title',label:'Клиент / название',placeholder:'напр. Айгуль, Алматы'},
-        {k:'spec',label:'Изделие',value:'GEOMETRY 3,5 м'},
-        {k:'price',label:'Сумма, ₸',type:'number',value:'300000'},
-        {k:'stage',label:'Этап',type:'select',value:'new',options:stages.map(function(s){return {value:s.id,label:s.name};})},
-        {k:'source',label:'Источник',type:'select',value:'Instagram',options:['Instagram','WhatsApp','Kaspi','Сайт','Дилеры'].map(function(s){return {value:s,label:s};})},
-        {k:'manager',label:'Менеджер (буква)',value:'А'}
-      ],
-      onSubmit:function(v){
-        if(!v.title){ UI.toast('Введите клиента','err'); return false; }
-        DB.add('deals',{title:v.title,spec:v.spec,price:parseInt(v.price)||0,stage:v.stage,source:v.source,manager:v.manager});
-        UI.toast('Сделка добавлена','ok'); render();
-      }});
+  async function reload(){
+    if(loading) return;loading=true;var sequence=++refreshSequence;
+    $('status').textContent='Обновляю…';
+    try{
+      var d=await api('GET','/deals');if(sequence!==refreshSequence)return;state.deals=d.deals;
+      $('status').textContent='Обновлено '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      if(state.tab==='deals') renderDeals();
+      else if(state.tab==='clients') await loadClients();
+      else if(state.tab==='analytics') await renderAnalytics();
+      else if(state.tab==='templates') await renderTemplates();
+    }catch(e){$('status').textContent='Не удалось обновить: '+error(e);}finally{loading=false;}
   }
-
-  document.getElementById('crm-add').addEventListener('click',addDeal);
-  var srch=document.getElementById('crm-search');
-  srch.addEventListener('input',function(){ q=srch.value.trim().toLowerCase(); render(); });
-  var del=document.getElementById('dc-del');
-  if(del) del.addEventListener('click',function(){ if(!selected){UI.toast('Выберите сделку','err');return;} UI.confirm('Удалить эту сделку?',function(){ DB.remove('deals',selected); selected=null; UI.toast('Удалено','ok'); render(); }); });
-
-  render();
+  function matches(d){
+    var text=[d.client_name,d.title,d.phone,d.source,d.manager_name].join(' ').toLowerCase();
+    var digits=state.q.replace(/\D/g,'');
+    return !state.q||text.indexOf(state.q)>=0||(digits.length>2&&String(d.phone||'').indexOf(digits)>=0);
+  }
+  var lastBoardQuery='';
+  function renderDeals(){
+    var oldBoard=$('main').querySelector('.board'),oldScroll=oldBoard?oldBoard.scrollLeft:0;
+    var deals=state.deals.filter(matches);
+    $('main').innerHTML='<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
+      var rows=deals.filter(function(d){return d.stage_id===s.id;});
+      return '<section class="column '+(s.is_won?'won':s.is_lost?'lost':'')+'"><header class="col-head"><h2><span class="dot"></span>'+esc(s.name)+'</h2><div class="muted">'+esc(rows.length)+' · '+esc(money(rows.reduce(function(n,d){return n+Number(d.amount);},0)))+'</div></header>'+rows.map(function(d){
+        var days=d.stage_entered_at?Math.max(0,Math.floor((Date.now()-new Date(d.stage_entered_at).getTime())/86400000))+' дн. в этапе':'Срок неизвестен';
+        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div><div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button><button class="stage-btn" data-move="'+esc(d.id)+'">Сменить этап →</button></article>';
+      }).join('')+(rows.length?'':'<div class="empty">'+(state.q?'Нет совпадений':'Пока нет сделок')+'</div>')+'</section>';
+    }).join('')+'</div>';
+    var board=$('main').querySelector('.board');
+    if(state.q&&state.q!==lastBoardQuery){var first=board.querySelector('.deal');if(first)board.scrollLeft=first.parentElement.offsetLeft-16;}
+    else board.scrollLeft=oldScroll;lastBoardQuery=state.q;
+    bindDeals($('main'));
+  }
+  function bindDeals(root){
+    root.querySelectorAll('[data-deal]').forEach(function(b){b.onclick=function(){showDeal(b.dataset.deal);};});
+    root.querySelectorAll('[data-move]').forEach(function(b){b.onclick=function(){showStage(b.dataset.move);};});
+  }
+  function clientForm(c){return field('Имя клиента','name',c.name,'text','required maxlength="200" autocomplete="name"')+field('Телефон','phone',c.phone,'tel','autocomplete="tel" placeholder="+7 700 000 00 00"')+field('Instagram','instagram',c.instagram,'text','maxlength="200"')+source(c.source)+area('Заметка о клиенте','note',c.note);}
+  function quickDeal(c){
+    openSheet('Новая заявка','<form id="quick-form">'+(c?'<p class="pre">'+esc(c.name)+' · '+esc(c.phone||'Без телефона')+'</p>':field('Имя клиента','name','','text','required maxlength="200" autocomplete="name"')+field('Телефон','phone','','tel','required autocomplete="tel" placeholder="+7 700 000 00 00"'))+source(c?c.source:'')+'<p class="hint">Заявка появится в первом этапе. Сумму и состав можно заполнить позже.</p>'+submit('Создать заявку')+'</form>');
+    var f=$('quick-form');
+    mutation(f,'POST','/deals',function(){var src=val(f,'source');return c?{client_id:c.id,source:src}:{client:{name:val(f,'name'),phone:val(f,'phone'),source:src},source:src};},async function(r){closeSheet();toast('Заявка создана');await reload();showDeal(r.deal.id);});
+    (f.elements.namedItem(c?'source':'name')).focus();
+  }
+  function contactLinks(d){
+    var p=d.phone;
+    if(!p||!/^\+[1-9]\d{7,14}$/.test(p))return '<p class="muted">Телефон не указан</p>';
+    return '<div class="actions"><a class="ghost" href="tel:'+esc(p)+'">'+esc(p)+'</a><a class="ghost" href="https://wa.me/'+esc(p.slice(1))+'" target="_blank" rel="noopener noreferrer">WhatsApp ↗</a></div>';
+  }
+  async function showDeal(id){
+    openSheet('Сделка','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
+    try{
+      var all=await Promise.all([api('GET','/deals/'+id),api('GET','/deals/'+id+'/events'),api('GET','/templates')]);
+      if(gen!==sheetGeneration)return;
+      var d=all[0].deal, files=all[0].files;state.templates=all[2].templates;
+      $('sheet-title').textContent=d.client_name;
+      body.innerHTML='<span class="pill">'+esc(d.stage_name)+'</span><div class="amount">'+esc(money(d.amount))+'</div><p class="pre">'+esc(d.title)+'</p>'+contactLinks(d)+
+        '<div class="actions"><button class="btn" id="deal-stage">Сменить этап</button><button class="ghost" id="deal-edit">Изменить</button><button class="ghost" id="deal-client">Клиент</button></div>'+
+        '<p class="hint">'+esc(d.manager_name||'—')+' · '+esc(d.source||'Без источника')+'</p>'+(d.note?'<p class="pre">'+esc(d.note)+'</p>':'')+
+        (d.lost_reason?'<p class="pre danger">Причина отказа: '+esc(d.lost_reason)+'</p>':'')+
+        (d.imported_incomplete?'<p class="hint">Импорт: дополните состав и дату отгрузки через «Изменить».</p>':'')+((d.is_won||d.is_lost)&&!d.closed_at?'<p class="hint">Дата закрытия неизвестна. Сделка не включена в сумму продаж за период. Уточните дату через «Изменить».</p>':'')+'<h3>Состав и отгрузка</h3><p class="muted">Дата: '+esc(day(d.ship_date))+'</p>'+(d.items.length?d.items.map(function(x){return '<div class="metric"><span>'+esc(x.name)+' × '+esc(x.qty)+'</span><b>'+esc(money(x.price*x.qty))+'</b></div>';}).join(''):'<p class="muted">Состав не заполнен</p>')+
+        '<h3>Фото и файлы</h3><div class="files">'+files.map(function(f){
+          var safe=/^\/uploads\/[\w-]+\.(jpg|png|webp|pdf)$/.test(f.url);if(!safe)return '';
+          return '<a class="file" href="'+esc(f.url)+'" target="_blank" rel="noopener noreferrer">'+(f.mime.indexOf('image/')===0?'<img loading="lazy" src="'+esc(f.url)+'" alt="'+esc(f.name)+'">':'PDF · ')+esc(f.name)+'</a>';
+        }).join('')+'</div><form id="file-form"><label class="field">Прикрепить JPEG, PNG, WebP или PDF до 5 МБ<input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required></label>'+submit('Прикрепить')+'</form>'+
+        '<h3>Шаблоны ответов</h3>'+(state.templates.length?'<div class="actions">'+state.templates.map(function(t){return '<button class="ghost" data-copy="'+esc(t.id)+'">'+esc(t.title)+'</button>';}).join('')+'</div>':'<p class="muted">Руководитель может добавить шаблоны в разделе «Шаблоны».</p>')+
+        '<h3>Лента сделки</h3><form id="event-form">'+select('Тип записи','kind',[{id:'note',name:'Заметка'},{id:'call',name:'Звонок'},{id:'msg',name:'Сообщение (запись вручную)'}],'note')+area('Текст','text','')+submit('Добавить запись')+'</form><div class="timeline">'+all[1].events.map(function(e){
+          var kinds={note:'Заметка',call:'Звонок',msg:'Сообщение',status:'Этап'};
+          return '<article class="event"><div class="muted">'+esc(kinds[e.kind]||e.kind)+' · '+esc(e.author_name)+' · '+esc(stamp(e.ts))+'</div><div class="pre">'+esc(e.text)+'</div></article>';
+        }).join('')+'</div>';
+      $('deal-stage').onclick=function(){showStage(d.id,d);};$('deal-edit').onclick=function(){editDeal(d);};$('deal-client').onclick=function(){showClient(d.client_id);};bindCopy(body);
+      var f=$('event-form');f.elements.namedItem('text').required=true;
+      mutation(f,'POST','/deals/'+d.id+'/events',function(){return {kind:val(f,'kind'),text:val(f,'text')};},async function(){toast('Запись добавлена');await showDeal(d.id);});
+      var ff=$('file-form');
+      mutation(ff,'POST','/deals/'+d.id+'/files',async function(){var file=ff.elements.namedItem('file').files[0];if(!file||file.size>5*1024*1024)throw new Error('Выберите файл размером до 5 МБ');return {name:file.name,data:await fileData(file)};},async function(){toast('Файл прикреплён');await showDeal(d.id);});
+    }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
+  }
+  function itemHtml(x){return '<div class="item">'+field('Изделие','item_name',x.name,'text','required maxlength="200"')+'<div class="item-grid">'+field('Количество','item_qty',x.qty==null?1:x.qty,'number','required min="0.01" step="0.01"')+field('Цена, ₸','item_price',x.price==null?0:x.price,'number','required min="0" max="1000000000000" step="0.01"')+'</div><button type="button" class="ghost danger" data-remove>Убрать позицию</button></div>';}
+  function itemsForm(d){return '<h3>Состав</h3><div id="items">'+d.items.map(itemHtml).join('')+'</div><button type="button" class="ghost" id="add-item">+ Позиция</button>'+field('Дата отгрузки','ship_date',d.ship_date,'date');}
+  function wireItems(){function bind(){body.querySelectorAll('[data-remove]').forEach(function(b){b.onclick=function(){b.closest('.item').remove();};});}bind();$('add-item').onclick=function(){$('items').insertAdjacentHTML('beforeend',itemHtml({}));bind();};}
+  function readItems(){return Array.from($('items').querySelectorAll('.item')).map(function(el){return {name:el.querySelector('[name=item_name]').value.trim(),qty:el.querySelector('[name=item_qty]').value,price:el.querySelector('[name=item_price]').value};});}
+  async function showStage(id,known){
+    if(!known){openSheet('Сменить этап','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;try{known=(await api('GET','/deals/'+id)).deal;if(gen!==sheetGeneration)return;}catch(e){body.innerHTML='<p class="error">'+esc(error(e))+'</p>';return;}}
+    var d=known;
+    openSheet('Сменить этап','<form id="stage-form">'+select('Этап','stage_id',state.stages,d.stage_id)+'<div id="won-fields" hidden><p class="hint">Для завершения сделки нужны состав и плановая дата отгрузки.</p>'+field('Сумма сделки, ₸','amount',d.amount,'number','required min="0" max="1000000000000" step="0.01"')+itemsForm(d)+'</div><div id="lost-fields" hidden>'+area('Причина отказа','lost_reason',d.lost_reason)+'</div>'+submit('Сохранить этап')+'</form>');
+    wireItems();var f=$('stage-form'), manualAmount=Number(d.amount)>0;
+    f.elements.namedItem('amount').oninput=function(){manualAmount=true;};
+    function total(){if(!manualAmount)f.elements.namedItem('amount').value=String(Math.round(readItems().reduce(function(n,x){return n+Number(x.qty||0)*Number(x.price||0);},0)*100)/100);}
+    $('items').addEventListener('input',total);$('items').addEventListener('click',total);total();
+    function change(){var s=state.stages.find(function(x){return x.id===Number(val(f,'stage_id'));});$('won-fields').hidden=!s.is_won;$('lost-fields').hidden=!s.is_lost;
+      $('won-fields').querySelectorAll('input,button').forEach(function(x){x.disabled=!s.is_won;});f.elements.namedItem('ship_date').required=s.is_won;
+      if(s.is_won&&!$('items').children.length)$('add-item').click();}
+    f.elements.namedItem('stage_id').onchange=change;change();
+    mutation(f,'POST','/deals/'+d.id+'/stage',function(){var stage=state.stages.find(function(x){return x.id===Number(val(f,'stage_id'));});var b={baseRev:d.rev,stage_id:stage.id,lost_reason:val(f,'lost_reason')};if(stage.is_won){b.amount=val(f,'amount');b.items=readItems();b.ship_date=val(f,'ship_date');if(!b.items.length)throw new Error('Добавьте хотя бы одну позицию');}return b;},async function(){toast('Этап сохранён');await showDeal(d.id);await reload();});
+  }
+  function editDeal(d){
+    openSheet('Изменить сделку','<form id="deal-form">'+field('Название','title',d.title,'text','required maxlength="200"')+field('Сумма сделки, ₸','amount',d.amount,'number','required min="0" max="1000000000000" step="0.01"')+select('Менеджер','manager_id',state.managers,d.manager_id)+source(d.source)+area('Заметка о сделке','note',d.note)+itemsForm(d)+((d.is_won||d.is_lost)?field('Дата закрытия','closed_date',d.closed_at?new Date(new Date(d.closed_at).getTime()+5*3600000).toISOString().slice(0,10):'','date'):'')+submit()+'</form>');wireItems();
+    var f=$('deal-form');if(d.is_won)f.elements.namedItem('ship_date').required=true;
+    mutation(f,'PATCH','/deals/'+d.id,function(){var b={baseRev:d.rev,title:val(f,'title'),amount:val(f,'amount'),manager_id:Number(val(f,'manager_id')),source:val(f,'source'),note:val(f,'note'),items:readItems(),ship_date:val(f,'ship_date')};if(f.elements.namedItem('closed_date')&&val(f,'closed_date')){var original=d.closed_at?new Date(new Date(d.closed_at).getTime()+5*3600000).toISOString().slice(0,10):'';if(val(f,'closed_date')!==original)b.closed_at=val(f,'closed_date')+'T12:00:00+05:00';}return b;},async function(){toast('Сделка сохранена');await showDeal(d.id);await reload();});
+  }
+  var clientSeq=0;
+  async function loadClients(){var seq=++clientSeq;try{var r=await api('GET','/clients?q='+encodeURIComponent(state.q));if(state.tab!=='clients'||seq!==clientSeq)return;state.clients=r.clients;$('main').innerHTML='<div class="content">'+(r.clients.length?r.clients.map(function(c){return '<button class="card client-row" data-client="'+esc(c.id)+'"><strong>'+esc(c.name)+'</strong><div class="muted">'+esc(c.phone||'Без телефона')+' · Сделок: '+esc(c.deals_count)+'</div></button>';}).join(''):'<div class="empty">'+(state.q?'Клиенты не найдены':'Клиенты появятся после создания первой заявки')+'</div>')+'</div>';$('main').querySelectorAll('[data-client]').forEach(function(b){b.onclick=function(){showClient(b.dataset.client);};});}catch(e){if(state.tab==='clients')$('status').textContent=error(e);}}
+  async function showClient(id){
+    openSheet('Клиент','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
+    try{var r=await api('GET','/clients/'+id);if(gen!==sheetGeneration)return;var c=r.client;$('sheet-title').textContent=c.name;
+      body.innerHTML=contactLinks(c)+'<p class="muted">'+esc(c.source||'Без источника')+(c.instagram?' · Instagram: '+esc(c.instagram):'')+'</p><p class="pre">'+esc(c.note)+'</p><div class="actions"><button class="btn" id="client-new">+ Заявка</button><button class="ghost" id="client-edit">Изменить клиента</button></div><h3>История сделок</h3>'+r.deals.map(function(d){return '<button class="card client-row" data-deal="'+esc(d.id)+'"><strong>'+esc(d.title)+'</strong><div class="muted">'+esc(d.stage_name)+' · '+esc(money(d.amount))+' · '+esc(stamp(d.created_at))+'</div></button>';}).join('');bindDeals(body);
+      $('client-new').onclick=function(){quickDeal(c);};$('client-edit').onclick=function(){openSheet('Изменить клиента','<form id="client-form">'+clientForm(c)+submit()+'</form>');var f=$('client-form');mutation(f,'PATCH','/clients/'+c.id,function(){return {baseRev:c.rev,name:val(f,'name'),phone:val(f,'phone'),instagram:val(f,'instagram'),source:val(f,'source'),note:val(f,'note')};},async function(){toast('Клиент сохранён');await showClient(c.id);await reload();});};
+    }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
+  }
+  var range=null,analyticsSeq=0;
+  async function renderAnalytics(){
+    var seq=++analyticsSeq;
+    try{var a=await api('GET','/analytics'+(range?'?from='+range.from+'&to='+range.to:''));if(state.tab!=='analytics'||seq!==analyticsSeq)return;
+      $('main').innerHTML='<div class="content"><form id="range-form"><div class="split">'+field('С','from',a.from,'date','required')+field('По','to',a.to,'date','required')+'</div><button class="ghost" type="submit">Показать период</button></form><p class="hint">Даты по времени Астаны, обе границы включены.</p>'+(a.missing&&(a.missing.undated_closed||a.missing.undated_leads)?'<p class="hint">Импорт без дат: заявок — '+esc(a.missing.undated_leads)+', закрытий — '+esc(a.missing.undated_closed)+'. Они не включены в соответствующие показатели за период.</p>':'')+'<div class="stats"><div class="card"><div class="muted">Новых заявок</div><div class="stat">'+esc(a.leads)+'</div></div><div class="card"><div class="muted">Конверсия</div><div class="stat">'+esc(a.conversion)+'%</div></div><div class="card"><div class="muted">Продаж за период</div><div class="stat">'+esc(a.sales_count)+'</div></div><div class="card"><div class="muted">Сумма продаж</div><div class="stat">'+esc(money(a.sales_amount))+'</div></div></div><p class="hint">Конверсия: выполненные из заявок, созданных за период ('+esc(a.won)+' / '+esc(a.leads)+'). Продажи: выполненные сделки по дате закрытия. Это сумма сделок, не движения денег в кассе.</p><div class="card"><h2>Все сделки по этапам · сейчас</h2>'+a.stages.map(function(s){return '<div class="metric"><span>'+esc(s.name)+' · '+esc(s.count)+'</span><b>'+esc(money(s.amount))+'</b></div>';}).join('')+'</div><div class="card"><h2>Источники заявок за период</h2>'+(a.sources.length?a.sources.map(function(s){return '<div class="metric"><span>'+esc(s.source||'Без источника')+'</span><b>'+esc(s.count)+'</b></div>';}).join(''):'<p class="muted">Нет заявок за период</p>')+'</div></div>';
+      $('range-form').onsubmit=function(e){e.preventDefault();var f=e.target;range={from:val(f,'from'),to:val(f,'to')};renderAnalytics();};
+    }catch(e){if(state.tab==='analytics')$('status').textContent=error(e);}
+  }
+  async function copy(t){try{await navigator.clipboard.writeText(t.text);toast('Шаблон скопирован');}catch(e){openSheet('Скопируйте текст',area(t.title,'copy',t.text));var el=body.querySelector('textarea');el.readOnly=true;el.focus();el.select();}}
+  function bindCopy(root){root.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){var t=state.templates.find(function(x){return x.id===Number(b.dataset.copy);});if(t)copy(t);};});}
+  async function renderTemplates(){
+    try{var r=await api('GET','/templates');if(state.tab!=='templates')return;state.templates=r.templates;
+      $('main').innerHTML='<div class="content">'+(state.user.role==='mgr'?'<button class="btn" id="template-new">+ Шаблон</button>':'')+'<p class="hint">Нажмите «Копировать» и вставьте ответ в переписку.</p>'+r.templates.map(function(t){return '<article class="card"><h2>'+esc(t.title)+'</h2><p class="pre">'+esc(t.text)+'</p><div class="actions"><button class="ghost" data-copy="'+esc(t.id)+'">Копировать</button>'+(state.user.role==='mgr'?'<button class="ghost danger" data-delete-template="'+esc(t.id)+'">Удалить</button>':'')+'</div></article>';}).join('')+(r.templates.length?'':'<div class="empty">Пока нет шаблонов</div>')+'</div>';bindCopy($('main'));
+      if($('template-new'))$('template-new').onclick=function(){openSheet('Новый шаблон','<form id="template-form">'+field('Название','title','','text','required maxlength="200"')+area('Текст ответа','text','')+submit('Добавить')+'</form>');var f=$('template-form');f.elements.namedItem('text').required=true;mutation(f,'POST','/templates',function(){return {title:val(f,'title'),text:val(f,'text')};},async function(){closeSheet();toast('Шаблон добавлен');await renderTemplates();});};
+      $('main').querySelectorAll('[data-delete-template]').forEach(function(b){b.onclick=function(){var t=state.templates.find(function(x){return x.id===Number(b.dataset.deleteTemplate);});openSheet('Удалить шаблон?','<form id="delete-template"><p class="pre">'+esc(t.title)+'</p>'+submit('Удалить')+'</form>');mutation($('delete-template'),'DELETE','/templates/'+t.id,function(){return {};},async function(){closeSheet();toast('Шаблон удалён');await renderTemplates();});};});
+    }catch(e){$('status').textContent=error(e);}
+  }
+  function fileData(file){return new Promise(function(resolve,reject){var r=new FileReader();r.onload=function(){resolve(r.result);};r.onerror=function(){reject(new Error('Не удалось прочитать файл'));};r.readAsDataURL(file);});}
+  function renderImport(){
+    $('main').innerHTML='<div class="content"><div class="card"><h2>Перенос из MindSales</h2><p class="hint">JSON: deals, clients, stages, products. Выберите файл, сопоставьте этапы, затем запустите импорт. Повторный импорт пропускает существующие внешние ID и сохраняет последующие правки менеджеров.</p><label class="field">Файл JSON (до 10 МБ)<input id="import-file" type="file" accept=".json,application/json"></label><div id="import-preview"></div><p class="error" id="import-error" role="alert"></p></div></div>';
+    $('import-file').onchange=async function(){
+      var f=this.files[0];if(!f)return;var preview=$('import-preview');$('import-error').textContent='';preview.innerHTML='';
+      try{if(f.size>10*1024*1024)throw new Error('Файл слишком большой');var data=JSON.parse(await f.text());if(!data||!Array.isArray(data.deals))throw new Error('В файле нужен массив deals');
+        var stages=new Map();(data.stages||[]).forEach(function(s){stages.set(String(s.id),s.name||s.title||String(s.id));});data.deals.forEach(function(d){if(d.statusId==null)throw new Error('В каждой сделке нужен statusId');if(!stages.has(String(d.statusId)))stages.set(String(d.statusId),String(d.statusId));});
+        preview.innerHTML='<p class="pre">Сделок: '+esc(data.deals.length)+' · Клиентов: '+esc((data.clients||[]).length)+' · Товаров: '+esc((data.products||[]).length)+'</p><p class="hint">Неизвестные даты останутся пустыми и не попадут в показатели за период. Выполненные сделки без состава/даты отгрузки будут отмечены для уточнения. При ошибке весь импорт откатывается.</p><form id="import-form">'+Array.from(stages).map(function(entry,i){var same=state.stages.find(function(s){return s.name.toLowerCase()===String(entry[1]).toLowerCase();});return '<label class="field">'+esc(entry[1])+'<select name="map'+i+'" data-ext="'+esc(entry[0])+'" required><option value="">Выберите этап CRM</option>'+options(state.stages,same?same.id:'')+'</select></label>';}).join('')+submit('Импортировать')+'</form>';
+        var form=$('import-form');mutation(form,'POST','/import',function(){var map=Object.create(null);form.querySelectorAll('[data-ext]').forEach(function(s){map[s.dataset.ext]=Number(s.value);});return {data:data,stageMap:map};},async function(r){var c=r.counts;preview.innerHTML='<p class="pre">Импорт завершён.\nДобавлено сделок: '+esc(c.deals)+'\nКлиентов: '+esc(c.clients)+'\nТоваров: '+esc(c.products)+'\nПропущено существующих сделок: '+esc(c.skipped_deals)+'\nНужно уточнить состав/отгрузку: '+esc(c.incomplete_won)+'\nБез даты создания: '+esc(c.undated_leads)+'\nБез даты закрытия: '+esc(c.undated_closed)+'</p>';$('import-file').value='';await reload();});
+      }catch(e){$('import-error').textContent=error(e);}
+    };
+  }
+  async function tab(name){
+    state.tab=name;$('toolbar').hidden=!['deals','clients'].includes(name);
+    document.querySelectorAll('[data-tab]').forEach(function(b){b.classList.toggle('on',b.dataset.tab===name);if(b.dataset.tab===name)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+    if(name==='deals')renderDeals();else if(name==='clients')await loadClients();else if(name==='analytics')await renderAnalytics();else if(name==='templates')await renderTemplates();else if(name==='import'&&state.user.role==='mgr')renderImport();
+  }
+  var searchTimer;
+  $('search').oninput=function(){state.q=this.value.trim().toLowerCase();clearTimeout(searchTimer);if(state.tab==='deals')renderDeals();else searchTimer=setTimeout(loadClients,200);};
+  $('new-deal').onclick=function(){quickDeal();};$('refresh').onclick=reload;
+  document.querySelectorAll('[data-tab]').forEach(function(b){b.onclick=function(){if(state.user)tab(b.dataset.tab);};});
+  if(!API.token){location.replace('login.html?next=crm.html');return;}
+  API.me().then(async function(r){
+    if(!['mgr','fin'].includes(r.user.role)){location.replace('home.html');return;}
+    state.user=r.user;var m=await api('GET','/meta');state.stages=m.stages;state.managers=m.managers;state.userId=m.user_id;
+    $('who').textContent=r.user.name;$('new-deal').disabled=false;$('import-tab').hidden=r.user.role!=='mgr';await reload();
+  }).catch(function(e){$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p><button class="ghost" id="retry-start">Повторить</button></div>';$('retry-start').onclick=function(){location.reload();};});
+  setInterval(function(){if(state.user&&sheet.hidden&&!document.hidden&&state.tab==='deals')reload();},20000);
+  window.addEventListener('online',function(){if(state.user)reload();});
 })();

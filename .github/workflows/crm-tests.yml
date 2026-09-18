@@ -1,0 +1,44 @@
+name: CRM MVP acceptance
+on:
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'app/crm.*'
+      - 'app/api.js'
+      - 'app/home.html'
+      - 'app/login.html'
+      - '.github/workflows/crm-tests.yml'
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: crm_test
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: crm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CRM_TEST_DATABASE_URL: postgres://crm_test:isolated-ci-only@127.0.0.1:5432/crm_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix server --no-package-lock --ignore-scripts
+      - run: node --check server/crm.js && node --check server/server.js && node --check app/crm.js && node --check app/api.js
+      - run: npm install --prefix "$RUNNER_TEMP/crm-browser" --no-package-lock playwright@1.62.1
+      - run: node "$RUNNER_TEMP/crm-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - run: node --test server/tests/crm.integration.cjs
+        env:
+          CRM_BROWSER_TEST: '1'
+          CRM_PLAYWRIGHT_PATH: ${{ runner.temp }}/crm-browser/node_modules/playwright
