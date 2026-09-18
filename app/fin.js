@@ -940,7 +940,7 @@
       else if(lc>0){ doPush(); }                                                  // сервер пуст, локально есть — первичная миграция вверх
     }).catch(function(){ /* сеть недоступна: synced остаётся false — НЕ затираем сервер вслепую */ });
   } else {
-    var rsd=document.querySelector('.roleswitch'); if(rsd)rsd.classList.add('show');   // демо без логина — переключатель нужен
-    setRole('ruslan');
+    // без логина песочницы больше нет — только вход (реальные данные, демо отключено)
+    location.replace('login.html?next=fin.html');
   }
 })();
