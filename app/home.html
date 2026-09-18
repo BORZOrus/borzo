@@ -59,14 +59,14 @@
   API.me().then(function(d){
     var u=d.user||{};
     // одиночные роли ведём сразу в их модуль — прихожая для них не нужна
-    if(u.role==='fin'){ location.replace('fin.html'); return; }
     if(u.role==='sup'){ location.replace('kassa.html'); return; }
-    // руководитель — показываем прихожую с плитками
-    $('nm').textContent=u.name||'—'; $('rl').textContent='Руководитель';
+    // руководитель и финансист — прихожая с доступными модулями
+    $('nm').textContent=u.name||'—'; $('rl').textContent=u.role==='mgr'?'Руководитель':'Финансы и продажи';
     $('hi').textContent='Что открываем?';
     $('tiles').innerHTML =
       tile('ic-fin','💳','Финансы','Деньги, продажи, кредиты, аналитика','fin.html')+
-      tile('ic-kassa','🛒','Касса снабжения','Выдачи, закупы, склад','kassa.html');
+      tile('ic-pult','◈','CRM','Заявки, клиенты, продажи','crm.html')+
+      (u.role==='mgr'?tile('ic-kassa','🛒','Касса снабжения','Выдачи, закупы, склад','kassa.html'):'');
   }).catch(function(){ location.replace('login.html'); });
   $('logout').onclick=function(){ API.logout(); };
   $('passbtn').onclick=function(){

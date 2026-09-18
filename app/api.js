@@ -43,6 +43,7 @@ window.API = (function(){
     reject:      function(id){ return req('POST','/kassa/'+id+'/reject'); },
     finGet:      function(){ return req('GET','/fin'); },
     finPut:      function(data,baseRev){ return req('PUT','/fin',{data:data,baseRev:baseRev}); },
+    crm: function(method,path,body){ return req(method,'/crm'+path,body); },
     logout: logout
   };
   return self;
