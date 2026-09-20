@@ -60,6 +60,22 @@ async function initSchema(db) {
       id SERIAL PRIMARY KEY, ext_id TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
       price NUMERIC(16,2) NOT NULL DEFAULT 0 CHECK(price >= 0)
     );
+    CREATE TABLE IF NOT EXISTS crm_cat_models (
+      id SERIAL PRIMARY KEY, type TEXT NOT NULL, base TEXT NOT NULL, name TEXT NOT NULL UNIQUE,
+      line TEXT NOT NULL DEFAULT '', ord INTEGER NOT NULL DEFAULT 0, archived BOOLEAN NOT NULL DEFAULT false
+    );
+    CREATE TABLE IF NOT EXISTS crm_cat_options (
+      id SERIAL PRIMARY KEY, kind TEXT NOT NULL, value TEXT NOT NULL, ord INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(kind,value)
+    );
+    CREATE TABLE IF NOT EXISTS crm_cat_variants (
+      id SERIAL PRIMARY KEY, model_id INTEGER NOT NULL REFERENCES crm_cat_models(id),
+      corpus TEXT NOT NULL DEFAULT '', legs TEXT NOT NULL DEFAULT '', len TEXT NOT NULL DEFAULT '', width TEXT NOT NULL DEFAULT '',
+      code TEXT NOT NULL DEFAULT '', ntin TEXT NOT NULL DEFAULT '', link TEXT NOT NULL DEFAULT '',
+      price NUMERIC(16,2) CHECK(price IS NULL OR price >= 0), archived BOOLEAN NOT NULL DEFAULT false,
+      UNIQUE(model_id,corpus,legs,len,width)
+    );
+    CREATE INDEX IF NOT EXISTS crm_cat_variants_model_idx ON crm_cat_variants(model_id);
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) VALUES
       ('new','Новая заявка',1,false,false), ('working','В работе',2,false,false),
       ('selection','Подбор решения',3,false,false), ('agreed','Договорились/Предоплата',4,false,false),
@@ -109,7 +125,9 @@ function items(v) {
   if(!Array.isArray(v)||v.length>200) throw err(400,'Состав: нужен массив, максимум 200 позиций');
   return v.map(x=>{
     if(!x||typeof x!=='object') throw err(400,'Некорректная позиция');
-    return {name:str(x.name,'Название позиции',200,true),qty:number(x.qty,'Количество',true),price:number(x.price,'Цена')};
+    const out={name:str(x.name,'Название позиции',200,true),qty:number(x.qty,'Количество',true),price:number(x.price,'Цена')};
+    if(x.variant_id!=null && x.variant_id!=='') out.variant_id=id(x.variant_id);   // привязка к варианту каталога (снимок name/price остаётся в позиции)
+    return out;
   });
 }
 function wonCheck(stage, deal) {
@@ -339,6 +357,75 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
         FROM crm_deals d JOIN crm_stages s ON s.id=d.stage_id`);
       const c=summary.rows[0]; return {from,to,timezone:'Asia/Almaty',missing:missing.rows[0],stages:stages.rows,...c,...sales.rows[0],conversion:c.leads?Math.round(c.won/c.leads*10000)/100:0,sources:sources.rows};
     }); res.json(result);
+  }));
+  // ---------- каталог товаров (конструктор: модели × опции × варианты) ----------
+  router.get('/catalog',route(async(req,res)=>{
+    const [m,o,v]=await Promise.all([
+      pool.query('SELECT * FROM crm_cat_models ORDER BY archived,type,ord,name'),
+      pool.query('SELECT * FROM crm_cat_options ORDER BY kind,ord,id'),
+      pool.query('SELECT * FROM crm_cat_variants ORDER BY model_id,corpus,legs,len,width')]);
+    res.json({models:m.rows,options:o.rows,variants:v.rows});
+  }));
+  router.post('/catalog/models',mutate(async(req,db)=>{
+    const b=req.body, type=str(b.type,'Тип',60,true), base=str(b.base,'Серия/база',100,true);
+    const name=str(b.name||type+' '+base,'Название модели',200,true);
+    const r=await db.query('INSERT INTO crm_cat_models(type,base,name,line) VALUES($1,$2,$3,$4) RETURNING *',[type,base,name,str(b.line,'Линейка',60)]);
+    return {model:r.rows[0]};
+  }));
+  router.patch('/catalog/models/:id',mutate(async(req,db)=>{
+    const r=await db.query('SELECT * FROM crm_cat_models WHERE id=$1 FOR UPDATE',[id(req.params.id)]);
+    if(!r.rowCount) throw err(404,'Модель не найдена');
+    const m={...r.rows[0]}, b=req.body;
+    if('name' in b) m.name=str(b.name,'Название',200,true);
+    if('archived' in b) m.archived=b.archived===true;
+    const out=await db.query('UPDATE crm_cat_models SET name=$1,archived=$2 WHERE id=$3 RETURNING *',[m.name,m.archived,m.id]);
+    return {model:out.rows[0]};
+  }));
+  router.post('/catalog/options',mutate(async(req,db)=>{
+    const kind=str(req.body.kind,'Вид опции',40,true), value=str(req.body.value,'Значение',100,true);
+    const r=await db.query('INSERT INTO crm_cat_options(kind,value) VALUES($1,$2) ON CONFLICT(kind,value) DO UPDATE SET value=excluded.value RETURNING *',[kind,value]);
+    return {option:r.rows[0]};
+  }));
+  router.post('/catalog/variants',mutate(async(req,db)=>{
+    const b=req.body;
+    const m=(await db.query('SELECT * FROM crm_cat_models WHERE id=$1',[id(b.model_id)])).rows[0];
+    if(!m) throw err(400,'Модель не найдена');
+    const r=await db.query(`INSERT INTO crm_cat_variants(model_id,corpus,legs,len,width,code,ntin,link,price) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [m.id,str(b.corpus,'Корпус',60),str(b.legs,'Ножки',60),str(b.len,'Длина',30),str(b.width,'Ширина',30),str(b.code,'Код/артикул',120),str(b.ntin,'NTIN',40),str(b.link,'Ссылка',400),b.price==null||b.price===''?null:number(b.price,'Цена')]);
+    return {variant:r.rows[0]};
+  }));
+  router.patch('/catalog/variants/:id',mutate(async(req,db)=>{
+    const r=await db.query('SELECT * FROM crm_cat_variants WHERE id=$1 FOR UPDATE',[id(req.params.id)]);
+    if(!r.rowCount) throw err(404,'Вариант не найден');
+    const v={...r.rows[0]}, b=req.body;
+    if('price' in b) v.price=(b.price==null||b.price==='')?null:number(b.price,'Цена');
+    if('code' in b) v.code=str(b.code,'Код',120);
+    if('ntin' in b) v.ntin=str(b.ntin,'NTIN',40);
+    if('archived' in b) v.archived=b.archived===true;
+    const out=await db.query('UPDATE crm_cat_variants SET price=$1,code=$2,ntin=$3,archived=$4 WHERE id=$5 RETURNING *',[v.price,v.code,v.ntin,v.archived,v.id]);
+    return {variant:out.rows[0]};
+  }));
+  // разовая загрузка каталога из catalog.json (идемпотентно: модель по name, вариант по сочетанию)
+  router.post('/catalog/seed',requireRole('mgr'),mutate(async(req,db)=>{
+    let src;
+    try { src=JSON.parse(fs.readFileSync(path.join(__dirname,'catalog.json'),'utf8')); }
+    catch(e) { throw err(500,'catalog.json не найден на сервере'); }
+    const counts={models:0,variants:0,skipped:0,options:0};
+    const optSeen=new Set((await db.query('SELECT kind,value FROM crm_cat_options')).rows.map(o=>o.kind+'|'+o.value));
+    async function opt(kind,value){ if(!value||optSeen.has(kind+'|'+value))return; optSeen.add(kind+'|'+value);
+      await db.query('INSERT INTO crm_cat_options(kind,value) VALUES($1,$2) ON CONFLICT DO NOTHING',[kind,value]); counts.options++; }
+    for(const it of src.items||[]){
+      const type=(it.name||'').split(' ')[0]||'Прочее';
+      const mname=(type+' '+(it.base||it.stem||'?')+(it.len?' '+it.len:'')+(it.width?' '+it.width:'')).trim();
+      let m=(await db.query('SELECT * FROM crm_cat_models WHERE name=$1',[mname])).rows[0];
+      if(!m){ m=(await db.query('INSERT INTO crm_cat_models(type,base,name,line) VALUES($1,$2,$3,$4) RETURNING *',[type,it.base||'?',mname,it.line||''])).rows[0]; counts.models++; }
+      await opt('corpus',it.corpus); await opt('legs',it.legs); await opt('len',it.len); await opt('width',it.width);
+      const ins=await db.query(`INSERT INTO crm_cat_variants(model_id,corpus,legs,len,width,code,ntin) VALUES($1,$2,$3,$4,$5,$6,$7)
+        ON CONFLICT(model_id,corpus,legs,len,width) DO NOTHING RETURNING id`,
+        [m.id,it.corpus||'',it.legs||'',it.len||'',it.width||'',it.code||'',it.ntin||'']);
+      counts[ins.rowCount?'variants':'skipped']++;
+    }
+    return {ok:true,counts};
   }));
   router.post('/import',requireRole('mgr'),mutate(async(req,db)=>importMindSales(db,req.body,req.user)));
   app.use('/api/crm',router);

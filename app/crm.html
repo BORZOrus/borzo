@@ -15,7 +15,7 @@
 <body>
 <main class="wrap" id="app">
   <header class="top"><div class="row"><a class="iconbtn" href="home.html" aria-label="В прихожую">‹</a><span class="logo">B</span><div class="grow"><h1>CRM</h1><div class="muted" id="who">Загрузка…</div></div><button class="iconbtn" id="refresh" aria-label="Обновить">↻</button></div></header>
-  <nav class="tabs" aria-label="Разделы CRM"><button data-tab="deals" class="on" aria-current="page">Сделки</button><button data-tab="clients">Клиенты</button><button data-tab="analytics">Аналитика</button><button data-tab="templates">Шаблоны</button><button data-tab="import" id="import-tab" hidden>Импорт</button></nav>
+  <nav class="tabs" aria-label="Разделы CRM"><button data-tab="deals" class="on" aria-current="page">Сделки</button><button data-tab="clients">Клиенты</button><button data-tab="analytics">Аналитика</button><button data-tab="templates">Шаблоны</button><button data-tab="catalog">Каталог</button><button data-tab="import" id="import-tab" hidden>Импорт</button></nav>
   <div class="toolbar" id="toolbar"><label class="sr-only" for="search">Поиск по имени, телефону или сделке</label><input type="search" id="search" placeholder="Имя или телефон" autocomplete="off"><button class="btn" id="new-deal" disabled>+ Заявка</button></div>
   <div id="status" class="status" role="status" aria-live="polite"></div>
   <div id="main"><div class="empty">Загружаю CRM…</div></div>
@@ -24,6 +24,6 @@
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden><header><h2 id="sheet-title"></h2><button class="iconbtn" id="sheet-close" aria-label="Закрыть">✕</button></header><div id="sheet-body"></div></section>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm1"></script>
-<script src="crm.js?v=crm1"></script>
+<script src="crm.js?v=crm2"></script>
 </body>
 </html>

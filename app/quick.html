@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Трата">
+<meta name="theme-color" content="#0f1115">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="quick-manifest.json">
+<title>➕ Трата · BORZO</title>
+<style>
+  :root{--bg:#0f1115;--card:#181b21;--card2:#20242c;--ink:#eef0f3;--mut:#9aa0a8;--line:#2a2e37;--red:#f0555c;--green:#28c07a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  .wrap{max-width:520px;margin:0 auto;min-height:100vh;padding:18px 16px 40px}
+  h1{font-size:17px;margin:0 0 4px}
+  .sub{color:var(--mut);font-size:12.5px;margin-bottom:18px}
+  .amt{width:100%;padding:18px;background:var(--card);border:1px solid var(--line);border-radius:16px;color:var(--ink);font-size:34px;font-weight:800;text-align:center;font-family:inherit}
+  .amt:focus{outline:none;border-color:var(--red)}
+  label{display:block;font-size:12px;color:var(--mut);margin:16px 0 8px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chips button{padding:10px 14px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:20px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+  .chips button.on{border-color:var(--red);color:var(--red);background:rgba(240,85,92,.1)}
+  .note{width:100%;padding:12px;background:var(--card);border:1px solid var(--line);border-radius:11px;color:var(--ink);font-size:14px;font-family:inherit}
+  .go{width:100%;margin-top:22px;padding:16px;border:none;border-radius:14px;background:var(--red);color:#fff;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit}
+  .go:disabled{opacity:.55}
+  .done{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;z-index:10}
+  .done.on{display:flex}
+  .done .ok{font-size:52px;color:var(--green)}
+  .done .t{font-size:16px;font-weight:700}
+  .msg{color:var(--mut);font-size:13px;text-align:center;padding:30px 0}
+  .err{color:var(--red);font-size:13px;margin-top:10px;text-align:center;min-height:18px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="msg">Загрузка…</div></div>
+<div class="done" id="done"><div class="ok">✓</div><div class="t">Записано</div><div class="sub" id="done-sub"></div></div>
+<script src="api.js?v=8"></script>
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i);};
+  if(!API.token){ location.replace('login.html?next=quick.html'); return; }
+  var KEYCTX='pers_ruslan', DEF=['Обед','Бензин','Одежда','Развлечения','Падл'];
+  var cat='', cats=DEF.slice();
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function form(){
+    $('app').innerHTML='<h1>➕ Личная трата</h1><div class="sub">спишется с твоего кошелька (Личные Руслана)</div>'+
+      '<input class="amt" id="q-amt" type="number" inputmode="numeric" placeholder="0 ₸" autofocus>'+
+      '<label>Категория</label><div class="chips" id="q-cats">'+cats.map(function(c){return '<button data-c="'+esc(c)+'"'+(c===cat?' class="on"':'')+'>'+esc(c)+'</button>';}).join('')+'<button data-add="1">+</button></div>'+
+      '<label>Заметка (не обязательно)</label><input class="note" id="q-note" placeholder="напр. кофе">'+
+      '<button class="go" id="q-go">Списать</button><div class="err" id="q-err"></div>';
+    Array.prototype.forEach.call($('q-cats').querySelectorAll('button'),function(b){
+      b.onclick=function(){
+        if(b.getAttribute('data-add')){ var v=(prompt('Новая категория:')||'').trim(); if(!v)return; if(cats.indexOf(v)<0)cats.push(v); cat=v; form(); return; }
+        cat=b.getAttribute('data-c');
+        Array.prototype.forEach.call($('q-cats').querySelectorAll('button'),function(x){x.className='';});
+        b.className='on';
+      };
+    });
+    $('q-go').onclick=submit;
+  }
+  // сохранение через штатный «безопасный» путь: свежий GET → добавить операцию → PUT с версией; конфликт → перечитать и повторить
+  function submit(){
+    var a=parseInt($('q-amt').value,10)||0;
+    if(a<=0){ $('q-err').textContent='Укажи сумму'; return; }
+    if(!cat){ $('q-err').textContent='Выбери категорию'; return; }
+    var note=($('q-note').value||'').trim();
+    $('q-go').disabled=true; $('q-err').textContent='';
+    var op={ id:'o'+Date.now()+Math.floor(Math.random()*10000), ts:Date.now(), kind:'out', acc:'zpRuslan', project:'Личное', amount:a, category:cat, who:'ruslan' };
+    if(note) op.note=note;
+    var tries=0;
+    function attempt(){
+      tries++;
+      API.finGet().then(function(res){
+        var data=res&&res.data;
+        if(!data||!Array.isArray(data.ops)){ throw new Error('финансы недоступны — открой основной финмодуль'); }
+        if(data.ops.some(function(o){return o&&o.id===op.id;})) return {rev:res.rev};  // уже записана (повтор после обрыва)
+        // категория «плюсиком» видна и в финансах
+        data.cats=data.cats||{}; data.cats[KEYCTX]=data.cats[KEYCTX]||DEF.slice();
+        if(data.cats[KEYCTX].indexOf(cat)<0) data.cats[KEYCTX].push(cat);
+        data.ops.unshift(op);
+        return API.finPut(data,res.rev);
+      }).then(function(){
+        $('done-sub').textContent='−'+a.toLocaleString('ru-RU')+' ₸ · '+cat;
+        $('done').classList.add('on');
+        setTimeout(function(){ $('done').classList.remove('on'); form(); },1400);
+        $('q-go').disabled=false;
+      }).catch(function(e){
+        var conflict=e&&(e.status===409||(e.body&&e.body.conflict));
+        if(conflict&&tries<3){ attempt(); return; }   // кто-то писал параллельно — перечитали и повторили
+        $('q-go').disabled=false; $('q-err').textContent=(e&&e.message)||'Не сохранилось — проверь связь';
+      });
+    }
+    attempt();
+  }
+  API.me().then(function(d){
+    var u=d.user||{};
+    if(u.role!=='mgr'){ $('app').innerHTML='<div class="msg">Быстрая трата доступна только Руслану.</div>'; return; }
+    API.finGet().then(function(res){
+      var c=res&&res.data&&res.data.cats&&res.data.cats[KEYCTX];
+      if(Array.isArray(c)&&c.length) cats=c.slice();
+      cat=cats[0]||''; form();
+    }).catch(function(){ cat=cats[0]; form(); });
+  }).catch(function(){ location.replace('login.html?next=quick.html'); });
+})();
+</script>
+</body>
+</html>
