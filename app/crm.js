@@ -169,12 +169,17 @@
           '<button class="wa-ic" id="wa-menu-btn" title="Меню">⋮</button>'+
         '</div>'+
         '<div class="wa-menu" id="wa-menu" hidden>'+
+          '<button id="wm-sale">✅ Оформить продажу</button>'+
           (p?'<a href="https://wa.me/'+esc(p.slice(1))+'" target="_blank" rel="noopener noreferrer">🟢 Открыть в WhatsApp</a>':'')+
           '<button id="wm-agent">🤖 Агент: '+(d.agent_on?'вкл — выключить тут':'выкл — включить тут')+'</button>'+
           '<button id="wm-stage">📊 Сменить этап</button>'+
           '<button id="wm-info">ℹ️ Детали сделки</button>'+
           '<button id="wm-client">👤 Клиент</button>'+
         '</div>'+
+        '<div class="wa-stages" id="wa-stages">'+state.stages.map(function(s){
+          var cur=s.id===d.stage_id;
+          return '<button class="st-chip'+(cur?' on':'')+(s.is_won?' won':'')+(s.is_lost?' lost':'')+'" data-st="'+s.id+'">'+(s.is_won?'✅ ':'')+esc(s.name)+'</button>';
+        }).join('')+'</div>'+
         '<div class="wa-log" id="ch-log">'+renderLog(evs)+'</div>'+
         '<div class="ch-tpl" id="ch-tpl" hidden></div>'+
         '<div class="wa-input">'+
@@ -188,6 +193,18 @@
       var log=$('ch-log'); log.scrollTop=log.scrollHeight;
       var menu=$('wa-menu');
       $('wa-menu-btn').onclick=function(){menu.hidden=!menu.hidden;};
+      // полоска воронки: текущий этап подсвечен, тап по другому — переход; «Продажа» открывает оформление
+      var stagesBar=$('wa-stages'), curChip=stagesBar.querySelector('.st-chip.on');
+      if(curChip)curChip.scrollIntoView({inline:'center',block:'nearest'});
+      stagesBar.querySelectorAll('[data-st]').forEach(function(b){b.onclick=async function(){
+        var s=state.stages.find(function(x){return x.id===Number(b.dataset.st);});
+        if(!s||s.id===d.stage_id)return;
+        if(s.is_won){stopChat();showSale(d.id);return;}
+        if(s.is_lost){stopChat();showStage(d.id,d);return;}
+        if(!confirm('Перевести сделку в «'+s.name+'»?'))return;
+        try{await api('POST','/deals/'+d.id+'/stage',{reqId:uid(),baseRev:d.rev,stage_id:s.id});toast('Этап: '+s.name);showDeal(d.id);reload();}
+        catch(e){toast(error(e));}
+      };});
       async function send(){
         var t=$('ch-text').value.trim(); if(!t)return;
         $('ch-send').disabled=true;
@@ -235,6 +252,7 @@
         catch(e){ toast(error(e)); }
         this.value='';
       };
+      $('wm-sale').onclick=function(){ stopChat(); showSale(d.id); };
       $('wm-agent').onclick=async function(){
         try{ await api('POST','/deals/'+d.id+'/agent',{reqId:uid(),on:!d.agent_on}); showDeal(d.id); }catch(e){toast(error(e));}
       };
@@ -270,6 +288,33 @@
   function itemsForm(d){return '<h3>Состав</h3>'+pickerHtml()+'<div id="items">'+d.items.map(itemHtml).join('')+'</div><button type="button" class="ghost" id="add-item">+ Позиция вручную</button>'+field('Дата отгрузки','ship_date',d.ship_date,'date');}
   function wireItems(){function bind(){body.querySelectorAll('[data-remove]').forEach(function(b){b.onclick=function(){b.closest('.item').remove();};});}bind();$('add-item').onclick=function(){$('items').insertAdjacentHTML('beforeend',itemHtml({}));bind();};wirePicker();}
   function readItems(){return Array.from($('items').querySelectorAll('.item')).map(function(el){var it={name:el.querySelector('[name=item_name]').value.trim(),qty:el.querySelector('[name=item_qty]').value,price:el.querySelector('[name=item_price]').value};var v=el.getAttribute('data-variant');if(v)it.variant_id=Number(v);return it;});}
+  // ✅ оформление продажи: клиент сказал «беру» → что продали, сумма, дата отгрузки → сделка в «Выполнено»
+  async function showSale(id){
+    openSheet('Оформление продажи','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
+    try{
+      var d=(await api('GET','/deals/'+id)).deal;if(gen!==sheetGeneration)return;
+      var won=state.stages.find(function(s){return s.is_won;});
+      if(!won){body.innerHTML='<p class="error">В воронке нет этапа «Выполнено»</p>';return;}
+      $('sheet-title').textContent='✅ Продажа · '+d.client_name;
+      body.innerHTML='<form id="sale-form">'+
+        '<p class="hint">Выбери из каталога, что именно продали, проверь сумму и поставь дату отгрузки. После сохранения сделка станет «'+esc(won.name)+'» — состав уйдёт в производство и отгрузку, оттуда спишется склад.</p>'+
+        field('Сумма продажи, ₸','amount',d.amount,'number','required min="0" max="1000000000000" step="0.01"')+
+        itemsForm(d)+
+        '<p class="hint">📎 Документ оплаты (чек Kaspi) можно прикрепить скрепкой в чате — карточка напомнит, если его нет.</p>'+
+        submit('✅ Оформить продажу')+'</form>';
+      wireItems();var f=$('sale-form');
+      f.elements.namedItem('ship_date').required=true;
+      var manualAmount=Number(d.amount)>0;
+      f.elements.namedItem('amount').oninput=function(){manualAmount=true;};
+      function total(){if(!manualAmount)f.elements.namedItem('amount').value=String(Math.round(readItems().reduce(function(n,x){return n+Number(x.qty||0)*Number(x.price||0);},0)*100)/100);}
+      $('items').addEventListener('input',total);$('items').addEventListener('click',total);total();
+      mutation(f,'POST','/deals/'+d.id+'/stage',function(){
+        var b={baseRev:d.rev,stage_id:won.id,amount:val(f,'amount'),items:readItems(),ship_date:val(f,'ship_date')};
+        if(!b.items.length)throw new Error('Добавь хотя бы одну позицию — выбери модель из каталога выше');
+        return b;
+      },async function(){toast('Продажа оформлена ✅');await showDeal(d.id);await reload();});
+    }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
+  }
   async function showStage(id,known){
     if(!known){openSheet('Сменить этап','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;try{known=(await api('GET','/deals/'+id)).deal;if(gen!==sheetGeneration)return;}catch(e){body.innerHTML='<p class="error">'+esc(error(e))+'</p>';return;}}
     var d=known;
