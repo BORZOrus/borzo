@@ -21,7 +21,7 @@
   function closeSheet(){
     if(pendingMutation) return;
     if(uncertainMutation&&!confirm('Сервер мог сохранить действие. Лучше повторить отправку с тем же ключом. Всё равно закрыть?')) return;
-    uncertainMutation=false;sheetGeneration++;sheet.hidden=true;$('sheet-bg').hidden=true;$('app').inert=false;document.body.style.overflow='';body.innerHTML='';
+    stopChat();uncertainMutation=false;sheetGeneration++;sheet.hidden=true;$('sheet-bg').hidden=true;$('app').inert=false;document.body.style.overflow='';body.innerHTML='';
     if(focusBefore&&focusBefore.isConnected) focusBefore.focus();
   }
   $('sheet-close').onclick=closeSheet;$('sheet-bg').onclick=closeSheet;
@@ -121,33 +121,114 @@
     if(!p||!/^\+[1-9]\d{7,14}$/.test(p))return '<p class="muted">Телефон не указан</p>';
     return '<div class="actions"><a class="ghost" href="tel:'+esc(p)+'">'+esc(p)+'</a><a class="ghost" href="https://wa.me/'+esc(p.slice(1))+'" target="_blank" rel="noopener noreferrer">WhatsApp ↗</a></div>';
   }
+  // ---------- карточка лида = ЧАТ как WhatsApp: пузыри, ввод снизу, шаблоны у ввода; детали за ℹ️ ----------
+  var chatTimer=null, chatDealId=null, chatLastEventId=0;
+  function stopChat(){ clearTimeout(chatTimer); chatTimer=null; chatDealId=null; }
+  function bubble(e){
+    if(e.kind==='status') return '<div class="ch-sys">'+esc(e.text)+' · '+esc(stamp(e.ts))+'</div>';
+    if(e.kind==='note'||e.kind==='call') return '<div class="ch-sys">'+(e.kind==='call'?'📞 ':'📝 ')+esc(e.text)+' · '+esc(stamp(e.ts))+'</div>';
+    var inc=/^📩/.test(e.text||'');
+    var t=String(e.text||'').replace(/^📩\s*/,'');
+    var m=inc&&t.indexOf(':')>0?t.slice(t.indexOf(':')+1).trim():t;
+    return '<div class="ch-row '+(inc?'in':'out')+'"><div class="ch-b">'+esc(inc?m:t)+'<span class="ch-t">'+new Date(e.ts).toLocaleTimeString('ru-RU',{timeZone:'Asia/Almaty',hour:'2-digit',minute:'2-digit'})+'</span></div></div>';
+  }
   async function showDeal(id){
-    openSheet('Сделка','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
+    stopChat();
+    openSheet('Чат','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
     try{
       var all=await Promise.all([api('GET','/deals/'+id),api('GET','/deals/'+id+'/events'),api('GET','/templates')]);
       if(gen!==sheetGeneration)return;
-      var d=all[0].deal, files=all[0].files;state.templates=all[2].templates;
+      var d=all[0].deal, files=all[0].files, evs=all[1].events.slice().reverse();
+      state.templates=all[2].templates;
+      chatDealId=d.id; chatLastEventId=evs.length?evs[evs.length-1].id:0;
       $('sheet-title').textContent=d.client_name;
-      body.innerHTML='<span class="pill">'+esc(d.stage_name)+'</span><div class="amount">'+esc(money(d.amount))+'</div><p class="pre">'+esc(d.title)+'</p>'+contactLinks(d)+
-        '<div class="actions"><button class="btn" id="deal-stage">Сменить этап</button><button class="ghost" id="deal-edit">Изменить</button><button class="ghost" id="deal-client">Клиент</button></div>'+
-        '<p class="hint">'+esc(d.manager_name||'—')+' · '+esc(d.source||'Без источника')+'</p>'+(d.note?'<p class="pre">'+esc(d.note)+'</p>':'')+
+      var p=d.phone&&/^\+[1-9]\d{7,14}$/.test(d.phone)?d.phone:null;
+      body.innerHTML=
+        '<div class="ch-head">'+
+          '<span class="pill">'+esc(d.stage_name)+'</span>'+
+          (p?'<a class="ghost chh" href="tel:'+esc(p)+'">📞</a><a class="ghost chh" href="https://wa.me/'+esc(p.slice(1))+'" target="_blank" rel="noopener noreferrer">🟢</a>':'')+
+          '<button class="ghost chh" id="ch-agent" title="Агент-продавец (обучим на этапе WhatsApp)">🤖</button>'+
+          '<span style="flex:1"></span>'+
+          '<button class="ghost chh" id="ch-stage">Этап →</button>'+
+          '<button class="ghost chh" id="ch-info">ℹ️</button>'+
+        '</div>'+
+        '<div class="ch-log" id="ch-log">'+(evs.length?evs.map(bubble).join(''):'<div class="ch-sys">Пока нет сообщений</div>')+'</div>'+
+        '<div class="ch-tpl" id="ch-tpl" hidden></div>'+
+        '<div class="ch-input">'+
+          '<label class="ghost chh" style="cursor:pointer" title="Прикрепить">📎<input id="ch-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden></label>'+
+          '<button class="ghost chh" id="ch-tplbtn" title="Шаблоны">📋</button>'+
+          '<textarea id="ch-text" rows="1" placeholder="Сообщение…"></textarea>'+
+          '<button class="btn chh" id="ch-send" style="width:auto;padding:10px 14px">➤</button>'+
+        '</div>';
+      var log=$('ch-log'); log.scrollTop=log.scrollHeight;
+      // отправка нашего сообщения
+      async function send(){
+        var t=$('ch-text').value.trim(); if(!t)return;
+        $('ch-send').disabled=true;
+        try{ await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:t}); $('ch-text').value=''; await poll(true); }
+        catch(e){ toast(error(e)); }
+        $('ch-send').disabled=false; $('ch-text').focus();
+      }
+      $('ch-send').onclick=send;
+      $('ch-text').addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
+      // живое обновление чата, пока открыт (новые сообщения дорисовываются)
+      async function poll(force){
+        if(chatDealId!==d.id)return;
+        try{
+          var r=await api('GET','/deals/'+d.id+'/events');
+          if(chatDealId!==d.id||gen!==sheetGeneration)return;
+          var list=r.events.slice().reverse().filter(function(e){return e.id>chatLastEventId;});
+          if(list.length){ chatLastEventId=list[list.length-1].id; list.forEach(function(e){log.insertAdjacentHTML('beforeend',bubble(e));}); log.scrollTop=log.scrollHeight; }
+        }catch(e){}
+        chatTimer=setTimeout(poll,7000);
+      }
+      chatTimer=setTimeout(poll,7000);
+      // шаблоны у поля ввода: тап — вставить в сообщение
+      $('ch-tplbtn').onclick=function(){
+        var box=$('ch-tpl');
+        if(!box.hidden){box.hidden=true;return;}
+        box.innerHTML=(state.templates.length?state.templates.map(function(t){return '<button class="ghost" data-tpl="'+t.id+'" style="text-align:left">'+esc(t.title)+'</button>';}).join(''):'<span class="muted" style="font-size:12px;padding:6px">Шаблонов нет — добавь во вкладке «Шаблоны»</span>');
+        box.hidden=false;
+        box.querySelectorAll('[data-tpl]').forEach(function(b){b.onclick=function(){
+          var t=state.templates.find(function(x){return x.id===Number(b.dataset.tpl);});
+          if(t){var ta=$('ch-text'); ta.value=(ta.value?ta.value+' ':'')+t.text; ta.focus();}
+          box.hidden=true;
+        };});
+      };
+      // файл → к сделке + событие в ленту
+      $('ch-file').onchange=async function(){
+        var f=this.files[0]; if(!f)return;
+        if(f.size>5*1024*1024){toast('Файл — до 5 МБ');return;}
+        try{ await api('POST','/deals/'+d.id+'/files',{reqId:uid(),name:f.name,data:await fileData(f)}); toast('Файл прикреплён'); await poll(true); }
+        catch(e){ toast(error(e)); }
+        this.value='';
+      };
+      $('ch-agent').onclick=function(){ toast('🤖 Агент-продавец подключится на этапе WhatsApp — будем обучать его на твоих скриптах.'); };
+      $('ch-stage').onclick=function(){ stopChat(); showStage(d.id,d); };
+      $('ch-info').onclick=function(){ stopChat(); showDealInfo(d.id); };
+    }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
+  }
+  // ℹ️ детали сделки: сумма, состав, файлы, менеджер — всё, что убрано из чата
+  async function showDealInfo(id){
+    openSheet('Детали','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
+    try{
+      var r=await api('GET','/deals/'+id);if(gen!==sheetGeneration)return;
+      var d=r.deal, files=r.files;
+      $('sheet-title').textContent=d.client_name;
+      body.innerHTML='<button class="ghost" id="di-back" style="margin-bottom:8px">← в чат</button>'+
+        '<span class="pill">'+esc(d.stage_name)+'</span><div class="amount">'+esc(money(d.amount))+'</div><p class="pre">'+esc(d.title)+'</p>'+
+        '<p class="hint">'+esc(d.manager_name||'—')+' · '+esc(d.source||'Без источника')+(d.note?' · '+esc(d.note):'')+'</p>'+
         (d.lost_reason?'<p class="pre danger">Причина отказа: '+esc(d.lost_reason)+'</p>':'')+
-        (d.imported_incomplete?'<p class="hint">Импорт: дополните состав и дату отгрузки через «Изменить».</p>':'')+
-        (d.is_won&&!files.length?'<p class="hint">⚠ Документ оплаты (Kaspi) не прикреплён — добавьте ниже в «Фото и файлы».</p>':'')+((d.is_won||d.is_lost)&&!d.closed_at?'<p class="hint">Дата закрытия неизвестна. Сделка не включена в сумму продаж за период. Уточните дату через «Изменить».</p>':'')+'<h3>Состав и отгрузка</h3><p class="muted">Дата: '+esc(day(d.ship_date))+'</p>'+(d.items.length?d.items.map(function(x){return '<div class="metric"><span>'+esc(x.name)+' × '+esc(x.qty)+'</span><b>'+esc(money(x.price*x.qty))+'</b></div>';}).join(''):'<p class="muted">Состав не заполнен</p>')+
-        '<h3>Фото и файлы</h3><div class="files">'+files.map(function(f){
+        (d.is_won&&!files.length?'<p class="hint">⚠ Документ оплаты (Kaspi) не прикреплён — добавьте в чате скрепкой.</p>':'')+
+        '<h3>Состав и отгрузка</h3><p class="muted">Дата: '+esc(day(d.ship_date))+'</p>'+(d.items.length?d.items.map(function(x){return '<div class="metric"><span>'+esc(x.name)+' × '+esc(x.qty)+'</span><b>'+esc(money(x.price*x.qty))+'</b></div>';}).join(''):'<p class="muted">Состав не заполнен</p>')+
+        '<h3>Файлы</h3><div class="files">'+files.map(function(f){
           var safe=/^\/uploads\/[\w-]+\.(jpg|png|webp|pdf)$/.test(f.url);if(!safe)return '';
           return '<a class="file" href="'+esc(f.url)+'" target="_blank" rel="noopener noreferrer">'+(f.mime.indexOf('image/')===0?'<img loading="lazy" src="'+esc(f.url)+'" alt="'+esc(f.name)+'">':'PDF · ')+esc(f.name)+'</a>';
-        }).join('')+'</div><form id="file-form"><label class="field">Прикрепить JPEG, PNG, WebP или PDF до 5 МБ<input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required></label>'+submit('Прикрепить')+'</form>'+
-        '<h3>Шаблоны ответов</h3>'+(state.templates.length?'<div class="actions">'+state.templates.map(function(t){return '<button class="ghost" data-copy="'+esc(t.id)+'">'+esc(t.title)+'</button>';}).join('')+'</div>':'<p class="muted">Руководитель может добавить шаблоны в разделе «Шаблоны».</p>')+
-        '<h3>Лента сделки</h3><form id="event-form">'+select('Тип записи','kind',[{id:'note',name:'Заметка'},{id:'call',name:'Звонок'},{id:'msg',name:'Сообщение (запись вручную)'}],'note')+area('Текст','text','')+submit('Добавить запись')+'</form><div class="timeline">'+all[1].events.map(function(e){
-          var kinds={note:'Заметка',call:'Звонок',msg:'Сообщение',status:'Этап'};
-          return '<article class="event"><div class="muted">'+esc(kinds[e.kind]||e.kind)+' · '+esc(e.author_name)+' · '+esc(stamp(e.ts))+'</div><div class="pre">'+esc(e.text)+'</div></article>';
-        }).join('')+'</div>';
-      $('deal-stage').onclick=function(){showStage(d.id,d);};$('deal-edit').onclick=function(){editDeal(d);};$('deal-client').onclick=function(){showClient(d.client_id);};bindCopy(body);
-      var f=$('event-form');f.elements.namedItem('text').required=true;
-      mutation(f,'POST','/deals/'+d.id+'/events',function(){return {kind:val(f,'kind'),text:val(f,'text')};},async function(){toast('Запись добавлена');await showDeal(d.id);});
-      var ff=$('file-form');
-      mutation(ff,'POST','/deals/'+d.id+'/files',async function(){var file=ff.elements.namedItem('file').files[0];if(!file||file.size>5*1024*1024)throw new Error('Выберите файл размером до 5 МБ');return {name:file.name,data:await fileData(file)};},async function(){toast('Файл прикреплён');await showDeal(d.id);});
+        }).join('')+(files.length?'':'<p class="muted">Файлов нет</p>')+'</div>'+
+        '<div class="actions" style="margin-top:10px"><button class="ghost" id="di-edit">✏️ Изменить сделку</button><button class="ghost" id="di-client">Клиент</button></div>';
+      $('di-back').onclick=function(){showDeal(d.id);};
+      $('di-edit').onclick=function(){editDeal(d);};
+      $('di-client').onclick=function(){showClient(d.client_id);};
     }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
   }
   function itemHtml(x){return '<div class="item" data-variant="'+esc(x.variant_id||'')+'">'+field('Изделие','item_name',x.name,'text','required maxlength="200"')+'<div class="item-grid">'+field('Количество','item_qty',x.qty==null?1:x.qty,'number','required min="0.01" step="0.01"')+field('Цена, ₸','item_price',x.price==null?0:x.price,'number','required min="0" max="1000000000000" step="0.01"')+'</div><button type="button" class="ghost danger" data-remove>Убрать позицию</button></div>';}

@@ -22,6 +22,20 @@
 .drag-h{font-size:17px;color:var(--mut,#9aa0a8);padding:8px 10px;cursor:grab;opacity:.75;user-select:none;flex:0 0 auto;margin:-8px -6px -8px 0}
 .cat-var{position:relative}
 .cat-var .drag-h{position:absolute;top:6px;right:6px;margin:0}
+.ch-head{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.chh{padding:7px 10px!important;font-size:13px}
+.ch-log{height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg,#0f1115);border:1px solid var(--line,#2a2e37);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.ch-row{display:flex}
+.ch-row.in{justify-content:flex-start}
+.ch-row.out{justify-content:flex-end}
+.ch-b{max-width:82%;padding:8px 11px;border-radius:13px;font-size:14px;line-height:1.35;white-space:pre-wrap;word-break:break-word}
+.ch-row.in .ch-b{background:var(--card2,#20242c);border-bottom-left-radius:4px}
+.ch-row.out .ch-b{background:rgba(59,130,246,.28);border-bottom-right-radius:4px}
+.ch-t{display:inline-block;font-size:10px;opacity:.55;margin-left:8px;vertical-align:bottom}
+.ch-sys{text-align:center;font-size:11px;color:var(--mut,#9aa0a8);padding:2px 0}
+.ch-input{display:flex;gap:6px;align-items:flex-end;margin-top:8px}
+.ch-input textarea{flex:1;min-width:0;resize:none;padding:10px 12px;background:var(--bg,#0f1115);border:1px solid var(--line,#2a2e37);border-radius:12px;color:inherit;font:inherit;font-size:14px;max-height:90px}
+.ch-tpl{display:flex;flex-direction:column;gap:4px;margin-top:6px;max-height:30vh;overflow-y:auto}
 .dragging{opacity:.45;outline:1.5px dashed var(--amber,#f0a621)}
 </style>
 </head>
@@ -38,6 +52,6 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="theme.js?v=1"></script>
 <script src="api.js?v=crm1"></script>
-<script src="crm.js?v=crm8"></script>
+<script src="crm.js?v=crm9"></script>
 </body>
 </html>
