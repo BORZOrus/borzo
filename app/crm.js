@@ -225,11 +225,12 @@
     var types={};live.forEach(function(m){(types[m.type]=types[m.type]||[]).push(m);});
     $('main').innerHTML='<div class="content">'+
       (cat.models.length?'':'<div class="card"><h2>Каталог пуст</h2><p class="hint">Загрузить каталог BORZO из Kaspi-файла (171 позиция, 46 моделей)?</p><button class="btn" id="cat-seed">Загрузить каталог</button><p class="error" id="seed-err"></p></div>')+
-      '<div class="actions"><button class="btn" id="cat-new">+ Модель</button></div>'+
-      Object.keys(types).sort().map(function(t){return '<h3 style="display:flex;align-items:center;justify-content:space-between">'+esc(t)+' · '+types[t].length+'<button class="ghost" data-addtype="'+esc(t)+'" style="font-size:16px;padding:2px 12px">+</button></h3>'+types[t].map(function(m){
+      Object.keys(types).sort().map(function(t){return '<h3 style="display:flex;align-items:center;justify-content:space-between">'+esc(t)+' · '+types[t].length+'<button class="ghost" data-addtype="'+esc(t)+'" style="font-size:16px;padding:2px 12px">+</button></h3><div class="cat-grid">'+types[t].map(function(m){
         var vs=variantsOf(m),priced=vs.filter(function(v){return v.price!=null;}).length;
-        var ph=vs.filter(function(v){return v.photo;})[0];return '<button class="card client-row cat-row" data-model="'+esc(m.id)+'">'+(ph?'<img class="cat-thumb" loading="lazy" src="'+esc(ph.photo)+'" alt="">':'<span class="cat-thumb cat-noimg">📦</span>')+'<span><strong>'+esc(m.name)+'</strong><div class="muted">вариантов: '+vs.length+' · с ценой: '+priced+'</div></span></button>';}).join('');}).join('')+
-      '</div>';
+        var ph=vs.filter(function(v){return v.photo;})[0];
+        var nm=m.name.indexOf(t)===0?m.name.slice(t.length).trim():m.name;   // в карточке без повторения категории
+        return '<button class="cat-card" data-model="'+esc(m.id)+'">'+(ph?'<img loading="lazy" src="'+esc(ph.photo)+'" alt="">':'<span class="cat-noimg">📦</span>')+'<strong>'+esc(nm)+'</strong><span class="muted">'+vs.length+' вар.'+(priced?' · цены':'')+'</span></button>';}).join('')+'</div>';}).join('')+
+      '<div class="actions" style="margin-top:14px"><button class="ghost" id="cat-newtype">+ Категория</button></div></div>';
     if($('cat-seed'))$('cat-seed').onclick=async function(){var b=this;b.disabled=true;try{var r=await api('POST','/catalog/seed',{reqId:uid()});toast('Загружено моделей: '+r.counts.models+', вариантов: '+r.counts.variants);await loadCatalog(true);renderCatalog();}catch(e){$('seed-err').textContent=error(e);b.disabled=false;}};
     $('main').querySelectorAll('[data-model]').forEach(function(b){b.onclick=function(){showModel(Number(b.dataset.model));};});
     function newModelForm(type){
@@ -261,8 +262,11 @@
         }catch(ex){ errBox.textContent=error(ex); btn.disabled=false; btn.textContent='Создать позицию'; }
       };
     }
-    $('cat-new').onclick=function(){newModelForm(null);};
     $('main').querySelectorAll('[data-addtype]').forEach(function(b){b.onclick=function(){newModelForm(b.dataset.addtype);};});
+    if($('cat-newtype'))$('cat-newtype').onclick=function(){
+      var t=(prompt('Название новой категории (напр. Смарт-тумба):')||'').trim();
+      if(!t)return; newModelForm(t);   // категория появится вместе с первой карточкой
+    };
   }
   function chipsEdit(name,kind,value){
     var vals=optValues(kind);
@@ -276,7 +280,7 @@
       '<h3>Варианты · '+vs.length+'</h3>'+vs.map(function(v){
         return '<div class="card cat-var">'+(v.photo?'<img class="cat-thumb big" loading="lazy" src="'+esc(v.photo)+'" alt="">':'')+'<div class="metric"><span>'+esc(variantLabel(v,m))+(v.archived?' · архив':'')+'</span><b>'+(v.price!=null?esc(money(v.price)):'<span class="muted">нет цены</span>')+'</b></div>'+(v.code?'<div class="muted">'+esc(v.code)+'</div>':'')+'<div class="actions"><button class="ghost" data-price="'+v.id+'">Цена</button><label class="ghost" style="cursor:pointer">📷<input type="file" accept="image/jpeg,image/png,image/webp" hidden data-photo="'+v.id+'"></label>'+(v.photo?'<button class="ghost danger" data-unphoto="'+v.id+'">без фото</button>':'')+'<button class="ghost danger" data-varch="'+v.id+'">'+(v.archived?'Вернуть':'Архив')+'</button></div></div>';
       }).join('')+
-      '<h3>+ Добавить вариант</h3><form id="var-form">'+chipsEdit(softType(m)?'Ткань (подушка)':'Корпус','corpus','')+chipsEdit('Ножки','legs','')+chipsEdit('Длина','len','')+chipsEdit('Ширина','width','')+field('Цена, ₸ (можно позже)','price','','number','min="0" step="1"')+field('Код/артикул','code','','text','maxlength="120"')+submit('Добавить вариант')+'</form>');
+      '<button class="ghost" id="var-toggle" style="margin-top:8px">+ Добавить вариант</button><form id="var-form" hidden>'+chipsEdit(softType(m)?'Ткань (подушка)':'Корпус','corpus','')+chipsEdit('Ножки','legs','')+chipsEdit('Длина','len','')+chipsEdit('Ширина','width','')+field('Цена, ₸ (можно позже)','price','','number','min="0" step="1"')+field('Код/артикул','code','','text','maxlength="120"')+submit('Добавить вариант')+'</form>');
     body.querySelectorAll('select[name^=opt_]').forEach(function(s){s.onchange=async function(){
       if(s.value!=='__new')return;
       var kind=s.name.slice(4), v=(prompt('Новое значение ('+kind+'):')||'').trim();
@@ -311,6 +315,7 @@
       try{await api('PATCH','/catalog/variants/'+v.id,{reqId:uid(),archived:!v.archived});await loadCatalog(true);showModel(m.id);}catch(e){toast(error(e));}
     };});
     var f=$('var-form');
+    $('var-toggle').onclick=function(){f.hidden=!f.hidden;this.textContent=f.hidden?'+ Добавить вариант':'− Свернуть';};
     mutation(f,'POST','/catalog/variants',function(){function ov(k){var s=f.elements.namedItem('opt_'+k);return s&&s.value!=='__new'?s.value:'';}
       return {model_id:m.id,corpus:ov('corpus'),legs:ov('legs'),len:ov('len'),width:ov('width'),price:val(f,'price'),code:val(f,'code')};},
       async function(){toast('Вариант добавлен');await loadCatalog(true);showModel(m.id);});
