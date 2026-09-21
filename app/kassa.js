@@ -480,8 +480,15 @@
     $('mgr-mon').innerHTML='<button id="mgr-prev" style="'+nb+'">‹</button><span style="font-weight:700;font-size:13px;min-width:120px;text-align:center">'+monthLabel(mgrMon)+'</span><button id="mgr-next" style="'+nb+(mgrMon>=0?';opacity:.4':'')+'">›</button>';
     $('mgr-prev').onclick=function(){ mgrMon--; renderMgr(); };
     $('mgr-next').onclick=function(){ if(mgrMon<0){ mgrMon++; renderMgr(); } };
-    $('mgr-notifs').innerHTML = reqPlates('sup');
-    bindReqPlates($('mgr-notifs'));
+    // выдачи, которые снабженец ещё не подтвердил — висят у руководителя, пока не приняты
+    var waitIss=txs().filter(function(x){return x.kind==='issue'&&x.status==='wait';});
+    var waitHtml=waitIss.map(function(x){
+      return '<div class="card notif" style="border-color:rgba(59,130,246,.45);background:rgba(59,130,246,.07)" data-op="'+x.id+'">'+
+        '<div style="font-weight:700">⏳ Выдача '+money(x.amount)+' — ждёт подтверждения снабженца</div>'+
+        '<div class="muted fz12" style="margin-top:2px">'+esc(x.source)+' · '+stamp(x.ts)+' · исчезнет, когда он нажмёт «Подтвердить»</div></div>';
+    }).join('');
+    $('mgr-notifs').innerHTML = waitHtml + reqPlates('sup');
+    bindReqPlates($('mgr-notifs')); bindOpRows($('mgr-notifs'));
 
     var issues=txs().filter(function(x){return x.kind==='issue';});
     $('mgr-issues').innerHTML = issues.length ? issues.map(function(x){
@@ -551,7 +558,7 @@
     $('view-mgr').style.display=sup?'none':'';
     $('u-role').textContent = sup?'Кабинет снабженца':'Кабинет управленца';
     $('ub-nav').style.display = mgr?'':'none';   // навигация и переключатель — только у управленца
-    var vt=$('viewtoggle'); if(vt){ vt.textContent = sup?'↩ Вернуться к себе':'👁 Смотреть как снабженец'; vt.className = sup?'on':''; }
+    var vt=$('viewtoggle'); if(vt){ vt.textContent = sup?'↩':'👁'; vt.title = sup?'Вернуться к себе':'Подглядеть кабинет снабженца'; vt.className = sup?'on':''; }
     $('preview-note').style.display = (mgr&&sup)?'':'none';
     renderCurrent();
   }
@@ -572,9 +579,18 @@
       }).catch(function(e){ alert('Не удалось включить уведомления: '+(e&&e.message||e)); });
     });
   }
-  var nb=$('notifbtn'); if(nb) nb.onclick=enablePush;
-  $('logout').onclick=function(){ API.logout(); };
-  $('passbtn').onclick=function(){
+  $('gearbtn').onclick=function(){
+    openSheet('<h3>⚙️ Настройки</h3>'+
+      '<button class="btn btn-ghost" id="set-push" style="margin-bottom:8px">🔔 Включить уведомления</button>'+
+      '<button class="btn btn-ghost" id="set-pass" style="margin-bottom:8px">🔑 Сменить пароль</button>'+
+      '<button class="btn btn-ghost" id="set-logout" style="margin-bottom:8px;color:var(--k-red)">Выйти из аккаунта</button>'+
+      '<button class="btn btn-ghost" id="set-close">Закрыть</button>');
+    $('set-close').onclick=closeSheet;
+    $('set-push').onclick=function(){ enablePush(); };
+    $('set-logout').onclick=function(){ API.logout(); };
+    $('set-pass').onclick=doPass;
+  };
+  function doPass(){
     openSheet('<h3>🔑 Смена пароля</h3>'+
       '<div class="fld"><label>Текущий пароль</label><input type="password" id="p-old" autocomplete="current-password"></div>'+
       '<div class="fld"><label>Новый пароль (минимум 5 символов)</label><input type="password" id="p-new" autocomplete="new-password"></div>'+

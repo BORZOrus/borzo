@@ -908,26 +908,42 @@
   if(CLOUD){
     var U=window.API.user||{}, owner=(U.role==='mgr');
     var dn=document.querySelector('.demo-note');
+    var BTN='background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:6px 11px;font-size:14px;cursor:pointer';
     if(dn){ dn.style.color='var(--ink)'; dn.innerHTML=
-      '<div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:2px 0">'+
-      '<span style="color:var(--mut)">'+((U.name||'—'))+'</span>'+
-      (owner?'<button id="fin-supply" style="background:var(--card2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer">🛒 Снабжение</button>':'')+
-      (owner?'<button id="fin-pult" style="background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer">🏠 Домой</button>':'')+
-      '<button id="fin-pass" style="background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer">🔑 Пароль</button>'+
-      '<button id="fin-logout" style="background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer">Выйти</button>'+
+      '<div style="display:flex;align-items:center;gap:6px;padding:2px 0">'+
+      '<span style="color:var(--mut);flex:1;text-align:left;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+((U.name||'—'))+'</span>'+
+      (owner?'<button id="fin-pult" title="Домой" style="'+BTN+'">🏠</button>':'')+
+      (owner?'<button id="fin-supply" title="Касса снабжения" style="'+BTN+'">🛒</button>':'')+
+      (owner?'<button id="fin-eye" title="Подглядеть кабинет Ульяны" style="'+BTN+'">👁</button>':'')+
+      '<button id="fin-gear" title="Настройки" style="'+BTN+'">⚙️</button>'+
       '</div>'; }
     var sup=document.getElementById('fin-supply'); if(sup)sup.onclick=function(){ location.href='kassa.html'; };
     var plt=document.getElementById('fin-pult'); if(plt)plt.onclick=function(){ location.href='home.html'; };
-    var lo=document.getElementById('fin-logout'); if(lo)lo.onclick=function(){ window.API.logout(); };
-    var pb=document.getElementById('fin-pass'); if(pb)pb.onclick=function(){
-      var oldp=prompt('Текущий пароль:'); if(oldp===null)return;
-      var np=prompt('Новый пароль (минимум 5 символов):'); if(np===null)return;
-      if((np||'').length<5){ alert('Новый пароль — минимум 5 символов'); return; }
-      window.API.password({old_pass:oldp,new_pass:np}).then(function(){ alert('Пароль изменён'); }).catch(function(e){ alert(e.message||'Ошибка'); });
+    var rsw=document.querySelector('.roleswitch'); if(rsw)rsw.classList.remove('show');   // сегментный переключатель убран — вместо него глазок
+    if(!owner && impBtn&&impBtn.parentNode) impBtn.parentNode.style.display='none';
+    var eye=document.getElementById('fin-eye');
+    if(eye) eye.onclick=function(){
+      var toUl = role()!=='ulyana';
+      setRole(toUl?'ulyana':'ruslan');
+      eye.textContent = toUl?'↩':'👁';
+      eye.title = toUl?'Вернуться к себе':'Подглядеть кабинет Ульяны';
+      eye.style.borderColor = toUl?'var(--amber)':'var(--line)';
     };
-    var rsw=document.querySelector('.roleswitch');
-    if(owner){ if(rsw)rsw.classList.add('show'); }   // переключатель кабинетов — только руководителю
-    else { if(rsw)rsw.classList.remove('show'); if(impBtn&&impBtn.parentNode)impBtn.parentNode.style.display='none'; }
+    var gear=document.getElementById('fin-gear');
+    if(gear) gear.onclick=function(){
+      open('<h3>⚙️ Настройки</h3>'+
+        '<button class="btn btn-ghost" id="set-pass" style="margin-bottom:8px">🔑 Сменить пароль</button>'+
+        '<button class="btn btn-ghost" id="set-logout" style="margin-bottom:8px;color:var(--red)">Выйти из аккаунта</button>'+
+        '<button class="btn btn-ghost" id="set-close">Закрыть</button>');
+      document.getElementById('set-close').onclick=close;
+      document.getElementById('set-logout').onclick=function(){ window.API.logout(); };
+      document.getElementById('set-pass').onclick=function(){
+        var oldp=prompt('Текущий пароль:'); if(oldp===null)return;
+        var np=prompt('Новый пароль (минимум 5 символов):'); if(np===null)return;
+        if((np||'').length<5){ alert('Новый пароль — минимум 5 символов'); return; }
+        window.API.password({old_pass:oldp,new_pass:np}).then(function(){ alert('Пароль изменён'); close(); }).catch(function(e){ alert(e.message||'Ошибка'); });
+      };
+    };
     setRole(owner?'ruslan':'ulyana');
     loadPot();
     window.API.finGet().then(function(res){

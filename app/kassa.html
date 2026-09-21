@@ -26,9 +26,8 @@
   .ub-top{display:flex;align-items:center;gap:8px}
   .ub-top .who{flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ub-top .who b{font-weight:700}
-  .userbar #logout,.userbar #passbtn{flex:0 0 auto;padding:8px 12px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer}
-  .userbar #passbtn{padding:8px 11px}
-  .ub-nav{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}
+  .userbar #gearbtn{flex:0 0 auto;padding:8px 11px;border:1px solid var(--k-line);background:transparent;color:var(--k-mut);border-radius:9px;font-size:14px;cursor:pointer}
+  .ub-nav{display:flex;gap:6px;align-items:center}
   .ub-nav a,.ub-nav button{padding:7px 11px;border:1px solid var(--k-line);background:var(--k-card2);color:var(--k-ink);border-radius:9px;font-weight:600;font-size:12.5px;text-decoration:none;cursor:pointer}
   .ub-nav #viewtoggle.on{border-color:var(--k-amber);color:var(--k-amber)}
   .preview-note{background:rgba(240,166,33,.12);color:var(--k-amber);font-size:12px;text-align:center;padding:7px;border-radius:9px;margin:10px 14px 0}
@@ -131,14 +130,12 @@
   <div class="userbar">
     <div class="ub-top">
       <div class="who"><b id="u-name"></b> · <span id="u-role" class="muted"></span></div>
-      <button id="passbtn" title="Сменить пароль">🔑</button>
-      <button id="logout">Выйти</button>
-    </div>
-    <div class="ub-nav" id="ub-nav" style="display:none">
-      <a id="topult" href="home.html">🏠 Домой</a>
-      <a id="tofin" href="fin.html">💳 Финансы</a>
-      <button id="viewtoggle" type="button">👁 Смотреть как снабженец</button>
-      <button id="notifbtn" type="button">🔔 Уведомления</button>
+      <span class="ub-nav" id="ub-nav" style="display:none;margin:0">
+        <a id="topult" href="home.html" title="Домой">🏠</a>
+        <a id="tofin" href="fin.html" title="Финансы">💳</a>
+        <button id="viewtoggle" type="button" title="Подглядеть кабинет снабженца">👁</button>
+      </span>
+      <button id="gearbtn" title="Настройки">⚙️</button>
     </div>
   </div>
   <div class="preview-note" id="preview-note" style="display:none">👁 Просмотр кабинета снабженца (только смотришь, действуешь как управленец)</div>
@@ -193,6 +190,6 @@
 <div class="sheet" id="sheet"><div id="sheet-body"></div></div>
 
 <script src="api.js?v=8"></script>
-<script src="kassa.js?v=26"></script>
+<script src="kassa.js?v=27"></script>
 </body>
 </html>
