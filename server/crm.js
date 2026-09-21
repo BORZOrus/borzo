@@ -431,6 +431,16 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     for(let i=0;i<ids.length;i++) await db.query('UPDATE '+table+' SET ord=$1 WHERE id=$2',[i+1,id(ids[i])]);
     return {ok:true,count:ids.length};
   }));
+  // порядок КАТЕГОРИЙ (типов): массив имён в нужном порядке, хранится в crm_cat_options kind='typeord'
+  router.post('/catalog/typeorder',mutate(async(req,db)=>{
+    const types=req.body.types;
+    if(!Array.isArray(types)||!types.length||types.length>100) throw err(400,'types: массив названий категорий');
+    for(let i=0;i<types.length;i++){
+      const t=str(types[i],'Категория',60,true);
+      await db.query("INSERT INTO crm_cat_options(kind,value,ord) VALUES('typeord',$1,$2) ON CONFLICT(kind,value) DO UPDATE SET ord=excluded.ord",[t,i+1]);
+    }
+    return {ok:true};
+  }));
   // разовая загрузка каталога из catalog.json (идемпотентно: модель по name, вариант по сочетанию)
   router.post('/catalog/seed',requireRole('mgr'),mutate(async(req,db)=>{
     let src;
