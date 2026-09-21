@@ -229,8 +229,11 @@
         var vs=variantsOf(m),priced=vs.filter(function(v){return v.price!=null;}).length;
         var ph=vs.filter(function(v){return v.photo;})[0];
         var nm=m.name.indexOf(t)===0?m.name.slice(t.length).trim():m.name;   // в карточке без повторения категории
-        var minis=vs.filter(function(v){return v.photo;}).slice(0,4).map(function(v){return '<img loading="lazy" src="'+esc(v.photo)+'" alt="">';}).join('');
-        return '<button class="cat-card" data-model="'+esc(m.id)+'">'+(ph?'<img loading="lazy" src="'+esc(ph.photo)+'" alt="">':'<span class="cat-noimg">📦</span>')+'<strong>'+esc(nm)+'</strong><span class="muted">'+vs.length+' вар.'+(priced?' · цены':'')+'</span>'+(vs.length>1&&minis?'<span class="cat-mini">'+minis+'</span>':'')+'<span class="drag-h" data-drag title="Зажми и перетащи">✥</span></button>';}).join('')+'</div>';}).join('')+
+        var phs=vs.filter(function(v){return v.photo;}).slice(0,4);
+        var collage = phs.length<=1
+          ? (phs[0]?'<img loading="lazy" src="'+esc(phs[0].photo)+'" alt="">':'<span class="cat-noimg">📦</span>')
+          : '<span class="cat-collage c'+phs.length+'">'+phs.map(function(v){return '<img loading="lazy" src="'+esc(v.photo)+'" alt="">';}).join('')+'</span>';
+        return '<button class="cat-card" data-model="'+esc(m.id)+'">'+collage+'<strong>'+esc(nm)+'</strong><span class="muted">'+vs.length+' вар.'+(priced?' · цены':'')+'</span><span class="drag-h" data-drag title="Зажми и перетащи">✥</span></button>';}).join('')+'</div>';}).join('')+
       '<div class="actions" style="margin-top:14px"><button class="ghost" id="cat-newtype">+ Категория</button></div></div>';
     if($('cat-seed'))$('cat-seed').onclick=async function(){var b=this;b.disabled=true;try{var r=await api('POST','/catalog/seed',{reqId:uid()});toast('Загружено моделей: '+r.counts.models+', вариантов: '+r.counts.variants);await loadCatalog(true);renderCatalog();}catch(e){$('seed-err').textContent=error(e);b.disabled=false;}};
     $('main').querySelectorAll('[data-model]').forEach(function(b){b.onclick=function(){showModel(Number(b.dataset.model));};});
@@ -277,51 +280,78 @@
   async function showModel(mid){
     try{await loadCatalog();}catch(e){toast(error(e));return;}
     var m=cat.models.find(function(x){return x.id===mid;});if(!m)return;
-    var vs=cat.variants.filter(function(v){return v.model_id===m.id;});
-    openSheet(m.name,'<div class="actions"><button class="ghost" id="m-rename">✏️ Переименовать</button><button class="ghost danger" id="m-arch">'+(m.archived?'Вернуть из архива':'В архив')+'</button></div>'+
-      '<h3>Варианты · '+vs.length+'</h3><div id="var-list">'+vs.map(function(v){
-        return '<div class="card cat-var" data-vid="'+v.id+'"><span class="drag-h" data-drag title="Зажми и перетащи">✥</span>'+(v.photo?'<img class="cat-thumb big" loading="lazy" src="'+esc(v.photo)+'" alt="">':'')+'<div class="metric"><span>'+esc(variantLabel(v,m))+(v.archived?' · архив':'')+'</span><b>'+(v.price!=null?esc(money(v.price)):'<span class="muted">нет цены</span>')+'</b></div>'+(v.code?'<div class="muted">'+esc(v.code)+'</div>':'')+'<div class="actions"><button class="ghost" data-price="'+v.id+'">Цена</button><label class="ghost" style="cursor:pointer">📷<input type="file" accept="image/jpeg,image/png,image/webp" hidden data-photo="'+v.id+'"></label>'+(v.photo?'<button class="ghost danger" data-unphoto="'+v.id+'">без фото</button>':'')+'<button class="ghost danger" data-varch="'+v.id+'">'+(v.archived?'Вернуть':'Архив')+'</button></div></div>';
+    var vs=cat.variants.filter(function(v){return v.model_id===m.id&&!v.archived;});
+    var soft=softType(m);
+    openSheet(m.name,'<div style="text-align:right;margin:-6px 0 4px"><button class="ghost" id="m-rename" style="padding:4px 10px;font-size:12px">✏️ название</button></div>'+
+      '<div id="var-list">'+vs.map(function(v){
+        var dims=[v.len,v.width,m.sizeNote].filter(Boolean).join(' · ');
+        return '<div class="card cat-var" data-vid="'+v.id+'" style="display:flex;gap:12px;align-items:center">'+
+          '<span class="drag-h" data-drag title="Зажми и перетащи">✥</span>'+
+          (v.photo?'<img loading="lazy" src="'+esc(v.photo)+'" alt="" style="width:64px;height:64px;border-radius:10px;object-fit:cover;flex:0 0 64px">':'<span style="width:64px;height:64px;border-radius:10px;background:var(--card2,#20242c);display:flex;align-items:center;justify-content:center;flex:0 0 64px">📦</span>')+
+          '<span style="flex:1;min-width:0">'+
+            '<strong style="font-size:13.5px">'+esc(variantLabel(v,m))+'</strong>'+
+            (dims?'<div class="muted" style="font-size:12px">'+esc(dims)+'</div>':'')+
+            (v.code?'<div class="muted" style="font-size:11.5px">'+esc(v.code)+'</div>':'')+
+            '<div style="font-weight:700;margin-top:2px">'+(v.price!=null?esc(money(v.price)):'<span class="muted" style="font-weight:400">цена не задана</span>')+'</div>'+
+          '</span>'+
+          '<button class="ghost" data-editvar="'+v.id+'" style="padding:8px 10px;flex:0 0 auto">✏️</button>'+
+        '</div>';
       }).join('')+'</div>'+
-      '<button class="ghost" id="var-toggle" style="margin-top:8px">+ Добавить вариант</button><form id="var-form" hidden>'+chipsEdit(softType(m)?'Ткань (подушка)':'Корпус','corpus','')+chipsEdit('Ножки','legs','')+chipsEdit('Длина','len','')+chipsEdit('Ширина','width','')+field('Цена, ₸ (можно позже)','price','','number','min="0" step="1"')+field('Код/артикул','code','','text','maxlength="120"')+submit('Добавить вариант')+'</form>');
-    body.querySelectorAll('select[name^=opt_]').forEach(function(s){s.onchange=async function(){
-      if(s.value!=='__new')return;
-      var kind=s.name.slice(4), v=(prompt('Новое значение ('+kind+'):')||'').trim();
-      if(!v){s.value='';return;}
-      try{await api('POST','/catalog/options',{reqId:uid(),kind:kind,value:v});await loadCatalog(true);
-        var opt=document.createElement('option');opt.textContent=v;s.insertBefore(opt,s.querySelector('option[value=__new]'));s.value=v;toast('Добавлено: '+v);}
-      catch(e){toast(error(e));s.value='';}
-    };});
+      '<button class="ghost" id="var-add" style="margin-top:8px">+ Добавить вариант</button>');
     $('m-rename').onclick=async function(){var v=(prompt('Новое название:',m.name)||'').trim();if(!v||v===m.name)return;
       try{await api('PATCH','/catalog/models/'+m.id,{reqId:uid(),name:v});await loadCatalog(true);renderCatalog();showModel(m.id);}catch(e){toast(error(e));}};
-    $('m-arch').onclick=async function(){try{await api('PATCH','/catalog/models/'+m.id,{reqId:uid(),archived:!m.archived});await loadCatalog(true);closeSheet();renderCatalog();}catch(e){toast(error(e));}};
-    body.querySelectorAll('[data-price]').forEach(function(b){b.onclick=async function(){
-      var v=cat.variants.find(function(x){return x.id===Number(b.dataset.price);});
-      var p=prompt('Цена, ₸ (пусто — убрать):',v.price!=null?v.price:'');if(p===null)return;
-      try{await api('PATCH','/catalog/variants/'+v.id,{reqId:uid(),price:p.trim()===''?null:p.trim()});await loadCatalog(true);showModel(m.id);toast('Цена сохранена');}catch(e){toast(error(e));}
-    };});
-    body.querySelectorAll('[data-photo]').forEach(function(inp){inp.onchange=async function(){
-      var file=inp.files[0];if(!file)return;if(file.size>5*1024*1024){toast('Фото — до 5 МБ');return;}
-      var data=await fileData(file);
-      try{await api('PATCH','/catalog/variants/'+inp.dataset.photo,{reqId:uid(),photo:data});await loadCatalog(true);showModel(m.id);toast('Фото сохранено');}catch(e){toast(error(e));}
-    };});
     var vl=document.getElementById('var-list'); if(vl)enableDrag(vl,'.cat-var','data-vid','variants');
-    body.querySelectorAll('[data-editcode]').forEach(function(b){b.onclick=async function(){
-      var v=cat.variants.find(function(x){return x.id===Number(b.dataset.editcode);});
-      var nc=prompt('Артикул:',v.code||''); if(nc===null)return;
-      try{await api('PATCH','/catalog/variants/'+v.id,{reqId:uid(),code:nc.trim()});await loadCatalog(true);showModel(m.id);toast('Артикул сохранён');}catch(e){toast(error(e));}
+    body.querySelectorAll('[data-editvar]').forEach(function(b){b.onclick=function(){editVariant(m,Number(b.dataset.editvar));};});
+    $('var-add').onclick=function(){editVariant(m,null);};
+  }
+  // редактор варианта: ВСЕ данные в одном месте (цвет/ткань, ножки, размеры, артикул, цена, фото)
+  function optSelect(label,kind,value){
+    var vals=optValues(kind); if(value&&vals.indexOf(value)<0)vals=vals.concat([value]);
+    return '<label class="field">'+esc(label)+'<select name="opt_'+kind+'"><option value="">—</option>'+vals.map(function(v){return '<option'+(v===value?' selected':'')+'>'+esc(v)+'</option>';}).join('')+'<option value="__new">+ добавить…</option></select></label>';
+  }
+  function editVariant(m,vid){
+    var v=vid?cat.variants.find(function(x){return x.id===vid;}):{corpus:'',legs:'',len:'',width:'',code:'',price:null,photo:''};
+    if(!v)return;
+    var soft=softType(m);
+    openSheet(vid?'✏️ '+m.name:'+ Вариант · '+m.name,'<form id="ev-form">'+
+      (v.photo?'<img src="'+esc(v.photo)+'" alt="" style="width:96px;height:96px;border-radius:10px;object-fit:cover;margin-bottom:8px">':'')+
+      '<label class="field">'+(v.photo?'Заменить фото':'Фото (JPEG/PNG/WebP до 5 МБ)')+'<input name="photo" type="file" accept="image/jpeg,image/png,image/webp"></label>'+
+      optSelect(soft?'Ткань (подушка)':'Корпус','corpus',v.corpus)+
+      optSelect('Ножки','legs',v.legs)+
+      optSelect('Длина','len',v.len)+
+      optSelect('Ширина','width',v.width)+
+      field('Артикул','code',v.code||'','text','maxlength="120"')+
+      field('Цена, ₸','price',v.price!=null?Math.round(v.price):'','number','min="0" step="1"')+
+      submit(vid?'Сохранить':'Добавить вариант')+'</form>'+
+      (vid?'<div style="text-align:center;margin-top:10px"><button class="ghost" id="ev-del" style="font-size:12px;color:var(--mut,#9aa0a8)">убрать вариант из каталога</button></div>':''));
+    var f=$('ev-form');
+    body.querySelectorAll('select[name^=opt_]').forEach(function(sel){sel.onchange=async function(){
+      if(sel.value!=='__new')return;
+      var kind=sel.name.slice(4), nv=(prompt('Новое значение:')||'').trim();
+      if(!nv){sel.value='';return;}
+      try{await api('POST','/catalog/options',{reqId:uid(),kind:kind,value:nv});await loadCatalog(true);
+        var opt=document.createElement('option');opt.textContent=nv;sel.insertBefore(opt,sel.querySelector('option[value=__new]'));sel.value=nv;}
+      catch(e){toast(error(e));sel.value='';}
     };});
-    body.querySelectorAll('[data-unphoto]').forEach(function(b){b.onclick=async function(){
-      try{await api('PATCH','/catalog/variants/'+b.dataset.unphoto,{reqId:uid(),photo:''});await loadCatalog(true);showModel(m.id);}catch(e){toast(error(e));}
-    };});
-    body.querySelectorAll('[data-varch]').forEach(function(b){b.onclick=async function(){
-      var v=cat.variants.find(function(x){return x.id===Number(b.dataset.varch);});
-      try{await api('PATCH','/catalog/variants/'+v.id,{reqId:uid(),archived:!v.archived});await loadCatalog(true);showModel(m.id);}catch(e){toast(error(e));}
-    };});
-    var f=$('var-form');
-    $('var-toggle').onclick=function(){f.hidden=!f.hidden;this.textContent=f.hidden?'+ Добавить вариант':'− Свернуть';};
-    mutation(f,'POST','/catalog/variants',function(){function ov(k){var s=f.elements.namedItem('opt_'+k);return s&&s.value!=='__new'?s.value:'';}
-      return {model_id:m.id,corpus:ov('corpus'),legs:ov('legs'),len:ov('len'),width:ov('width'),price:val(f,'price'),code:val(f,'code')};},
-      async function(){toast('Вариант добавлен');await loadCatalog(true);showModel(m.id);});
+    if($('ev-del'))$('ev-del').onclick=async function(){
+      if(!confirm('Убрать этот вариант из каталога? В старых сделках он останется как был.'))return;
+      try{await api('PATCH','/catalog/variants/'+vid,{reqId:uid(),archived:true});await loadCatalog(true);renderCatalog();showModel(m.id);}catch(e){toast(error(e));}
+    };
+    f.onsubmit=async function(e){
+      e.preventDefault();
+      var btn=f.querySelector('[type=submit]'); btn.disabled=true; btn.textContent='Сохраняю…';
+      var errBox=f.querySelector('[data-error]'); errBox.textContent='';
+      function ov(k){var sel=f.elements.namedItem('opt_'+k);return sel&&sel.value!=='__new'?sel.value:'';}
+      try{
+        var photo=null; var pf=f.elements.namedItem('photo').files[0];
+        if(pf){ if(pf.size>5*1024*1024) throw new Error('Фото — до 5 МБ'); photo=await fileData(pf); }
+        var payload={reqId:uid(),corpus:ov('corpus'),legs:ov('legs'),len:ov('len'),width:ov('width'),code:val(f,'code'),price:val(f,'price')};
+        if(photo)payload.photo=photo;
+        if(vid) await api('PATCH','/catalog/variants/'+vid,payload);
+        else { payload.model_id=m.id; await api('POST','/catalog/variants',payload); }
+        toast('Сохранено'); await loadCatalog(true); renderCatalog(); showModel(m.id);
+      }catch(ex){ errBox.textContent=error(ex); btn.disabled=false; btn.textContent=vid?'Сохранить':'Добавить вариант'; }
+    };
   }
   // перетаскивание: зажал лапку ✥ → двигаешь → порядок сохраняется на сервере
   function enableDrag(container,itemSel,idAttr,kind){
