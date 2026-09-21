@@ -922,20 +922,31 @@
     var rsw=document.querySelector('.roleswitch'); if(rsw)rsw.classList.remove('show');   // сегментный переключатель убран — вместо него глазок
     if(!owner && impBtn&&impBtn.parentNode) impBtn.parentNode.style.display='none';
     var eye=document.getElementById('fin-eye');
+    var peek=document.createElement('div');
+    peek.style.cssText='display:none;background:rgba(240,166,33,.12);color:var(--amber,#f0a621);font-size:12px;text-align:center;padding:7px;border-radius:9px;margin:8px 14px 0';
+    peek.textContent='👁 Кабинет Ульяны — это не твоя зона, ты подглядываешь. Действуй за неё только если реально нужно.';
+    if(dn&&dn.parentNode) dn.parentNode.insertBefore(peek,dn.nextSibling);
     if(eye) eye.onclick=function(){
       var toUl = role()!=='ulyana';
       setRole(toUl?'ulyana':'ruslan');
       eye.textContent = toUl?'↩':'👁';
       eye.title = toUl?'Вернуться к себе':'Подглядеть кабинет Ульяны';
-      eye.style.borderColor = toUl?'var(--amber)':'var(--line)';
+      eye.style.borderColor = toUl?'var(--amber,#f0a621)':'var(--line)';
+      peek.style.display = toUl?'':'none';
     };
     var gear=document.getElementById('fin-gear');
     if(gear) gear.onclick=function(){
       open('<h3>⚙️ Настройки</h3>'+
+        '<button class="btn btn-ghost" id="set-theme" style="margin-bottom:8px">🎨 Тема приложения</button>'+
         '<button class="btn btn-ghost" id="set-pass" style="margin-bottom:8px">🔑 Сменить пароль</button>'+
         '<button class="btn btn-ghost" id="set-logout" style="margin-bottom:8px;color:var(--red)">Выйти из аккаунта</button>'+
         '<button class="btn btn-ghost" id="set-close">Закрыть</button>');
       document.getElementById('set-close').onclick=close;
+      document.getElementById('set-theme').onclick=function(){
+        open(BorzoTheme.editorHtml()+'<button class="btn btn-ghost" id="th-close" style="margin-top:10px">Закрыть</button>');
+        BorzoTheme.wireEditor(document.getElementById('sheet-body')||document.body);
+        document.getElementById('th-close').onclick=close;
+      };
       document.getElementById('set-logout').onclick=function(){ window.API.logout(); };
       document.getElementById('set-pass').onclick=function(){
         var oldp=prompt('Текущий пароль:'); if(oldp===null)return;

@@ -582,11 +582,13 @@
   $('gearbtn').onclick=function(){
     openSheet('<h3>⚙️ Настройки</h3>'+
       '<button class="btn btn-ghost" id="set-push" style="margin-bottom:8px">🔔 Включить уведомления</button>'+
+      '<button class="btn btn-ghost" id="set-theme" style="margin-bottom:8px">🎨 Тема приложения</button>'+
       '<button class="btn btn-ghost" id="set-pass" style="margin-bottom:8px">🔑 Сменить пароль</button>'+
       '<button class="btn btn-ghost" id="set-logout" style="margin-bottom:8px;color:var(--k-red)">Выйти из аккаунта</button>'+
       '<button class="btn btn-ghost" id="set-close">Закрыть</button>');
     $('set-close').onclick=closeSheet;
     $('set-push').onclick=function(){ enablePush(); };
+    $('set-theme').onclick=function(){ openSheet(BorzoTheme.editorHtml()+'<button class="btn btn-ghost" id="th-close" style="margin-top:10px">Закрыть</button>'); BorzoTheme.wireEditor(sheetBody); $('th-close').onclick=closeSheet; };
     $('set-logout').onclick=function(){ API.logout(); };
     $('set-pass').onclick=doPass;
   };
