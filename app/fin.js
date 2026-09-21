@@ -115,8 +115,8 @@
   function money(n){ n=Math.round(+n||0); return n.toLocaleString('ru-RU')+' ₸'; }
   function uid(){ return 'o'+Date.now()+Math.floor(Math.random()*10000); }
   function pad(x){return x<10?'0'+x:''+x;}
-  function fdate(ts){ var d=new Date(ts); return pad(d.getDate())+'.'+pad(d.getMonth()+1); }
-  function fdate2(ts){ var d=new Date(ts); return pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.'+d.getFullYear(); }
+  function fdate(ts){ var d=new Date(ts); return pad(d.getDate())+'.'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+  function fdate2(ts){ var d=new Date(ts); return pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
   var MON=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   // диапазон месяца по смещению (0=текущий, -1=прошлый)
   function monthRange(off){ var d=new Date(); var s=new Date(d.getFullYear(),d.getMonth()+off,1); var e=new Date(d.getFullYear(),d.getMonth()+off+1,1); return {s:s.getTime(),e:e.getTime(),name:MON[s.getMonth()]+' '+s.getFullYear()}; }

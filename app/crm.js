@@ -215,7 +215,8 @@
   var cat={models:[],options:[],variants:[],loaded:false};
   async function loadCatalog(force){if(cat.loaded&&!force)return cat;var r=await api('GET','/catalog');cat.models=r.models;cat.options=r.options;cat.variants=r.variants;cat.loaded=true;return cat;}
   function optValues(kind){return cat.options.filter(function(o){return o.kind===kind;}).map(function(o){return o.value;});}
-  function variantLabel(v){return [v.corpus&&('корпус '+v.corpus),v.legs&&('ножки '+v.legs),v.len,v.width].filter(Boolean).join(' · ')||'базовый';}
+  function softType(m){return !!m&&/^(Банкетка|Пуф)/i.test(m.type);}
+  function variantLabel(v,m){return [v.corpus&&((softType(m)?'ткань ':'корпус ')+v.corpus),v.legs&&('ножки '+v.legs),v.len,v.width].filter(Boolean).join(' · ')||'базовый';}
   function variantsOf(m){return cat.variants.filter(function(v){return v.model_id===m.id&&!v.archived;});}
   async function renderCatalog(){
     try{await loadCatalog();}catch(e){$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p></div>';return;}
@@ -227,7 +228,7 @@
       '<div class="actions"><button class="btn" id="cat-new">+ Модель</button></div>'+
       Object.keys(types).sort().map(function(t){return '<h3>'+esc(t)+' · '+types[t].length+'</h3>'+types[t].map(function(m){
         var vs=variantsOf(m),priced=vs.filter(function(v){return v.price!=null;}).length;
-        return '<button class="card client-row" data-model="'+esc(m.id)+'"><strong>'+esc(m.name)+'</strong><div class="muted">вариантов: '+vs.length+' · с ценой: '+priced+'</div></button>';}).join('');}).join('')+
+        var ph=vs.filter(function(v){return v.photo;})[0];return '<button class="card client-row cat-row" data-model="'+esc(m.id)+'">'+(ph?'<img class="cat-thumb" loading="lazy" src="'+esc(ph.photo)+'" alt="">':'<span class="cat-thumb cat-noimg">📦</span>')+'<span><strong>'+esc(m.name)+'</strong><div class="muted">вариантов: '+vs.length+' · с ценой: '+priced+'</div></span></button>';}).join('');}).join('')+
       '</div>';
     if($('cat-seed'))$('cat-seed').onclick=async function(){var b=this;b.disabled=true;try{var r=await api('POST','/catalog/seed',{reqId:uid()});toast('Загружено моделей: '+r.counts.models+', вариантов: '+r.counts.variants);await loadCatalog(true);renderCatalog();}catch(e){$('seed-err').textContent=error(e);b.disabled=false;}};
     $('main').querySelectorAll('[data-model]').forEach(function(b){b.onclick=function(){showModel(Number(b.dataset.model));};});
@@ -247,9 +248,9 @@
     var vs=cat.variants.filter(function(v){return v.model_id===m.id;});
     openSheet(m.name,'<div class="actions"><button class="ghost" id="m-rename">✏️ Переименовать</button><button class="ghost danger" id="m-arch">'+(m.archived?'Вернуть из архива':'В архив')+'</button></div>'+
       '<h3>Варианты · '+vs.length+'</h3>'+vs.map(function(v){
-        return '<div class="card"><div class="metric"><span>'+esc(variantLabel(v))+(v.archived?' · архив':'')+'</span><b>'+(v.price!=null?esc(money(v.price)):'<span class="muted">нет цены</span>')+'</b></div>'+(v.code?'<div class="muted">'+esc(v.code)+'</div>':'')+'<div class="actions"><button class="ghost" data-price="'+v.id+'">Цена</button><button class="ghost danger" data-varch="'+v.id+'">'+(v.archived?'Вернуть':'Архив')+'</button></div></div>';
+        return '<div class="card cat-var">'+(v.photo?'<img class="cat-thumb big" loading="lazy" src="'+esc(v.photo)+'" alt="">':'')+'<div class="metric"><span>'+esc(variantLabel(v,m))+(v.archived?' · архив':'')+'</span><b>'+(v.price!=null?esc(money(v.price)):'<span class="muted">нет цены</span>')+'</b></div>'+(v.code?'<div class="muted">'+esc(v.code)+'</div>':'')+'<div class="actions"><button class="ghost" data-price="'+v.id+'">Цена</button><label class="ghost" style="cursor:pointer">📷<input type="file" accept="image/jpeg,image/png,image/webp" hidden data-photo="'+v.id+'"></label>'+(v.photo?'<button class="ghost danger" data-unphoto="'+v.id+'">без фото</button>':'')+'<button class="ghost danger" data-varch="'+v.id+'">'+(v.archived?'Вернуть':'Архив')+'</button></div></div>';
       }).join('')+
-      '<h3>+ Добавить вариант</h3><form id="var-form">'+chipsEdit('Корпус','corpus','')+chipsEdit('Ножки','legs','')+chipsEdit('Длина','len','')+chipsEdit('Ширина','width','')+field('Цена, ₸ (можно позже)','price','','number','min="0" step="1"')+field('Код/артикул','code','','text','maxlength="120"')+submit('Добавить вариант')+'</form>');
+      '<h3>+ Добавить вариант</h3><form id="var-form">'+chipsEdit(softType(m)?'Ткань (подушка)':'Корпус','corpus','')+chipsEdit('Ножки','legs','')+chipsEdit('Длина','len','')+chipsEdit('Ширина','width','')+field('Цена, ₸ (можно позже)','price','','number','min="0" step="1"')+field('Код/артикул','code','','text','maxlength="120"')+submit('Добавить вариант')+'</form>');
     body.querySelectorAll('select[name^=opt_]').forEach(function(s){s.onchange=async function(){
       if(s.value!=='__new')return;
       var kind=s.name.slice(4), v=(prompt('Новое значение ('+kind+'):')||'').trim();
@@ -266,6 +267,14 @@
       var p=prompt('Цена, ₸ (пусто — убрать):',v.price!=null?v.price:'');if(p===null)return;
       try{await api('PATCH','/catalog/variants/'+v.id,{reqId:uid(),price:p.trim()===''?null:p.trim()});await loadCatalog(true);showModel(m.id);toast('Цена сохранена');}catch(e){toast(error(e));}
     };});
+    body.querySelectorAll('[data-photo]').forEach(function(inp){inp.onchange=async function(){
+      var file=inp.files[0];if(!file)return;if(file.size>5*1024*1024){toast('Фото — до 5 МБ');return;}
+      var data=await fileData(file);
+      try{await api('PATCH','/catalog/variants/'+inp.dataset.photo,{reqId:uid(),photo:data});await loadCatalog(true);showModel(m.id);toast('Фото сохранено');}catch(e){toast(error(e));}
+    };});
+    body.querySelectorAll('[data-unphoto]').forEach(function(b){b.onclick=async function(){
+      try{await api('PATCH','/catalog/variants/'+b.dataset.unphoto,{reqId:uid(),photo:''});await loadCatalog(true);showModel(m.id);}catch(e){toast(error(e));}
+    };});
     body.querySelectorAll('[data-varch]').forEach(function(b){b.onclick=async function(){
       var v=cat.variants.find(function(x){return x.id===Number(b.dataset.varch);});
       try{await api('PATCH','/catalog/variants/'+v.id,{reqId:uid(),archived:!v.archived});await loadCatalog(true);showModel(m.id);}catch(e){toast(error(e));}
@@ -281,16 +290,21 @@
     try{await loadCatalog();}catch(e){var el=$('cat-pick');if(el)el.innerHTML='<div class="muted">Каталог недоступен</div>';return;}
     var pm=$('pick-model'),pv=$('pick-variant'),pa=$('pick-add');if(!pm)return;
     cat.models.filter(function(m){return !m.archived&&variantsOf(m).length;}).forEach(function(m){var o=document.createElement('option');o.value=m.id;o.textContent=m.name;pm.appendChild(o);});
+    pv.onchange=function(){
+      var old=$('pick-img');if(old)old.remove();
+      var v=cat.variants.find(function(x){return x.id===Number(pv.value);});
+      if(v&&v.photo){var im=document.createElement('img');im.id='pick-img';im.className='cat-thumb big';im.src=v.photo;pa.parentNode.insertBefore(im,pa);}
+    };
     pm.onchange=function(){
-      pv.innerHTML='';pv.hidden=pa.hidden=!pm.value;if(!pm.value)return;
+      pv.innerHTML='';pv.hidden=pa.hidden=!pm.value;var old=$('pick-img');if(old)old.remove();if(!pm.value)return;
       var m=cat.models.find(function(x){return x.id===Number(pm.value);});
-      variantsOf(m).forEach(function(v){var o=document.createElement('option');o.value=v.id;o.textContent=variantLabel(v)+(v.price!=null?' · '+money(v.price):' · цены нет');pv.appendChild(o);});
+      variantsOf(m).forEach(function(v){var o=document.createElement('option');o.value=v.id;o.textContent=variantLabel(v,m)+(v.price!=null?' · '+money(v.price):' · цены нет');pv.appendChild(o);});pv.onchange();
     };
     pa.onclick=function(){
       var m=cat.models.find(function(x){return x.id===Number(pm.value);});
       var v=cat.variants.find(function(x){return x.id===Number(pv.value);});
       if(!m||!v)return;
-      var name=m.name+(variantLabel(v)!=='базовый'?' · '+variantLabel(v):'');
+      var name=m.name+(variantLabel(v,m)!=='базовый'?' · '+variantLabel(v,m):'');
       $('items').insertAdjacentHTML('beforeend',itemHtml({name:name,qty:1,price:v.price!=null?v.price:0,variant_id:v.id}));
       body.querySelectorAll('[data-remove]').forEach(function(b){b.onclick=function(){b.closest('.item').remove();};});
       $('items').dispatchEvent(new Event('input'));

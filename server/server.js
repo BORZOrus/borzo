@@ -205,7 +205,16 @@ async function bookPot(op, db){
   await q.query('UPDATE fin_state SET data=$1, rev=rev+1, updated_at=$2 WHERE id=1', [JSON.stringify(data), Date.now()]);
   return true;
 }
-function monthPerNow(){ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }
+// первый день ТЕКУЩЕГО месяца по Астане (UTC+5): серверное UTC возле полуночи не должно уводить проводку в чужой месяц
+function almatyMonthStart(ts){ const d=new Date((ts==null?Date.now():Number(ts))+5*3600000); return new Date(d.getUTCFullYear(), d.getUTCMonth(), 1).getTime(); }
+function monthPerNow(){ return almatyMonthStart(); }
+// дата документа не может быть из будущего (сканер иногда распознаёт мусор с накладной)
+function docDateClean(v){
+  let s = String(v||'').trim().slice(0,10);
+  if(s && !/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+  if(s){ const today=new Date(Date.now()+5*3600000).toISOString().slice(0,10); if(s>today) return null; }  // null = «в будущем», отклонить
+  return s;
+}
 // снять операцию из котла по id (при удалении/правке закупа руководителя)
 async function unbookPot(id, db){
   const q = db||pool;
@@ -305,8 +314,8 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   const cleanItems = items.filter(i=>(i.name||'').trim()).map(i=>({name:String(i.name).trim(),qty:norm(i.qty),unit:i.unit||'шт',price:norm(i.price),sum:rowSum(i),cat:i.cat||req.body.category}));
   const invNo = String(req.body.invNo||'').trim().slice(0,40);
   const recNo = String(req.body.recNo||'').trim().slice(0,40);
-  let docDate = String(req.body.docDate||'').trim().slice(0,10);
-  if(docDate && !/^\d{4}-\d{2}-\d{2}$/.test(docDate)) docDate = '';
+  let docDate = docDateClean(req.body.docDate);
+  if(docDate===null) return res.status(400).json({error:'дата документа из будущего — проверьте распознанную дату'});
   const sig = sigOf(cleanItems, amount, req.body.category);
   const who = actRole==='mgr' ? 'ruslan' : 'snab';
   const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
@@ -326,7 +335,7 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
       for(const i of cleanItems){
         if((i.cat||'')!=='Сырьё') continue;   // на склад попадает ТОЛЬКО сырьё; операционка (ремонт, доставка, услуги) не складируется
         await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [now, new Date(now).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
+          [now, new Date(now).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'}), i.name, i.qty, i.unit, i.price, i.sum, i.cat, id]);
       }
       const potBooked = await bookSupplyExpense(amount, req.body.category, noteTxt, id, who, c, undefined, cleanItems);
       return { id, dup:isDup, dupDate: isDup ? dupR.rows[0].t : null, potBooked };
@@ -374,18 +383,18 @@ app.post('/api/kassa/expense/:id/edit', auth, requireRole('mgr'), async (req,res
       // реквизиты документа сохраняем при правке (аудит #27): если поле прислано — обновляем, иначе оставляем прежнее
       const invNo = (req.body.invNo!=null) ? String(req.body.invNo).trim().slice(0,40) : (tx.inv_no||'');
       const recNo = (req.body.recNo!=null) ? String(req.body.recNo).trim().slice(0,40) : (tx.rec_no||'');
-      let docDate = (req.body.docDate!=null) ? String(req.body.docDate).trim().slice(0,10) : (tx.doc_date||'');
-      if(docDate && !/^\d{4}-\d{2}-\d{2}$/.test(docDate)) docDate = '';
+      let docDate = (req.body.docDate!=null) ? docDateClean(req.body.docDate) : (tx.doc_date||'');
+      if(docDate===null) throw httpErr(400,'дата документа из будущего — проверьте её');
       await c.query('UPDATE kassa_tx SET amount=$1, category=$2, items=$3, inv_no=$4, rec_no=$5, doc_date=$6 WHERE id=$7',[amount, cat, JSON.stringify(cleanItems), invNo, recNo, docDate, tx.id]);
       await c.query('DELETE FROM sklad_intake WHERE tx_id=$1',[tx.id]);
       for(const i of cleanItems){
         if((i.cat||'')!=='Сырьё') continue;   // склад — только сырьё; смена категории на операционку убирает позицию со склада
         await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum, i.cat, tx.id]);
+          [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'}), i.name, i.qty, i.unit, i.price, i.sum, i.cat, tx.id]);
       }
       // перепровести в котле: снять старую, записать новую — СОХРАНЯЯ месяц исходной операции (аудит #18: правка не переносит расход в текущий месяц)
       await unbookPotTx(tx.id, c);
-      const origPer = new Date(new Date(Number(tx.ts)).getFullYear(), new Date(Number(tx.ts)).getMonth(), 1).getTime();
+      const origPer = almatyMonthStart(Number(tx.ts));
       const names = cleanItems.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
       await bookSupplyExpense(amount, cat, 'закуп Руслана'+(names?': '+names:''), tx.id, 'ruslan', c, origPer, cleanItems);
     });
@@ -477,14 +486,14 @@ app.post('/api/kassa/:id/approve', auth, requireAny(['mgr','sup']), async (req,r
         for(const i of rebuildItems){
           if((i.cat||effCat)!=='Сырьё') continue;   // склад — только сырьё
           await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-            [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU'), i.name, i.qty, i.unit, i.price, i.sum!=null?i.sum:rowSum(i), (i.cat||effCat), tx.id]);
+            [Number(tx.ts), new Date(Number(tx.ts)).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'}), i.name, i.qty, i.unit, i.price, i.sum!=null?i.sum:rowSum(i), (i.cat||effCat), tx.id]);
         }
       }
       // ПЕРЕПРОВЕСТИ КОТЁЛ при согласованной правке закупа (аудит #5): иначе supx_ остаётся на старой сумме/категории
       if(tx.kind==='expense' && (('amount' in next) || ('category' in next))){
         const newAmount = ('amount' in next) ? next.amount : money(tx.amount);
         const newCat = ('category' in next) ? next.category : tx.category;
-        const origPer = new Date(new Date(Number(tx.ts)).getFullYear(), new Date(Number(tx.ts)).getMonth(), 1).getTime();
+        const origPer = almatyMonthStart(Number(tx.ts));
         const ur = await c.query('SELECT role FROM users WHERE id=$1',[tx.created_by]);
         const who = (ur.rows[0] && ur.rows[0].role==='sup') ? 'snab' : 'ruslan';
         await unbookPotTx(tx.id, c);
@@ -574,7 +583,7 @@ app.post('/api/scan', auth, async (req,res)=>{
     let items = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.items) ? parsed.items : []);
     let number = (parsed && !Array.isArray(parsed) && parsed.number!=null) ? String(parsed.number).trim().slice(0,40) : '';
     let docDate = (parsed && !Array.isArray(parsed) && parsed.date!=null) ? String(parsed.date).trim().slice(0,10) : '';
-    if(docDate && !/^\d{4}-\d{2}-\d{2}$/.test(docDate)) docDate = '';
+    docDate = docDateClean(docDate) || '';   // будущая/кривая дата с бумаги не подставляется
     items = items.filter(function(i){return i && (i.name||'').toString().trim();}).map(function(i){
       var unit = ['шт','м','л','кг'].indexOf(i.unit)>=0 ? i.unit : 'шт';
       return { name:String(i.name).slice(0,120), qty:String(i.qty==null?'':i.qty), unit:unit, price:String(i.price==null?'':i.price).replace(/[^\d.]/g,'') };

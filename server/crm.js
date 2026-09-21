@@ -76,6 +76,7 @@ async function initSchema(db) {
       UNIQUE(model_id,corpus,legs,len,width)
     );
     CREATE INDEX IF NOT EXISTS crm_cat_variants_model_idx ON crm_cat_variants(model_id);
+    ALTER TABLE crm_cat_variants ADD COLUMN IF NOT EXISTS photo TEXT NOT NULL DEFAULT '';
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) VALUES
       ('new','Новая заявка',1,false,false), ('working','В работе',2,false,false),
       ('selection','Подбор решения',3,false,false), ('agreed','Договорились/Предоплата',4,false,false),
@@ -394,7 +395,7 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
       [m.id,str(b.corpus,'Корпус',60),str(b.legs,'Ножки',60),str(b.len,'Длина',30),str(b.width,'Ширина',30),str(b.code,'Код/артикул',120),str(b.ntin,'NTIN',40),str(b.link,'Ссылка',400),b.price==null||b.price===''?null:number(b.price,'Цена')]);
     return {variant:r.rows[0]};
   }));
-  router.patch('/catalog/variants/:id',mutate(async(req,db)=>{
+  router.patch('/catalog/variants/:id',mutate(async(req,db,saved)=>{
     const r=await db.query('SELECT * FROM crm_cat_variants WHERE id=$1 FOR UPDATE',[id(req.params.id)]);
     if(!r.rowCount) throw err(404,'Вариант не найден');
     const v={...r.rows[0]}, b=req.body;
@@ -402,7 +403,15 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     if('code' in b) v.code=str(b.code,'Код',120);
     if('ntin' in b) v.ntin=str(b.ntin,'NTIN',40);
     if('archived' in b) v.archived=b.archived===true;
-    const out=await db.query('UPDATE crm_cat_variants SET price=$1,code=$2,ntin=$3,archived=$4 WHERE id=$5 RETURNING *',[v.price,v.code,v.ntin,v.archived,v.id]);
+    if('photo' in b){
+      if(b.photo===''||b.photo==null) v.photo='';
+      else{
+        if(typeof b.photo!=='string'||!/^data:image\/(jpeg|png|webp);base64,/.test(b.photo)) throw err(400,'Фото: JPEG/PNG/WebP');
+        if(b.photo.length>7*1024*1024) throw err(400,'Фото — до 5 МБ');
+        const url=savePhoto(b.photo); if(!url) throw err(400,'Не удалось сохранить фото'); saved.push(url); v.photo=url;
+      }
+    }
+    const out=await db.query('UPDATE crm_cat_variants SET price=$1,code=$2,ntin=$3,archived=$4,photo=$5 WHERE id=$6 RETURNING *',[v.price,v.code,v.ntin,v.archived,v.photo,v.id]);
     return {variant:out.rows[0]};
   }));
   // разовая загрузка каталога из catalog.json (идемпотентно: модель по name, вариант по сочетанию)
