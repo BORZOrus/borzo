@@ -229,10 +229,12 @@
         var vs=variantsOf(m),priced=vs.filter(function(v){return v.price!=null;}).length;
         var ph=vs.filter(function(v){return v.photo;})[0];
         var nm=m.name.indexOf(t)===0?m.name.slice(t.length).trim():m.name;   // в карточке без повторения категории
-        return '<button class="cat-card" data-model="'+esc(m.id)+'">'+(ph?'<img loading="lazy" src="'+esc(ph.photo)+'" alt="">':'<span class="cat-noimg">📦</span>')+'<strong>'+esc(nm)+'</strong><span class="muted">'+vs.length+' вар.'+(priced?' · цены':'')+'</span></button>';}).join('')+'</div>';}).join('')+
+        var minis=vs.filter(function(v){return v.photo;}).slice(0,4).map(function(v){return '<img loading="lazy" src="'+esc(v.photo)+'" alt="">';}).join('');
+        return '<button class="cat-card" data-model="'+esc(m.id)+'">'+(ph?'<img loading="lazy" src="'+esc(ph.photo)+'" alt="">':'<span class="cat-noimg">📦</span>')+'<strong>'+esc(nm)+'</strong><span class="muted">'+vs.length+' вар.'+(priced?' · цены':'')+'</span>'+(vs.length>1&&minis?'<span class="cat-mini">'+minis+'</span>':'')+'<span class="drag-h" data-drag title="Зажми и перетащи">✥</span></button>';}).join('')+'</div>';}).join('')+
       '<div class="actions" style="margin-top:14px"><button class="ghost" id="cat-newtype">+ Категория</button></div></div>';
     if($('cat-seed'))$('cat-seed').onclick=async function(){var b=this;b.disabled=true;try{var r=await api('POST','/catalog/seed',{reqId:uid()});toast('Загружено моделей: '+r.counts.models+', вариантов: '+r.counts.variants);await loadCatalog(true);renderCatalog();}catch(e){$('seed-err').textContent=error(e);b.disabled=false;}};
     $('main').querySelectorAll('[data-model]').forEach(function(b){b.onclick=function(){showModel(Number(b.dataset.model));};});
+    $('main').querySelectorAll('.cat-grid').forEach(function(g){enableDrag(g,'.cat-card','data-model','models');});
     function newModelForm(type){
       var soft=/^(Банкетка|Пуф)/i.test(type||'');
       openSheet('Новая позиция'+(type?' · '+type:''),'<form id="model-form">'+
@@ -277,9 +279,9 @@
     var m=cat.models.find(function(x){return x.id===mid;});if(!m)return;
     var vs=cat.variants.filter(function(v){return v.model_id===m.id;});
     openSheet(m.name,'<div class="actions"><button class="ghost" id="m-rename">✏️ Переименовать</button><button class="ghost danger" id="m-arch">'+(m.archived?'Вернуть из архива':'В архив')+'</button></div>'+
-      '<h3>Варианты · '+vs.length+'</h3>'+vs.map(function(v){
-        return '<div class="card cat-var">'+(v.photo?'<img class="cat-thumb big" loading="lazy" src="'+esc(v.photo)+'" alt="">':'')+'<div class="metric"><span>'+esc(variantLabel(v,m))+(v.archived?' · архив':'')+'</span><b>'+(v.price!=null?esc(money(v.price)):'<span class="muted">нет цены</span>')+'</b></div>'+(v.code?'<div class="muted">'+esc(v.code)+'</div>':'')+'<div class="actions"><button class="ghost" data-price="'+v.id+'">Цена</button><label class="ghost" style="cursor:pointer">📷<input type="file" accept="image/jpeg,image/png,image/webp" hidden data-photo="'+v.id+'"></label>'+(v.photo?'<button class="ghost danger" data-unphoto="'+v.id+'">без фото</button>':'')+'<button class="ghost danger" data-varch="'+v.id+'">'+(v.archived?'Вернуть':'Архив')+'</button></div></div>';
-      }).join('')+
+      '<h3>Варианты · '+vs.length+'</h3><div id="var-list">'+vs.map(function(v){
+        return '<div class="card cat-var" data-vid="'+v.id+'"><span class="drag-h" data-drag title="Зажми и перетащи">✥</span>'+(v.photo?'<img class="cat-thumb big" loading="lazy" src="'+esc(v.photo)+'" alt="">':'')+'<div class="metric"><span>'+esc(variantLabel(v,m))+(v.archived?' · архив':'')+'</span><b>'+(v.price!=null?esc(money(v.price)):'<span class="muted">нет цены</span>')+'</b></div>'+(v.code?'<div class="muted">'+esc(v.code)+'</div>':'')+'<div class="actions"><button class="ghost" data-price="'+v.id+'">Цена</button><label class="ghost" style="cursor:pointer">📷<input type="file" accept="image/jpeg,image/png,image/webp" hidden data-photo="'+v.id+'"></label>'+(v.photo?'<button class="ghost danger" data-unphoto="'+v.id+'">без фото</button>':'')+'<button class="ghost danger" data-varch="'+v.id+'">'+(v.archived?'Вернуть':'Архив')+'</button></div></div>';
+      }).join('')+'</div>'+
       '<button class="ghost" id="var-toggle" style="margin-top:8px">+ Добавить вариант</button><form id="var-form" hidden>'+chipsEdit(softType(m)?'Ткань (подушка)':'Корпус','corpus','')+chipsEdit('Ножки','legs','')+chipsEdit('Длина','len','')+chipsEdit('Ширина','width','')+field('Цена, ₸ (можно позже)','price','','number','min="0" step="1"')+field('Код/артикул','code','','text','maxlength="120"')+submit('Добавить вариант')+'</form>');
     body.querySelectorAll('select[name^=opt_]').forEach(function(s){s.onchange=async function(){
       if(s.value!=='__new')return;
@@ -302,6 +304,7 @@
       var data=await fileData(file);
       try{await api('PATCH','/catalog/variants/'+inp.dataset.photo,{reqId:uid(),photo:data});await loadCatalog(true);showModel(m.id);toast('Фото сохранено');}catch(e){toast(error(e));}
     };});
+    var vl=document.getElementById('var-list'); if(vl)enableDrag(vl,'.cat-var','data-vid','variants');
     body.querySelectorAll('[data-editcode]').forEach(function(b){b.onclick=async function(){
       var v=cat.variants.find(function(x){return x.id===Number(b.dataset.editcode);});
       var nc=prompt('Артикул:',v.code||''); if(nc===null)return;
@@ -319,6 +322,42 @@
     mutation(f,'POST','/catalog/variants',function(){function ov(k){var s=f.elements.namedItem('opt_'+k);return s&&s.value!=='__new'?s.value:'';}
       return {model_id:m.id,corpus:ov('corpus'),legs:ov('legs'),len:ov('len'),width:ov('width'),price:val(f,'price'),code:val(f,'code')};},
       async function(){toast('Вариант добавлен');await loadCatalog(true);showModel(m.id);});
+  }
+  // перетаскивание: зажал лапку ✥ → двигаешь → порядок сохраняется на сервере
+  function enableDrag(container,itemSel,idAttr,kind){
+    var suppress=false;
+    container.addEventListener('click',function(e){ if(suppress){e.stopPropagation();e.preventDefault();suppress=false;} },true);
+    container.querySelectorAll('[data-drag]').forEach(function(h){
+      h.style.touchAction='none';
+      h.addEventListener('pointerdown',function(e){
+        e.preventDefault();e.stopPropagation();
+        var el=h.closest(itemSel); if(!el)return;
+        var parent=el.parentNode, moved=false;
+        el.classList.add('dragging');
+        function move(ev){
+          ev.preventDefault();
+          var t=document.elementFromPoint(ev.clientX,ev.clientY);
+          var over=t&&t.closest?t.closest(itemSel):null;
+          if(over&&over!==el&&over.parentNode===parent){
+            var r=over.getBoundingClientRect();
+            var after=(ev.clientY>r.top+r.height/2)||(Math.abs(ev.clientY-(r.top+r.height/2))<r.height/2&&ev.clientX>r.left+r.width/2);
+            parent.insertBefore(el, after?over.nextSibling:over);
+            moved=true;
+          }
+        }
+        function up(){
+          document.removeEventListener('pointermove',move);
+          document.removeEventListener('pointerup',up);
+          el.classList.remove('dragging');
+          if(moved){ suppress=true;
+            var ids=Array.from(parent.querySelectorAll(itemSel)).map(function(x){return Number(x.getAttribute(idAttr));}).filter(Boolean);
+            api('POST','/catalog/reorder',{reqId:uid(),kind:kind,ids:ids}).then(function(){loadCatalog(true);}).catch(function(e){toast(error(e));});
+          }
+        }
+        document.addEventListener('pointermove',move);
+        document.addEventListener('pointerup',up);
+      });
+    });
   }
   // пикер «из каталога» для состава сделки: модель → вариант → позиция с ценой и variant_id
   function pickerHtml(){return '<div class="card" id="cat-pick"><div class="muted">Добавить из каталога</div><select id="pick-model"><option value="">— модель —</option></select><select id="pick-variant" hidden></select><button type="button" class="ghost" id="pick-add" hidden>+ В состав</button></div>';}

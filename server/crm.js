@@ -77,6 +77,7 @@ async function initSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS crm_cat_variants_model_idx ON crm_cat_variants(model_id);
     ALTER TABLE crm_cat_variants ADD COLUMN IF NOT EXISTS photo TEXT NOT NULL DEFAULT '';
+    ALTER TABLE crm_cat_variants ADD COLUMN IF NOT EXISTS ord INTEGER NOT NULL DEFAULT 0;
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) VALUES
       ('new','Новая заявка',1,false,false), ('working','В работе',2,false,false),
       ('selection','Подбор решения',3,false,false), ('agreed','Договорились/Предоплата',4,false,false),
@@ -364,7 +365,7 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     const [m,o,v]=await Promise.all([
       pool.query('SELECT * FROM crm_cat_models ORDER BY archived,type,ord,name'),
       pool.query('SELECT * FROM crm_cat_options ORDER BY kind,ord,id'),
-      pool.query('SELECT * FROM crm_cat_variants ORDER BY model_id,corpus,legs,len,width')]);
+      pool.query('SELECT * FROM crm_cat_variants ORDER BY model_id,ord,id')]);
     res.json({models:m.rows,options:o.rows,variants:v.rows});
   }));
   router.post('/catalog/models',mutate(async(req,db)=>{
@@ -419,6 +420,15 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     }
     const out=await db.query('UPDATE crm_cat_variants SET price=$1,code=$2,ntin=$3,archived=$4,photo=$5 WHERE id=$6 RETURNING *',[v.price,v.code,v.ntin,v.archived,v.photo,v.id]);
     return {variant:out.rows[0]};
+  }));
+  // сохранить порядок карточек/вариантов после перетаскивания (массив id в новом порядке)
+  router.post('/catalog/reorder',mutate(async(req,db)=>{
+    const kind=req.body.kind, ids=req.body.ids;
+    if(!['models','variants'].includes(kind)) throw err(400,'kind: models или variants');
+    if(!Array.isArray(ids)||!ids.length||ids.length>2000) throw err(400,'ids: массив id в новом порядке');
+    const table=kind==='models'?'crm_cat_models':'crm_cat_variants';
+    for(let i=0;i<ids.length;i++) await db.query('UPDATE '+table+' SET ord=$1 WHERE id=$2',[i+1,id(ids[i])]);
+    return {ok:true,count:ids.length};
   }));
   // разовая загрузка каталога из catalog.json (идемпотентно: модель по name, вариант по сочетанию)
   router.post('/catalog/seed',requireRole('mgr'),mutate(async(req,db)=>{
