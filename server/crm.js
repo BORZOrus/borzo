@@ -78,6 +78,7 @@ async function initSchema(db) {
     CREATE INDEX IF NOT EXISTS crm_cat_variants_model_idx ON crm_cat_variants(model_id);
     ALTER TABLE crm_cat_variants ADD COLUMN IF NOT EXISTS photo TEXT NOT NULL DEFAULT '';
     ALTER TABLE crm_cat_variants ADD COLUMN IF NOT EXISTS ord INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS agent_on BOOLEAN NOT NULL DEFAULT true;
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) VALUES
       ('new','Новая заявка',1,false,false), ('working','В работе',2,false,false),
       ('selection','Подбор решения',3,false,false), ('agreed','Договорились/Предоплата',4,false,false),
@@ -303,6 +304,14 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
       [s.id,JSON.stringify(d.items),d.ship_date,reason,s.is_won||s.is_lost,d.amount,d.id]);
     await event(db,req.user,d.id,'status',prev.name+' → '+s.name+(reason?' · '+reason:''),prev.id,s.id);
     return {deal:await dealBy(db,d.id)};
+  }));
+  // тумблер агента на конкретный чат (глобальный появится вместе с WhatsApp-интеграцией)
+  router.post('/deals/:id/agent',mutate(async(req,db)=>{
+    const d=await dealBy(db,req.params.id,true);
+    const on=req.body.on===true;
+    await db.query('UPDATE crm_deals SET agent_on=$1,updated_at=now() WHERE id=$2',[on,d.id]);
+    await event(db,req.user,d.id,'note',on?'🤖 Агент включён в этом чате':'🤖 Агент выключен — отвечает менеджер');
+    return {ok:true,agent_on:on};
   }));
   router.get('/deals/:id/events',route(async(req,res)=>{
     const d=await dealBy(pool,req.params.id);
