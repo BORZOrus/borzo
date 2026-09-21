@@ -226,17 +226,43 @@
     $('main').innerHTML='<div class="content">'+
       (cat.models.length?'':'<div class="card"><h2>Каталог пуст</h2><p class="hint">Загрузить каталог BORZO из Kaspi-файла (171 позиция, 46 моделей)?</p><button class="btn" id="cat-seed">Загрузить каталог</button><p class="error" id="seed-err"></p></div>')+
       '<div class="actions"><button class="btn" id="cat-new">+ Модель</button></div>'+
-      Object.keys(types).sort().map(function(t){return '<h3>'+esc(t)+' · '+types[t].length+'</h3>'+types[t].map(function(m){
+      Object.keys(types).sort().map(function(t){return '<h3 style="display:flex;align-items:center;justify-content:space-between">'+esc(t)+' · '+types[t].length+'<button class="ghost" data-addtype="'+esc(t)+'" style="font-size:16px;padding:2px 12px">+</button></h3>'+types[t].map(function(m){
         var vs=variantsOf(m),priced=vs.filter(function(v){return v.price!=null;}).length;
         var ph=vs.filter(function(v){return v.photo;})[0];return '<button class="card client-row cat-row" data-model="'+esc(m.id)+'">'+(ph?'<img class="cat-thumb" loading="lazy" src="'+esc(ph.photo)+'" alt="">':'<span class="cat-thumb cat-noimg">📦</span>')+'<span><strong>'+esc(m.name)+'</strong><div class="muted">вариантов: '+vs.length+' · с ценой: '+priced+'</div></span></button>';}).join('');}).join('')+
       '</div>';
     if($('cat-seed'))$('cat-seed').onclick=async function(){var b=this;b.disabled=true;try{var r=await api('POST','/catalog/seed',{reqId:uid()});toast('Загружено моделей: '+r.counts.models+', вариантов: '+r.counts.variants);await loadCatalog(true);renderCatalog();}catch(e){$('seed-err').textContent=error(e);b.disabled=false;}};
     $('main').querySelectorAll('[data-model]').forEach(function(b){b.onclick=function(){showModel(Number(b.dataset.model));};});
-    $('cat-new').onclick=function(){
-      openSheet('Новая модель','<form id="model-form">'+field('Тип (Стол/Консоль/Тумба/Банкетка/Пуф/Столик)','type','','text','required maxlength="60"')+field('Серия/база (напр. LUX 3 м)','base','','text','required maxlength="100"')+submit('Создать модель')+'</form>');
+    function newModelForm(type){
+      var soft=/^(Банкетка|Пуф)/i.test(type||'');
+      openSheet('Новая позиция'+(type?' · '+type:''),'<form id="model-form">'+
+        (type?'':field('Тип (Стол-трансформер/Консоль/Тумба/Банкетка/Пуф/Столик)','type','','text','required maxlength="60"'))+
+        field('Название модели (напр. LUX 3 м)','base','','text','required maxlength="100"')+
+        '<h3>Первый вариант (можно дополнить позже)</h3>'+
+        field(soft?'Ткань (подушка)':'Корпус','corpus','','text','maxlength="60"')+
+        field('Ножки','legs','','text','maxlength="60"')+
+        field('Длина (напр. 3 м)','len','','text','maxlength="30"')+
+        field('Ширина (напр. 60 см)','width','','text','maxlength="30"')+
+        field('Артикул','code','','text','maxlength="120"')+
+        field('Цена, ₸','price','','number','min="0" step="1"')+
+        '<label class="field">Фото (JPEG/PNG/WebP до 5 МБ)<input name="photo" type="file" accept="image/jpeg,image/png,image/webp"></label>'+
+        submit('Создать позицию')+'</form>');
       var f=$('model-form');
-      mutation(f,'POST','/catalog/models',function(){return {type:val(f,'type'),base:val(f,'base')};},async function(r){closeSheet();toast('Модель создана');await loadCatalog(true);renderCatalog();showModel(r.model.id);});
-    };
+      f.onsubmit=async function(e){
+        e.preventDefault(); if(!f.reportValidity())return;
+        var btn=f.querySelector('[type=submit]'); btn.disabled=true; btn.textContent='Сохраняю…';
+        var errBox=f.querySelector('[data-error]'); errBox.textContent='';
+        try{
+          var t=type||val(f,'type');
+          var mr=await api('POST','/catalog/models',{reqId:uid(),type:t,base:val(f,'base')});
+          var photo=null; var pf=f.elements.namedItem('photo').files[0];
+          if(pf){ if(pf.size>5*1024*1024) throw new Error('Фото — до 5 МБ'); photo=await fileData(pf); }
+          await api('POST','/catalog/variants',{reqId:uid(),model_id:mr.model.id,corpus:val(f,'corpus'),legs:val(f,'legs'),len:val(f,'len'),width:val(f,'width'),code:val(f,'code'),price:val(f,'price'),photo:photo});
+          toast('Позиция создана'); await loadCatalog(true); renderCatalog(); showModel(mr.model.id);
+        }catch(ex){ errBox.textContent=error(ex); btn.disabled=false; btn.textContent='Создать позицию'; }
+      };
+    }
+    $('cat-new').onclick=function(){newModelForm(null);};
+    $('main').querySelectorAll('[data-addtype]').forEach(function(b){b.onclick=function(){newModelForm(b.dataset.addtype);};});
   }
   function chipsEdit(name,kind,value){
     var vals=optValues(kind);
@@ -271,6 +297,11 @@
       var file=inp.files[0];if(!file)return;if(file.size>5*1024*1024){toast('Фото — до 5 МБ');return;}
       var data=await fileData(file);
       try{await api('PATCH','/catalog/variants/'+inp.dataset.photo,{reqId:uid(),photo:data});await loadCatalog(true);showModel(m.id);toast('Фото сохранено');}catch(e){toast(error(e));}
+    };});
+    body.querySelectorAll('[data-editcode]').forEach(function(b){b.onclick=async function(){
+      var v=cat.variants.find(function(x){return x.id===Number(b.dataset.editcode);});
+      var nc=prompt('Артикул:',v.code||''); if(nc===null)return;
+      try{await api('PATCH','/catalog/variants/'+v.id,{reqId:uid(),code:nc.trim()});await loadCatalog(true);showModel(m.id);toast('Артикул сохранён');}catch(e){toast(error(e));}
     };});
     body.querySelectorAll('[data-unphoto]').forEach(function(b){b.onclick=async function(){
       try{await api('PATCH','/catalog/variants/'+b.dataset.unphoto,{reqId:uid(),photo:''});await loadCatalog(true);showModel(m.id);}catch(e){toast(error(e));}

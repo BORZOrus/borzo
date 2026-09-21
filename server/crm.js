@@ -387,12 +387,18 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     const r=await db.query('INSERT INTO crm_cat_options(kind,value) VALUES($1,$2) ON CONFLICT(kind,value) DO UPDATE SET value=excluded.value RETURNING *',[kind,value]);
     return {option:r.rows[0]};
   }));
-  router.post('/catalog/variants',mutate(async(req,db)=>{
+  router.post('/catalog/variants',mutate(async(req,db,saved)=>{
     const b=req.body;
     const m=(await db.query('SELECT * FROM crm_cat_models WHERE id=$1',[id(b.model_id)])).rows[0];
     if(!m) throw err(400,'Модель не найдена');
-    const r=await db.query(`INSERT INTO crm_cat_variants(model_id,corpus,legs,len,width,code,ntin,link,price) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [m.id,str(b.corpus,'Корпус',60),str(b.legs,'Ножки',60),str(b.len,'Длина',30),str(b.width,'Ширина',30),str(b.code,'Код/артикул',120),str(b.ntin,'NTIN',40),str(b.link,'Ссылка',400),b.price==null||b.price===''?null:number(b.price,'Цена')]);
+    let photo='';
+    if(b.photo){
+      if(typeof b.photo!=='string'||!/^data:image\/(jpeg|png|webp);base64,/.test(b.photo)) throw err(400,'Фото: JPEG/PNG/WebP');
+      if(b.photo.length>7*1024*1024) throw err(400,'Фото — до 5 МБ');
+      const url=savePhoto(b.photo); if(!url) throw err(400,'Не удалось сохранить фото'); saved.push(url); photo=url;
+    }
+    const r=await db.query(`INSERT INTO crm_cat_variants(model_id,corpus,legs,len,width,code,ntin,link,price,photo) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [m.id,str(b.corpus,'Корпус',60),str(b.legs,'Ножки',60),str(b.len,'Длина',30),str(b.width,'Ширина',30),str(b.code,'Код/артикул',120),str(b.ntin,'NTIN',40),str(b.link,'Ссылка',400),b.price==null||b.price===''?null:number(b.price,'Цена'),photo]);
     return {variant:r.rows[0]};
   }));
   router.patch('/catalog/variants/:id',mutate(async(req,db,saved)=>{
