@@ -161,7 +161,7 @@ app.post('/api/auth/login', async (req,res)=>{
   if(!login||!password) return res.status(400).json({error:'укажите логин и пароль'});
   const r = await pool.query('SELECT * FROM users WHERE login=$1',[String(login).toLowerCase().trim()]);
   const u = r.rows[0];
-  if(!u || !bcrypt.compareSync(password, u.pass_hash)) return res.status(401).json({error:'неверный логин или пароль'});
+  if(!u || !bcrypt.compareSync(String(password).trim(), u.pass_hash)) return res.status(401).json({error:'неверный логин или пароль'});
   res.json({ token: sign(u), user:{ name:u.name, role:u.role, login:u.login } });
 });
 app.get('/api/me', auth, (req,res)=> res.json({ user:{ name:req.user.name, role:req.user.role, login:req.user.login } }));
