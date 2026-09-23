@@ -89,10 +89,23 @@
         '<div style="font-weight:700">💰 Вам выдано '+money(x.amount)+'</div>'+
         '<div class="muted fz12" style="margin-top:2px">Источник: '+esc(x.source)+' · '+stamp(x.ts)+'</div></div></div>'+
         '<button class="btn btn-ok" style="margin-top:11px" data-accept="'+x.id+'">✓ Подтвердить получение</button></div>';
-    }).join('') + reqPlates('mgr');
-    $('sup-notifs').innerHTML=notifHtml;
+    }).join('');
+    // закупы, возвращённые руководителем на исправление
+    var returns=txs().filter(function(x){return x.kind==='expense' && x.by_role==='sup' && x.review==='bad' && !x.pending;});
+    var retHtml=returns.map(function(x){
+      var title=(x.items&&x.items.length&&x.items[0].name)?esc(x.items[0].name)+(x.items.length>1?' +'+(x.items.length-1):''):'Закуп';
+      return '<div class="card notif" style="border-color:rgba(240,85,92,.5);background:rgba(240,85,92,.08)">'+
+        '<div style="font-weight:700">⚠ Верни на исправление: '+title+' · '+money(x.amount)+'</div>'+
+        (x.review_note?'<div class="fz13" style="margin:5px 0 2px">Что переделать: '+esc(x.review_note)+'</div>':'')+
+        '<div class="muted fz12" style="margin-bottom:9px">'+stamp(x.ts)+' · исправь и отправь на согласование руководителю</div>'+
+        '<button class="btn btn-buy" data-fix="'+x.id+'" style="padding:9px">✏️ Исправить</button></div>';
+    }).join('');
+    $('sup-notifs').innerHTML=retHtml + notifHtml + reqPlates('mgr');
     Array.prototype.forEach.call($('sup-notifs').querySelectorAll('[data-accept]'),function(b){
       b.onclick=function(){ API.accept(b.getAttribute('data-accept')).then(refresh).catch(fail); };
+    });
+    Array.prototype.forEach.call($('sup-notifs').querySelectorAll('[data-fix]'),function(b){
+      b.onclick=function(){ openEdit(b.getAttribute('data-fix')); };
     });
     bindReqPlates($('sup-notifs'));
 
@@ -159,6 +172,19 @@
     // 7) крупная сумма — обрати внимание
     if((+x.amount||0)>=300000) f.push('крупная сумма — стоит проверить');
     return f;
+  }
+  // «Не норма» → диалог: что переделать (предзаполнено авто-косяками) → возврат снабженцу
+  function returnBad(id){
+    var x=txs().filter(function(t){return t.id===id;})[0]; if(!x) return;
+    var pre=audit(x).join('; ');
+    openSheet('<h3>⚠ Вернуть закуп на исправление</h3>'+
+      '<div class="muted fz12" style="margin-bottom:12px">Снабженцу придёт уведомление. Он исправит и отправит правку тебе на согласование — замечание закроется, когда одобришь.</div>'+
+      '<div class="fld"><label>Что переделать (снабженец это увидит)</label>'+
+      '<textarea id="rv-note" rows="4" style="width:100%;box-sizing:border-box;padding:11px;background:var(--k-bg);border:1px solid var(--k-line);border-radius:10px;color:var(--k-ink);font:inherit;font-size:14px">'+esc(pre)+'</textarea></div>'+
+      '<button class="btn btn-buy" id="rv-send">Вернуть на исправление</button>'+
+      '<button class="btn btn-ghost" id="rv-cancel" style="margin-top:8px">Отмена</button>');
+    $('rv-cancel').onclick=closeSheet;
+    $('rv-send').onclick=function(){ API.expenseReview(id,'bad',$('rv-note').value).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
   }
   // поиск по накладным: дата, название позиции, №, сумма, категория
   var supQ='', mgrQ='';
@@ -543,7 +569,7 @@
     $('mgr-notifs').innerHTML = auditHtml + waitHtml + reqPlates('sup');
     bindReqPlates($('mgr-notifs')); bindOpRows($('mgr-notifs'));
     Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvok]'),function(b){ b.onclick=function(e){ e.stopPropagation(); API.expenseReview(b.getAttribute('data-rvok'),'ok').then(refresh).catch(fail); }; });
-    Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvbad]'),function(b){ b.onclick=function(e){ e.stopPropagation(); API.expenseReview(b.getAttribute('data-rvbad'),'bad').then(refresh).catch(fail); }; });
+    Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvbad]'),function(b){ b.onclick=function(e){ e.stopPropagation(); returnBad(b.getAttribute('data-rvbad')); }; });
     Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvopen]'),function(b){ b.onclick=function(e){ e.stopPropagation(); showOp(b.getAttribute('data-rvopen')); }; });
 
     var issues=txs().filter(function(x){return x.kind==='issue';});

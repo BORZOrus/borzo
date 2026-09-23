@@ -71,6 +71,7 @@ async function initSchema() {
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS doc_date TEXT DEFAULT '';
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS req_id TEXT;
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS review TEXT DEFAULT '';
+    ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS review_note TEXT DEFAULT '';
     CREATE UNIQUE INDEX IF NOT EXISTS kassa_tx_req_id_uidx ON kassa_tx(req_id) WHERE req_id IS NOT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS token_ver INTEGER NOT NULL DEFAULT 0;
   `);
@@ -353,8 +354,11 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
 // контроль качества: руководитель помечает закуп «проверено» или «не норма» (учит систему)
 app.post('/api/kassa/expense/:id/review', auth, requireRole('mgr'), async (req,res)=>{
   const verdict = req.body.verdict==='bad' ? 'bad' : (req.body.verdict==='ok' ? 'ok' : '');
-  const r = await pool.query("UPDATE kassa_tx SET review=$1 WHERE id=$2 AND kind='expense' RETURNING id",[verdict, req.params.id]);
+  const note = verdict==='bad' ? String(req.body.note||'').slice(0,600) : '';
+  const r = await pool.query("UPDATE kassa_tx SET review=$1, review_note=$2 WHERE id=$3 AND kind='expense' RETURNING id, amount",[verdict, note, req.params.id]);
   if(!r.rowCount) return res.status(404).json({error:'не найдено'});
+  // «не норма» → снабженцу прилетает в систему (плашка + пуш): переделать через согласование
+  if(verdict==='bad') sendPushToRole('sup', { title:'BORZO · закуп на исправление', body:'Руководитель вернул закуп на '+money(r.rows[0].amount)+' ₸ — переделай', url:'/kassa.html' }).catch(()=>{});
   res.json({ ok:true, verdict });
 });
 // удаление СВОЕГО закупа руководителем — без согласования (только expense, созданный mgr)
@@ -484,6 +488,8 @@ app.post('/api/kassa/:id/approve', auth, requireAny(['mgr','sup']), async (req,r
       const fields=[], vals=[]; let n=1;
       ['amount','source','category','items'].forEach(k=>{ if(k in next){ fields.push(k+'=$'+n); vals.push(k==='items'?JSON.stringify(next[k]):next[k]); n++; } });
       fields.push('pending=NULL'); fields.push('log=$'+n); vals.push(JSON.stringify(log)); n++;
+      // снабженец исправил и руководитель одобрил → замечание «не норма» снимается
+      if(tx.kind==='expense' && tx.review==='bad'){ fields.push("review=''"); fields.push("review_note=''"); }
       vals.push(tx.id);
       await c.query(`UPDATE kassa_tx SET ${fields.join(', ')} WHERE id=$${n}`, vals);
       // пересобрать приход на склад при изменении позиций ИЛИ категории (смена на операционку убирает со склада)
