@@ -670,6 +670,16 @@ app.put('/api/fin', auth, requireAny(['mgr','fin']), async (req,res)=>{
       const fresh = await pool.query('SELECT data, rev FROM fin_state WHERE id=1');
       return res.status(409).json({ conflict:true, error:'параллельная запись — подтяните свежие данные', data:fresh.rows[0].data, rev:Number(fresh.rows[0].rev)||0 });
     }
+    // финансовые согласования → push противоположной стороне (только НОВЫЙ pending, которого не было)
+    try{
+      const oldP={}; curOps.forEach(o=>{ if(o&&o.id!=null&&o.pending) oldP[o.id]=1; });
+      data.ops.forEach(o=>{ if(o&&o.pending && !oldP[o.id]){
+        const by=o.pending.by, toRole=(by==='ulyana')?'mgr':'fin', who=(by==='ulyana')?'Ульяна':'Руслан';
+        const act=o.pending.del?'удалить операцию':'изменить операцию';
+        const sum=Math.round(+o.amount||0).toLocaleString('ru-RU');
+        sendPushToRole(toRole, { title:'BORZO · согласование', body:who+' просит '+act+' на '+sum+' ₸', url:'/fin.html' }).catch(()=>{});
+      }});
+    }catch(_){}
     return res.json({ ok:true, rev:Number(r.rows[0].rev) });
   } else {
     const r = await pool.query(

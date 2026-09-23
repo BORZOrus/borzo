@@ -998,11 +998,13 @@
     var gear=document.getElementById('fin-gear');
     if(gear) gear.onclick=function(){
       open('<h3>⚙️ Настройки</h3>'+
+        '<button class="btn btn-ghost" id="set-push" style="margin-bottom:8px">🔔 Включить уведомления</button>'+
         '<button class="btn btn-ghost" id="set-theme" style="margin-bottom:8px">🎨 Тема приложения</button>'+
         '<button class="btn btn-ghost" id="set-pass" style="margin-bottom:8px">🔑 Сменить пароль</button>'+
         '<button class="btn btn-ghost" id="set-logout" style="margin-bottom:8px;color:var(--red)">Выйти из аккаунта</button>'+
         '<button class="btn btn-ghost" id="set-close">Закрыть</button>');
       document.getElementById('set-close').onclick=close;
+      document.getElementById('set-push').onclick=function(){ if(window.BorzoPush)BorzoPush.enable(); };
       document.getElementById('set-theme').onclick=function(){
         open(BorzoTheme.editorHtml()+'<button class="btn btn-ghost" id="th-close" style="margin-top:10px">Закрыть</button>');
         BorzoTheme.wireEditor(document.getElementById('sheet-body')||document.body);
