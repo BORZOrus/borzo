@@ -421,7 +421,9 @@
     open('<h3>💰 Начислить</h3>'+projPart+'<div id="f-empwrap"></div>'+
       '<div class="fld"><label>Тип</label><div class="chips" id="f-type"><button data-v="salary" class="on">Зарплата</button><button data-v="advance">Аванс (наперёд)</button></div></div>'+
       '<div id="f-monwrap">'+monthSelect('f-mon',0)+'</div>'+
-      amtField()+acts('Начислить'));
+      amtField()+
+      '<div class="fld"><label>Комментарий (за что — необязательно)</label><input id="f-note" placeholder="напр. премия за сентябрь, аванс на материалы"></div>'+
+      acts('Начислить'));
     var tp=wireChips('f-type'), getEmp=function(){return '';};
     var getProj=cfg.fixedProj?function(){return cfg.fixedProj;}:wireSquares('f-proj',function(){renderEmp();});
     var defName={ruslan:'Руслан',ulyana:'Ульяна'}[cfg.who];
@@ -435,6 +437,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('#f-type button'),function(b){var o=b.onclick;b.onclick=function(){o&&o();$('f-monwrap').style.display=(tp()==='advance')?'none':'';};});
     wireActs(function(){var a=getAmt();if(!a)return;var emp=getEmp();if(!emp||emp==='__add'){alert('Выберите сотрудника');return;}var t=tp();var acct=EMP_ACCT[emp];var cat=t==='advance'?'Аванс':'Зарплата';
       var op={amount:a,category:cat,who:cfg.who,salary:{emp:emp,type:t}}; if(t!=='advance')op.per=monthPer('f-mon');
+      var nt=($('f-note')&&$('f-note').value||'').trim(); if(nt)op.note=nt;
       if(acct){ op.kind='transfer'; op.from=getProj(); op.to=acct; op.project=getProj(); } else { op.kind='out'; op.acc=getProj(); op.project=getProj(); }
       commit([op]);}); }
 
@@ -856,7 +859,7 @@
     var permo=((o.salary||o.kind==='close')&&o.per)?(' · за '+perName(o.per)):'';
     var whoLbl=o.who?(' · '+(o.who==='ulyana'?'Ульяна':o.who==='snab'?'Снабженец':'Руслан')):'';
     var saleBit=o.sale?(' · '+o.sale.qty+' шт · '+(o.sale.pay||'')+(o.sale.client?' · '+o.sale.client:'')):'';
-    var noteBit=(o.note&&!o.salary&&!o.sale&&(o.kind==='out'||o.kind==='return'||o.kind==='in'))?' · '+o.note:'';
+    var noteBit=(o.note&&!o.sale&&(o.salary||o.kind==='out'||o.kind==='return'||o.kind==='in'))?' · '+o.note:'';
     var sub=esc(fdate(o.ts)+' · '+(o.project||'')+permo+saleBit+whoLbl+noteBit)+pend+ret;   // текст экранируем, плашки (pend/ret) — готовый HTML
     var burning=o.salary&&o.salary.type==='advance'&&advBurning(o.salary.emp)>0;
     var amt=o.kind==='close'?'<span class="pill">−'+money(o.amount)+' аванс</span>':'<div class="amt '+cls+(burning?' adv':'')+'">'+sign+money(o.amount)+'</div>';
