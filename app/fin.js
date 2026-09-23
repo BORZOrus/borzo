@@ -728,7 +728,7 @@
     $('op-close').onclick=close;
     if($('op-appr'))$('op-appr').onclick=function(){approveChange(id);close();render();};
     if($('op-rej'))$('op-rej').onclick=function(){rejectChange(id);close();render();};
-    if($('op-edit'))$('op-edit').onclick=function(){formEdit(o);};
+    if($('op-edit'))$('op-edit').onclick=function(){ if(o.sale) formEditSale(o); else formEdit(o); };
     if($('op-del'))$('op-del').onclick=function(){ if(confirm('Удалить эту операцию? Отменить нельзя. Балансы и зарплаты пересчитаются автоматически.')){ deleteOp(id); close(); render(); } };
     if($('op-delreq'))$('op-delreq').onclick=function(){ proposeDelete(id); close(); render(); alert('Запрос на удаление отправлен Руслану на согласование.'); };
     if($('op-return'))$('op-return').onclick=function(){ formReturn(o); };
@@ -769,6 +769,32 @@
     var old=o.amount||o.sale.items.reduce(function(s,i){return s+(i.sum||0);},0); if(!old)return;
     var k=newAmt/old;
     o.sale.items.forEach(function(i){ if(i.sum!=null)i.sum=Math.round(i.sum*k); if(i.price!=null)i.price=Math.round(i.price*k); });
+  }
+  // правка ПРОДАЖИ: меняем сам состав (изделия/кол-во/цена), а не только сумму — через тот же каталожный конструктор
+  function formEditSale(o){
+    var hasRet=o.returned||(o.sale&&o.sale.items||[]).some(function(i){return i.returned;});
+    if(hasRet){ alert('По этой продаже уже оформлен возврат. Сначала отмени возврат, потом меняй состав.'); return; }
+    open('<h3>✏️ Изменить состав продажи</h3>'+
+      (needsApproval(o)?'<div style="font-size:12px;color:var(--mut);margin-bottom:10px">Правка уйдёт Руслану на согласование.</div>':'')+
+      '<div id="es-box"></div>'+acts('Сохранить'));
+    mountSale($('es-box'));
+    // подставить текущие позиции продажи, чтобы правились, а не заводились заново
+    saleItems=(o.sale.items||[]).map(function(i){var q=parseInt(i.qty,10)||1;var p=i.price!=null?i.price:Math.round((i.sum||0)/q);return {name:i.name,qty:q,price:p,sum:i.sum!=null?i.sum:p*q};});
+    renderSaleList();
+    if($('s-client')&&o.sale.client)$('s-client').value=o.sale.client;
+    if($('s-desc')&&o.sale.desc)$('s-desc').value=o.sale.desc;
+    wireActs(function(){
+      if(window._saleDirty&&$('s-cons')&&$('s-cons')._get){var cur=$('s-cons')._get();if(cur&&cur.price>0&&cur.qty>0){cur.sum=cur.qty*cur.price;saleItems.push(cur);window._saleDirty=false;renderSaleList();}}
+      if(!saleItems.length){alert('Добавьте хотя бы одну позицию');return;}
+      var tot=saleItems.reduce(function(s,i){return s+i.sum;},0);
+      var qty=saleItems.reduce(function(s,i){return s+(parseInt(i.qty,10)||0);},0);
+      var cli=($('s-client')&&$('s-client').value||'').trim(), sdesc=($('s-desc')&&$('s-desc').value||'').trim();
+      var newSale=Object.assign({},o.sale,{items:saleItems.slice(),qty:qty,client:cli,desc:sdesc});
+      var next={amount:tot,sale:newSale};
+      if(cli||sdesc)next.note=(cli?('Клиент: '+cli):'')+(cli&&sdesc?' · ':'')+(sdesc||'');
+      if(needsApproval(o)){ proposeChange(o.id,next); close(); render(); alert('Изменение отправлено Руслану на согласование.'); }
+      else { for(var k in next)o[k]=next[k]; save(); close(); render(); }
+    },'Сохранить изменения продажи?');
   }
   function formEdit(o){
     var ctx=ctxOf(o);
