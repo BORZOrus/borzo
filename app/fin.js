@@ -818,8 +818,10 @@
   // лента BORZO у Ульяны: две вкладки — финансы (ручные) и снабжение (закупки+выдачи снабженцу)
   function drawUBorzo(){
     var box=$('uborzo-feed'); if(!box) return;
-    var fin=opsSorted().filter(function(o){return ((o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO'))&&!o.family&&!o.supplyExpense&&!o.supplyIssue;});
-    var snab=opsSorted().filter(function(o){return o.supplyExpense||o.supplyIssue;});
+    // снабжение = закупы/выдачи через кассу снабжения + любые расходы сырья (это снабженческая зона, не финансовая)
+    function isSnab(o){ return o.supplyExpense||o.supplyIssue||(o.kind==='out'&&o.category==='Сырьё'); }
+    var fin=opsSorted().filter(function(o){return ((o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO'))&&!o.family&&!isSnab(o);});
+    var snab=opsSorted().filter(isSnab);
     var ops=uFeed==='snab'?snab:fin;
     wireSearch('s-uborzo',$('u-borzo-list'),ops,uFeed==='snab'?'Закупок снабжения пока нет.':'Операций пока нет.');
     Array.prototype.forEach.call(box.querySelectorAll('[data-uf]'),function(b){
