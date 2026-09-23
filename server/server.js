@@ -555,6 +555,8 @@ const SCAN_PROMPT = 'Ты распознаёшь фото товарной на�
   '"items":[{"name":"наименование","qty":"количество числом","unit":"одно из: шт, м, л, кг","price":"цена за ЕДИНИЦУ числом без пробелов и валюты"}]}. '+
   'Если в накладной дана сумма по строке, а не цена за единицу — раздели сумму на количество. '+
   'Единицу приведи к шт, м, л или кг (штуки/листы/рулоны/комплекты → шт; метры/погонные метры/метраж плёнки → м; литры → л; килограммы → кг). '+
+  'Фискальный чек (Webkassa и т.п., узкая лента): позиции идут нумерованным списком (1., 2., 3.) и название может переноситься на несколько строк — собери его целиком; строки «Скидка», «НДС», «Стоимость», «Итого», «Сдача», «Наценка», «Мобильные» — это НЕ позиции, пропусти их. '+
+  'Количество бывает дробным («1,500 м» значит 1.5 метра). Все числа возвращай с десятичной ТОЧКОЙ и без пробелов. '+
   'Если позиций нет — items пустой массив.';
 app.post('/api/scan', auth, async (req,res)=>{
   const image = req.body.image;
@@ -586,7 +588,10 @@ app.post('/api/scan', auth, async (req,res)=>{
     docDate = docDateClean(docDate) || '';   // будущая/кривая дата с бумаги не подставляется
     items = items.filter(function(i){return i && (i.name||'').toString().trim();}).map(function(i){
       var unit = ['шт','м','л','кг'].indexOf(i.unit)>=0 ? i.unit : 'шт';
-      return { name:String(i.name).slice(0,120), qty:String(i.qty==null?'':i.qty), unit:unit, price:String(i.price==null?'':i.price).replace(/[^\d.]/g,'') };
+      // числа с бумаги приходят и с запятой («1,500» «1334,00») — приводим к точке до чистки
+      var qty = String(i.qty==null?'':i.qty).replace(/\s/g,'').replace(/,/g,'.').replace(/[^\d.]/g,'');
+      var price = String(i.price==null?'':i.price).replace(/\s/g,'').replace(/,/g,'.').replace(/[^\d.]/g,'');
+      return { name:String(i.name).slice(0,120), qty:qty, unit:unit, price:price };
     });
     const usage = d.usage || {};
     console.log('[scan] items='+items.length+' num='+(number||'-')+' date='+(docDate||'-')+' tokens='+(usage.total_tokens||'?'));

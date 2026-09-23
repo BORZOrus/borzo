@@ -99,8 +99,15 @@
     var ins=txs().filter(function(x){return x.kind==='issue';});
     var outs=txs().filter(function(x){return x.kind==='expense';});
     $('sup-in').innerHTML = ins.length ? ins.map(opRow).join('') : '<div class="empty">Приходов пока нет. Когда управленец выдаст деньги — появятся здесь.</div>';
-    $('sup-out').innerHTML = outs.length ? outs.map(opRow).join('') : '<div class="empty">Расходов пока нет. Нажмите «Закупаюсь».</div>';
-    bindOpRows($('sup-in')); bindOpRows($('sup-out'));
+    $('sup-out').innerHTML = (outs.length?searchInput('sup-q',supQ):'')+'<div id="sup-out-list"></div>';
+    function drawSupOut(){
+      var f=outs.filter(function(x){return opMatch(x,supQ);});
+      $('sup-out-list').innerHTML = f.length ? f.map(opRow).join('') : '<div class="empty">'+(supQ?'Ничего не найдено':'Расходов пока нет. Нажмите «Закупаюсь».')+'</div>';
+      bindOpRows($('sup-out-list'));
+    }
+    drawSupOut();
+    if($('sup-q')) $('sup-q').oninput=function(){ supQ=this.value.trim(); drawSupOut(); };
+    bindOpRows($('sup-in'));
     renderSupAnal(outs); if($('sup-sklad').style.display!=='none') renderSupSklad();
   }
   // мелкая аналитика снабжения: сумма закупок за месяц по направлениям
@@ -128,6 +135,14 @@
     }).catch(function(){ box.innerHTML='<div class="empty">Не удалось загрузить склад.</div>'; });
   }
 
+  // поиск по накладным: дата, название позиции, №, сумма, категория
+  var supQ='', mgrQ='';
+  function searchInput(id,val){ return '<input id="'+id+'" value="'+esc(val)+'" placeholder="🔍 поиск: дата, название, №, сумма" autocomplete="off" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:10px 12px;background:var(--k-bg);border:1px solid var(--k-line);border-radius:10px;color:var(--k-ink);font-size:14px;font-family:inherit">'; }
+  function opMatch(x,q){
+    if(!q) return true;
+    var hay=[(x.items||[]).map(function(i){return i.name;}).join(' '),x.inv_no,x.rec_no,x.category,x.source,String(x.amount),stamp(x.ts)].join(' ').toLowerCase();
+    return hay.indexOf(q.toLowerCase())>=0;
+  }
   function opRow(x){
     if(x.kind==='issue'){
       var st = x.status==='accepted' ? '' : '<span class="pill pill-wait">ждёт подтверждения</span>';
@@ -269,9 +284,8 @@
   function numRow(kind){
     var val = kind==='inv'?(buf.invNo||''):(buf.recNo||'');
     var ph = kind==='inv'?'№ накладной':'№ чека';
-    var ai = kind==='rec' ? '<button type="button" data-scannum="rec" title="Определить № чека" style="flex:0 0 auto;padding:9px 11px;border:1px solid var(--k-line);background:var(--k-card2);color:var(--k-blue);border-radius:9px;cursor:pointer">🪄</button>' : '';
     return '<div style="display:flex;gap:6px;margin-top:6px">'+
-      '<input data-num="'+kind+'" placeholder="'+ph+'" value="'+esc(val)+'" style="flex:1;min-width:0;padding:9px;background:var(--k-bg);border:1px solid var(--k-line);border-radius:9px;color:var(--k-ink);font-size:13px;font-family:inherit">'+ai+'</div>';
+      '<input data-num="'+kind+'" placeholder="'+ph+'" value="'+esc(val)+'" style="flex:1;min-width:0;padding:9px;background:var(--k-bg);border:1px solid var(--k-line);border-radius:9px;color:var(--k-ink);font-size:13px;font-family:inherit"></div>';
   }
   // слот документа: пусто → стандартный выбор (камера/галерея/файл, вкл. PDF); приложено → превью + крестик удалить
   function photoSlot(kind,label){
@@ -279,17 +293,17 @@
     var base='width:100%;margin:0;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;min-height:70px';
     if(data){
       var prev = isPdf(data)?'<div style="margin-top:6px;font-size:12px">📄 документ</div>':'<img src="'+data+'" style="max-height:44px;margin-top:6px">';
-      // на накладной (не PDF) слева — значок распознавания
-      var ai = (kind==='inv'&&!isPdf(data)) ? '<button type="button" class="ph-ai" data-scan="1" title="Распознать позиции и №" style="position:absolute;top:3px;left:5px;background:var(--k-blue);color:#fff;border:none;border-radius:50%;width:23px;height:23px;font-size:12px;line-height:1;cursor:pointer">🪄</button>' : '';
+      // значок распознавания — одинаково на накладной и чеке (не PDF), аккуратно внутри слота
+      var ai = !isPdf(data) ? '<button type="button" class="ph-ai" data-scan="'+kind+'" title="Распознать позиции, № и дату" style="position:absolute;top:6px;left:6px;background:var(--k-blue);color:#fff;border:none;border-radius:8px;width:26px;height:26px;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">🪄</button>' : '';
       return '<div class="photo has" style="'+base+'">'+ai+'✓ '+label+prev+
-        '<button type="button" class="ph-x" data-clr="'+kind+'" style="position:absolute;top:3px;right:5px;background:var(--k-red);color:#fff;border:none;border-radius:50%;width:23px;height:23px;font-size:15px;line-height:1;cursor:pointer">×</button></div>';
+        '<button type="button" class="ph-x" data-clr="'+kind+'" style="position:absolute;top:6px;right:6px;background:var(--k-red);color:#fff;border:none;border-radius:8px;width:26px;height:26px;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button></div>';
     }
     return '<label class="photo" style="'+base+'">'+label+'<input type="file" accept="image/*,application/pdf" id="ph-'+kind+'"></label>';
   }
   function buyHtml(){
     var ed=!!editingId, sy=buf.category==='Сырьё';
     return '<h3>'+(ed?'✏️ Изменить накладную':'🛒 Закуп')+'</h3>'+
-      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?(editDirect?'Твой закуп — правки применяются сразу, без согласования.':'Правки уйдут второй стороне на согласование — молча ничего не меняется.'):'Приложи накладную или чек (фото, скриншот или файл/PDF). На приложенной накладной слева значок 🪄 — нажми, чтобы распознать позиции и № накладной, или заполни вручную. Номера — под кнопками.'+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Снабженцу документ обязателен.'))+'</div>'+
+      '<div class="muted fz12" style="margin-bottom:12px">'+(ed?(editDirect?'Твой закуп — правки применяются сразу, без согласования.':'Правки уйдут второй стороне на согласование — молча ничего не меняется.'):'Приложи накладную или чек (фото, скриншот или файл/PDF). На приложенном документе слева значок 🪄 — распознает позиции, номер и дату (работает и на чеке, и на накладной). Номера — под кнопками.'+(STATE.role==='mgr'?'Тебе документ — по желанию.':'Снабженцу документ обязателен.'))+'</div>'+
       '<div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">'+
         '<div style="flex:1 1 0;min-width:0">'+photoSlot('inv','📎 Накладная')+numRow('inv')+'</div>'+
         '<div style="flex:1 1 0;min-width:0">'+photoSlot('rec','🧾 Чек')+numRow('rec')+'</div>'+
@@ -358,14 +372,16 @@
     // «Накладная»/«Чек» — прикрепить фото ИЛИ файл (стандартный выбор: камера/галерея/файл, вкл. PDF)
     if($('ph-inv')) $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; refreshBuy(); }); };
     if($('ph-rec')) $('ph-rec').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.receipt=d; refreshBuy(); }); };
-    // 🪄 на накладной — распознать позиции + № накладной
+    // 🪄 на накладной и на чеке — одинаково: распознать позиции + номер + дату
     Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-scan]'),function(b){ b.onclick=function(){
-      if(!buf.invoice) return;
+      var kind=b.getAttribute('data-scan');
+      var img = kind==='inv'?buf.invoice:buf.receipt;
+      if(!img) return;
       buf.scanning=true; refreshBuy();
-      API.scan(buf.invoice).then(function(res){
+      API.scan(img).then(function(res){
         buf.scanning=false;
         if(res.items && res.items.length) buf.items=res.items.map(function(i){return {name:i.name,qty:i.qty,unit:i.unit||'шт',price:i.price};});
-        if(res.number) buf.invNo=res.number;
+        if(res.number){ if(kind==='inv') buf.invNo=res.number; else buf.recNo=res.number; }
         if(res.date) buf.docDate=res.date;
         if(!(res.items&&res.items.length)&&!res.number) alert('Ничего не распозналось — впиши вручную.');
         refreshBuy();
@@ -375,13 +391,6 @@
     Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-num]'),function(inp){ inp.oninput=function(){ if(inp.getAttribute('data-num')==='inv')buf.invNo=inp.value; else buf.recNo=inp.value; }; });
     // дата документа вручную
     if($('docdate')) $('docdate').onchange=function(){ buf.docDate=$('docdate').value; };
-    // 🪄 определить № чека
-    Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-scannum]'),function(b){ b.onclick=function(){
-      if(!buf.receipt){ alert('Сначала приложи фото чека.'); return; }
-      buf.scanning=true; refreshBuy();
-      API.scan(buf.receipt).then(function(res){ buf.scanning=false; if(res.number)buf.recNo=res.number; if(res.date&&!buf.docDate)buf.docDate=res.date; if(!res.number)alert('Номер чека не распознан — впиши вручную.'); refreshBuy(); })
-        .catch(function(){ buf.scanning=false; refreshBuy(); alert('Не удалось распознать — впиши вручную.'); });
-    }; });
     // крестик — удалить приложенный документ и приложить заново
     Array.prototype.forEach.call(sheetBody.querySelectorAll('.ph-x'),function(b){ b.onclick=function(){ var k=b.getAttribute('data-clr'); if(k==='inv')buf.invoice=null; else buf.receipt=null; refreshBuy(); }; });
     $('additem').onclick=function(){ buf.items.push({name:'',qty:'',unit:'шт'}); renderItems(); };
@@ -502,8 +511,14 @@
     bindOpRows($('mgr-issues'));
 
     var inv=txs().filter(function(x){return x.kind==='expense';});
-    $('mgr-inv').innerHTML = inv.length ? inv.map(opRow).join('') : '<div class="empty">Накладных пока нет.</div>';
-    bindOpRows($('mgr-inv'));
+    $('mgr-inv').innerHTML = (inv.length?searchInput('mgr-q',mgrQ):'')+'<div id="mgr-inv-list"></div>';
+    function drawMgrInv(){
+      var f=inv.filter(function(x){return opMatch(x,mgrQ);});
+      $('mgr-inv-list').innerHTML = f.length ? f.map(opRow).join('') : '<div class="empty">'+(mgrQ?'Ничего не найдено':'Накладных пока нет.')+'</div>';
+      bindOpRows($('mgr-inv-list'));
+    }
+    drawMgrInv();
+    if($('mgr-q')) $('mgr-q').oninput=function(){ mgrQ=this.value.trim(); drawMgrInv(); };
 
     API.sklad().then(function(d){
       var it=d.items||[];
