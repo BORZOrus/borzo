@@ -1,0 +1,16 @@
+/* BORZO — оформление на компьютере. Ширину и логику не меняем: то же приложение по центру,
+   но обрамлённое как аккуратное окно, чтобы не висело голой колонкой на пустом фоне.
+   Срабатывает только на широких экранах (ПК/ноутбук), на телефоне ничего не меняется. */
+@media (min-width: 760px){
+  body{ background-attachment: fixed; }
+  /* мягкая подложка по бокам колонки — работает и на тёмной, и на светлой теме */
+  body::before{
+    content:''; position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background:
+      radial-gradient(ellipse 60% 50% at 50% 0%, rgba(127,127,127,.10), transparent 70%),
+      linear-gradient(rgba(127,127,127,.05), rgba(127,127,127,.09));
+  }
+  .wrap{
+    box-shadow: 0 0 0 1px rgba(140,140,140,.16), 0 24px 80px rgba(0,0,0,.42);
+  }
+}
