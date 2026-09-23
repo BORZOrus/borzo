@@ -177,12 +177,14 @@
   function returnBad(id){
     var x=txs().filter(function(t){return t.id===id;})[0]; if(!x) return;
     var pre=audit(x).join('; ');
-    openSheet('<h3>⚠ Вернуть закуп на исправление</h3>'+
-      '<div class="muted fz12" style="margin-bottom:12px">Снабженцу придёт уведомление. Он исправит и отправит правку тебе на согласование — замечание закроется, когда одобришь.</div>'+
+    openSheet('<h3>⚠ Вернуть с комментарием</h3>'+
+      '<div class="muted fz12" style="margin-bottom:12px">Снабженцу придёт уведомление с твоим текстом. Он исправит и отправит правку на согласование — замечание закроется, когда одобришь.</div>'+
       '<div class="fld"><label>Что переделать (снабженец это увидит)</label>'+
-      '<textarea id="rv-note" rows="4" style="width:100%;box-sizing:border-box;padding:11px;background:var(--k-bg);border:1px solid var(--k-line);border-radius:10px;color:var(--k-ink);font:inherit;font-size:14px">'+esc(pre)+'</textarea></div>'+
+      '<textarea id="rv-note" rows="4" placeholder="напр.: на чеке цена 1650, а забил 1600 — исправь" style="width:100%;box-sizing:border-box;padding:11px;background:var(--k-bg);border:1px solid var(--k-line);border-radius:10px;color:var(--k-ink);font:inherit;font-size:14px"></textarea>'+
+      (pre?'<button type="button" id="rv-fill" style="margin-top:6px;background:none;border:none;color:var(--k-blue);font-size:12px;cursor:pointer;font-family:inherit;text-decoration:underline">подставить найденные косяки</button>':'')+'</div>'+
       '<button class="btn btn-buy" id="rv-send">Вернуть на исправление</button>'+
       '<button class="btn btn-ghost" id="rv-cancel" style="margin-top:8px">Отмена</button>');
+    if($('rv-fill'))$('rv-fill').onclick=function(){ $('rv-note').value=pre; };
     $('rv-cancel').onclick=closeSheet;
     $('rv-send').onclick=function(){ API.expenseReview(id,'bad',$('rv-note').value).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
   }
@@ -564,12 +566,15 @@
           '<button class="btn" data-rvopen="'+x.id+'" style="flex:1;padding:9px;background:var(--k-card2);color:var(--k-ink);border:1px solid var(--k-line)">Открыть</button>'+
           '<button class="btn" data-rvok="'+x.id+'" style="flex:1;padding:9px;background:var(--k-green,#28c07a);color:#04140b">✓ Всё ок</button>'+
           '<button class="btn" data-rvbad="'+x.id+'" style="flex:1;padding:9px;background:var(--k-red);color:#fff">⚠ Не норма</button>'+
-        '</div></div>';
+        '</div>'+
+        '<div style="text-align:center;margin-top:7px"><button data-rvnote="'+x.id+'" style="background:none;border:none;color:var(--k-mut);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">⚠ вернуть с комментарием</button></div>'+
+        '</div>';
     }).join('');
     $('mgr-notifs').innerHTML = auditHtml + waitHtml + reqPlates('sup');
     bindReqPlates($('mgr-notifs')); bindOpRows($('mgr-notifs'));
     Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvok]'),function(b){ b.onclick=function(e){ e.stopPropagation(); API.expenseReview(b.getAttribute('data-rvok'),'ok').then(refresh).catch(fail); }; });
-    Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvbad]'),function(b){ b.onclick=function(e){ e.stopPropagation(); returnBad(b.getAttribute('data-rvbad')); }; });
+    Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvbad]'),function(b){ b.onclick=function(e){ e.stopPropagation(); API.expenseReview(b.getAttribute('data-rvbad'),'bad','').then(refresh).catch(fail); }; });
+    Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvnote]'),function(b){ b.onclick=function(e){ e.stopPropagation(); returnBad(b.getAttribute('data-rvnote')); }; });
     Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvopen]'),function(b){ b.onclick=function(e){ e.stopPropagation(); showOp(b.getAttribute('data-rvopen')); }; });
 
     var issues=txs().filter(function(x){return x.kind==='issue';});
