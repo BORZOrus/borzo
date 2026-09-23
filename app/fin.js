@@ -25,7 +25,7 @@
   };
   var CATEGORIES=['Столы-трансформеры','Тумбочки','Консоли','Банкетки','Другое'];
   var PAYS=['Kaspi','Перечисление','Наличка'];
-  function load(){ try{var d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.ops)return d;}catch(e){} return {ops:[],employees:['Руслан','Ульяна','Азамат','Данияр']}; }
+  function load(){ try{var d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.ops){ if(!d.deleted)d.deleted={}; return d; }}catch(e){} return {ops:[],employees:['Руслан','Ульяна','Азамат','Данияр'],deleted:{}}; }
   // облако: залогинен (есть токен) → сервер источник правды; нет токена → демо на localStorage как раньше
   var CLOUD = !!(window.API && window.API.token && window.API.finPut);
   var pushT=null, pushing=false, pendAgain=false;
@@ -33,19 +33,31 @@
   var synced=false;      // до завершения первого finGet НИЧЕГО не отправляем на сервер (защита от затирания истории пустой базой)
   var curRev=0;          // версия, на которой построена локальная база (для сравнения версий на сервере)
   var conflictTries=0;   // ограничитель повторов при конфликте
-  // слияние при конфликте: серверная база — основа, добавляем СВОИ операции, которых на сервере ещё нет (по id). Ничего не теряем.
+  // слияние при конфликте: объединяем операции по id, уважая удаления («надгробия» deleted) и локальные правки (по метке времени _t).
+  // Раньше серверная база слепо перекрывала местные удаления/правки — одобренное удаление и правки откатывались при параллельной работе.
   function mergeDB(server, local){
     var out = {}; for(var k in server){ if(Object.prototype.hasOwnProperty.call(server,k)) out[k]=server[k]; }
     var sOps = Array.isArray(server.ops)?server.ops:[];
     var lOps = Array.isArray(local.ops)?local.ops:[];
-    var seen={}; sOps.forEach(function(o){ if(o&&o.id!=null) seen[o.id]=true; });
-    var extra = lOps.filter(function(o){ return o && o.id!=null && !seen[o.id]; });   // мои новые, серверу неизвестные
-    out.ops = sOps.concat(extra).sort(function(a,b){ return (b&&b.ts||0)-(a&&a.ts||0); });
-    // сотрудники — объединяем, чтобы не потерять только что добавленного
+    var del = {}; var sd=server.deleted||{}, ld=local.deleted||{};   // объединяем надгробия обеих сторон
+    for(var dk in sd) del[dk]=sd[dk]; for(var dk2 in ld) del[dk2]=ld[dk2];
+    var sMap={}, lMap={}, ids={};
+    sOps.forEach(function(o){ if(o&&o.id!=null){ sMap[o.id]=o; ids[o.id]=1; } });
+    lOps.forEach(function(o){ if(o&&o.id!=null){ lMap[o.id]=o; ids[o.id]=1; } });
+    var merged=[];
+    Object.keys(ids).forEach(function(id){
+      if(del[id]) return;                                  // удалено (одобрено удаление) — не воскрешаем
+      var s=sMap[id], l=lMap[id];
+      if(s&&l) merged.push(((l._t||0)>(s._t||0))?l:s);      // обе стороны знают операцию — берём свежее изменённую
+      else merged.push(s||l);                              // известна одной стороне — берём её
+    });
+    out.ops = merged.sort(function(a,b){ return (b&&b.ts||0)-(a&&a.ts||0); });
+    out.deleted = del;
     var se=Array.isArray(server.employees)?server.employees:[], le=Array.isArray(local.employees)?local.employees:[];
     out.employees = se.concat(le.filter(function(x){ return se.indexOf(x)<0; }));
     return out;
   }
+  function touch(o){ if(o) o._t=Date.now(); return o; }   // пометка «локально изменено сейчас» — чтобы merge не откатил правку
   function doPush(){ if(!CLOUD||!synced)return; if(pushing){pendAgain=true;return;} pushing=true;
     window.API.finPut(DB,curRev).then(function(res){ pushing=false; conflictTries=0; if(res&&res.rev!=null)curRev=res.rev; if(pendAgain){pendAgain=false;doPush();}})
       .catch(function(e){ pushing=false;
@@ -656,10 +668,13 @@
   function perName(per){ if(!per)return '—'; var d=new Date(per); return MON[d.getMonth()]+' '+d.getFullYear(); }
   function samePerMonth(a,b){ if(!a||!b)return false; var da=new Date(a),db=new Date(b); return da.getFullYear()===db.getFullYear()&&da.getMonth()===db.getMonth(); }
   function perToOff(per){ if(!per)return 0; var n=new Date(),p=new Date(per); return (p.getFullYear()-n.getFullYear())*12+(p.getMonth()-n.getMonth()); }
+  function fmtItems(items){ if(!items||!items.length)return '—'; return items.map(function(i){return i.name+' ×'+i.qty+' ('+money(i.sum||i.price*i.qty)+')';}).join(' · '); }
   function genericDiff(o,next){ var d=[];
     if('amount' in next && Math.round(+next.amount)!==Math.round(+o.amount)) d.push({label:'Сумма',from:money(o.amount),to:money(next.amount)});
     if('category' in next && next.category!==o.category) d.push({label:'Категория',from:o.category||'—',to:next.category});
     if('per' in next && (next.per||0)!==(o.per||0)) d.push({label:'Месяц',from:perName(o.per),to:perName(next.per)});
+    // состав продажи: показываем позиции было→стало, чтобы Руслан видел, что именно меняет Ульяна
+    if('sale' in next && next.sale){ var was=fmtItems(o.sale&&o.sale.items), now=fmtItems(next.sale.items); if(was!==now) d.push({label:'Состав',from:was,to:now}); }
     return d; }
   function deleteOp(id){
     var target=DB.ops.filter(function(x){return x.id===id;})[0];
@@ -670,12 +685,13 @@
         var its=sale.sale.items||[];
         if(Array.isArray(target.retIdx)) target.retIdx.forEach(function(i){ if(its[i])its[i].returned=false; });
         else its.forEach(function(it){ it.returned=false; });   // старые возвраты без индексов — снять со всех позиций
-        sale.returned=false;
-        if(target.retComm){ var cm=DB.ops.filter(function(x){return x.relSale===sale.id&&x.relKind==='comm';})[0]; if(cm)cm.amount+=target.retComm; }
-        if(target.retDeliv){ var dl=DB.ops.filter(function(x){return x.relSale===sale.id&&x.relKind==='deliv';})[0]; if(dl)dl.amount+=target.retDeliv; }
+        sale.returned=false; touch(sale);
+        if(target.retComm){ var cm=DB.ops.filter(function(x){return x.relSale===sale.id&&x.relKind==='comm';})[0]; if(cm){cm.amount+=target.retComm; touch(cm);} }
+        if(target.retDeliv){ var dl=DB.ops.filter(function(x){return x.relSale===sale.id&&x.relKind==='deliv';})[0]; if(dl){dl.amount+=target.retDeliv; touch(dl);} }
       }
     }
     var ids={}; ids[id]=1; DB.ops.forEach(function(o){ if(o.relSale===id||o.creditId===id)ids[o.id]=1; });
+    DB.deleted=DB.deleted||{}; for(var tk in ids) DB.deleted[tk]=Date.now();   // надгробия: удаление переживёт слияние
     // удаляем АВАНС → закрытия этого сотрудника могут повиснуть; срезаем лишние закрытия, чтобы не осталась ложная зарплата (аудит #29)
     if(target && target.salary && target.salary.type==='advance' && target.salary.emp){
       var emp=target.salary.emp, advSum=0, closes=[];
@@ -694,10 +710,10 @@
   // кто может править напрямую: Руслан — свои; Ульяна — только личное (её кошелёк). Остальное Ульяны — через согласование Руслана.
   function canDirect(o){ if(role()==='ruslan') return true; return o.acc==='zpUlyana'; }
   function needsApproval(o){ return role()==='ulyana' && o.who==='ulyana' && o.acc!=='zpUlyana'; }
-  function proposeChange(id,next){ var o=DB.ops.filter(function(x){return x.id===id;})[0]; if(!o)return; if(!genericDiff(o,next).length)return; o.pending={by:role(),next:next,t:Date.now()}; save(); }
-  function proposeDelete(id){ var o=DB.ops.filter(function(x){return x.id===id;})[0]; if(!o)return; o.pending={by:role(),del:true,t:Date.now()}; save(); }
-  function approveChange(id){ var o=DB.ops.filter(function(x){return x.id===id;})[0]; if(!o||!o.pending)return; if(o.pending.del){ deleteOp(id); return; } var d=genericDiff(o,o.pending.next); for(var k in o.pending.next)o[k]=o.pending.next[k]; o.log=(o.log||[]).concat([{t:Date.now(),by:o.pending.by,approver:role(),changes:d}]); o.pending=null; save(); }
-  function rejectChange(id){ var o=DB.ops.filter(function(x){return x.id===id;})[0]; if(!o||!o.pending)return; o.log=(o.log||[]).concat([{t:Date.now(),by:o.pending.by,approver:role(),rejected:true,changes:o.pending.del?[{label:'Удаление',from:'да',to:'отклонено'}]:genericDiff(o,o.pending.next)}]); o.pending=null; save(); }
+  function proposeChange(id,next){ var o=DB.ops.filter(function(x){return x.id===id;})[0]; if(!o)return; if(!genericDiff(o,next).length)return; o.pending={by:role(),next:next,t:Date.now()}; touch(o); save(); }
+  function proposeDelete(id){ var o=DB.ops.filter(function(x){return x.id===id;})[0]; if(!o)return; o.pending={by:role(),del:true,t:Date.now()}; touch(o); save(); }
+  function approveChange(id){ var o=DB.ops.filter(function(x){return x.id===id;})[0]; if(!o||!o.pending)return; if(o.pending.del){ deleteOp(id); return; } var d=genericDiff(o,o.pending.next); for(var k in o.pending.next)o[k]=o.pending.next[k]; o.log=(o.log||[]).concat([{t:Date.now(),by:o.pending.by,approver:role(),changes:d}]); o.pending=null; touch(o); save(); }
+  function rejectChange(id){ var o=DB.ops.filter(function(x){return x.id===id;})[0]; if(!o||!o.pending)return; o.log=(o.log||[]).concat([{t:Date.now(),by:o.pending.by,approver:role(),rejected:true,changes:o.pending.del?[{label:'Удаление',from:'да',to:'отклонено'}]:genericDiff(o,o.pending.next)}]); o.pending=null; touch(o); save(); }
 
   function ctxOf(o){ if(o.salary||o.kind==='close'||o.kind==='transfer'||o.sale||o.credit||o.creditId)return null; if(o.acc==='zpRuslan')return 'pers_ruslan'; if(o.acc==='zpUlyana')return 'pers_ulyana'; if(o.family)return 'family'; if(o.kind==='in')return 'in'; return 'work'; }
   function showOp(id){
@@ -760,8 +776,9 @@
       commit([{kind:'return',acc:'BORZO',project:'BORZO',amount:p.v,relSale:o.id,who:role(),note:'возврат: '+names,retIdx:idx.slice(),retComm:cr,retDeliv:dr}],function(){
         idx.forEach(function(i){ items[i].returned=true; });
         if(items.every(function(it){return it.returned;})) o.returned=true;
-        if(comm&&cr>0){ comm.amount-=cr; if(comm.amount<=0)deleteOp(comm.id); }
-        if(deliv&&dr>0){ deliv.amount-=dr; if(deliv.amount<=0)deleteOp(deliv.id); }
+        touch(o);
+        if(comm&&cr>0){ comm.amount-=cr; touch(comm); if(comm.amount<=0)deleteOp(comm.id); }
+        if(deliv&&dr>0){ deliv.amount-=dr; touch(deliv); if(deliv.amount<=0)deleteOp(deliv.id); }
         save(); close(); render(); },'Оформить возврат?'); }); }
   // пропорционально пересчитать позиции продажи при изменении её суммы (аудит #19: иначе sale.items рассинхронятся с amount и возврат посчитается неверно)
   function rescaleSaleItems(o,newAmt){
@@ -793,7 +810,7 @@
       var next={amount:tot,sale:newSale};
       if(cli||sdesc)next.note=(cli?('Клиент: '+cli):'')+(cli&&sdesc?' · ':'')+(sdesc||'');
       if(needsApproval(o)){ proposeChange(o.id,next); close(); render(); alert('Изменение отправлено Руслану на согласование.'); }
-      else { for(var k in next)o[k]=next[k]; save(); close(); render(); }
+      else { for(var k in next)o[k]=next[k]; touch(o); save(); close(); render(); }
     },'Сохранить изменения продажи?');
   }
   function formEdit(o){
@@ -806,7 +823,7 @@
     var ct=ctx?wireCatField('f-cat',ctx):function(){return o.category;};
     wireActs(function(){ var a=parseInt($('f-amt').value)||0; if(a<=0){alert('Укажите сумму');return;} var next={amount:a}; if(ctx)next.category=ct(); if(showMonth)next.per=monthPer('f-mon');
       if(needsApproval(o)){ proposeChange(o.id,next); close(); render(); alert('Изменение отправлено Руслану на согласование.'); }
-      else { if(o.sale && ('amount' in next)) rescaleSaleItems(o, next.amount); for(var k in next)o[k]=next[k]; save(); close(); render(); } });
+      else { if(o.sale && ('amount' in next)) rescaleSaleItems(o, next.amount); for(var k in next)o[k]=next[k]; touch(o); save(); close(); render(); } });
   }
 
   // ---------- операции (рендер строк) ----------
