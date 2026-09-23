@@ -179,7 +179,11 @@
         <button class="b-tr" data-act="ucredits" style="flex:1">🏦 Кредиты</button>
       </div>
       <button class="an-btn" data-an="uborzo">📊 Аналитика</button>
-      <div class="h1">Операции BORZO</div>
+      <div class="h1">Операции</div>
+      <div id="uborzo-feed" style="display:flex;gap:8px;margin-bottom:10px">
+        <button data-uf="fin" style="flex:1;padding:10px;border-radius:9px;border:1px solid var(--line);font-weight:700;font-size:13px;font-family:inherit;cursor:pointer">💼 Финансы</button>
+        <button data-uf="snab" style="flex:1;padding:10px;border-radius:9px;border:1px solid var(--line);font-weight:700;font-size:13px;font-family:inherit;cursor:pointer">🛒 Снабжение</button>
+      </div>
       <input id="s-uborzo" class="op-search" placeholder="🔍 поиск: дата, название, сумма"><div class="card" id="u-borzo-list"></div>
     </div>
 
@@ -221,6 +225,6 @@
 
 <script src="theme.js?v=1"></script>
 <script src="api.js?v=8"></script>
-<script src="fin.js?v=44"></script>
+<script src="fin.js?v=45"></script>
 </body>
 </html>

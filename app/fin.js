@@ -29,6 +29,7 @@
   // облако: залогинен (есть токен) → сервер источник правды; нет токена → демо на localStorage как раньше
   var CLOUD = !!(window.API && window.API.token && window.API.finPut);
   var pushT=null, pushing=false, pendAgain=false;
+  var uFeed='fin';   // лента Ульяны в BORZO: 'fin' финансы (ручные) | 'snab' снабжение (закупки/выдачи)
   var synced=false;      // до завершения первого finGet НИЧЕГО не отправляем на сервер (защита от затирания истории пустой базой)
   var curRev=0;          // версия, на которой построена локальная база (для сравнения версий на сервере)
   var conflictTries=0;   // ограничитель повторов при конфликте
@@ -799,7 +800,7 @@
     var pend=o.pending?' <span class="pill" style="background:rgba(240,166,33,.15);color:var(--amber)">на согласовании</span>':'';
     var ret=o.returned?' <span class="pill" style="background:rgba(240,85,92,.15);color:var(--red)">возвращено</span>':'';
     var permo=((o.salary||o.kind==='close')&&o.per)?(' · за '+perName(o.per)):'';
-    var whoLbl=o.who?(' · '+(o.who==='ulyana'?'Ульяна':'Руслан')):'';
+    var whoLbl=o.who?(' · '+(o.who==='ulyana'?'Ульяна':o.who==='snab'?'Снабженец':'Руслан')):'';
     var saleBit=o.sale?(' · '+o.sale.qty+' шт · '+(o.sale.pay||'')+(o.sale.client?' · '+o.sale.client:'')):'';
     var noteBit=(o.note&&!o.salary&&!o.sale&&(o.kind==='out'||o.kind==='return'||o.kind==='in'))?' · '+o.note:'';
     var sub=esc(fdate(o.ts)+' · '+(o.project||'')+permo+saleBit+whoLbl+noteBit)+pend+ret;   // текст экранируем, плашки (pend/ret) — готовый HTML
@@ -814,6 +815,19 @@
     function draw(){ var q=(inp?inp.value:'').trim().toLowerCase(); var f=q?ops.filter(function(o){return opSearchText(o).indexOf(q)>=0;}):ops; listInto(el,f,q?'Ничего не найдено':empty); }
     if(inp) inp.oninput=draw; draw(); }
 
+  // лента BORZO у Ульяны: две вкладки — финансы (ручные) и снабжение (закупки+выдачи снабженцу)
+  function drawUBorzo(){
+    var box=$('uborzo-feed'); if(!box) return;
+    var fin=opsSorted().filter(function(o){return ((o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO'))&&!o.family&&!o.supplyExpense&&!o.supplyIssue;});
+    var snab=opsSorted().filter(function(o){return o.supplyExpense||o.supplyIssue;});
+    var ops=uFeed==='snab'?snab:fin;
+    wireSearch('s-uborzo',$('u-borzo-list'),ops,uFeed==='snab'?'Закупок снабжения пока нет.':'Операций пока нет.');
+    Array.prototype.forEach.call(box.querySelectorAll('[data-uf]'),function(b){
+      var on=b.getAttribute('data-uf')===uFeed;
+      b.style.background=on?'var(--blue)':'var(--card2)'; b.style.color=on?'#fff':'var(--mut)'; b.style.borderColor=on?'var(--blue)':'var(--line)';
+      b.onclick=function(){ uFeed=b.getAttribute('data-uf'); drawUBorzo(); };
+    });
+  }
   // ---------- рендер панелей ----------
   function render(){
     // запросы Ульяны на согласование (видит Руслан)
@@ -837,7 +851,7 @@
     wireSearch('s-pers',$('r-pers-list'),opsSorted().filter(function(o){return (o.kind==='out'&&o.acc==='zpRuslan')||(o.kind==='in'&&o.acc==='zpRuslan')||(o.kind==='transfer'&&o.to==='zpRuslan')||o.family;}),'Личных операций пока нет.');
 
     $('u-borzo-bal').innerHTML='<div class="bal"><div class="l">Касса BORZO</div><div class="v">'+money(balance('BORZO'))+'</div><div style="font-size:10px;color:var(--mut);margin-top:4px">касса '+money(balance('BORZO')-potSnab)+' · снабжение '+money(potSnab)+'</div></div>';
-    wireSearch('s-uborzo',$('u-borzo-list'),opsSorted().filter(function(o){return ((o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO'))&&!o.family&&!o.supplyExpense;}),'Операций пока нет.');
+    drawUBorzo();
 
     $('uzp-balance').textContent=money(balance('zpUlyana'));
     $('uzp-spent').textContent=money(sumW(function(o){return o.kind==='out'&&o.acc==='zpUlyana'&&inRangeS(o,curR);}));
