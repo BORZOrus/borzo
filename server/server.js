@@ -13,7 +13,8 @@ if(process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE){
 }
 
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const JWT_SECRET = process.env.JWT_SECRET;
+if(!JWT_SECRET || JWT_SECRET.length<16){ console.error('FATAL: JWT_SECRET не задан или слишком короткий — старт запрещён'); process.exit(1); }
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/var/www/borzo/uploads';
 
 const pool = new Pool(); // конфиг из env PGHOST/PGUSER/PGPASSWORD/PGDATABASE/PGPORT
@@ -158,24 +159,34 @@ async function auth(req,res,next){
 function requireRole(role){ return (req,res,next)=> req.user.role===role ? next() : res.status(403).json({error:'нет прав'}); }
 function requireAny(roles){ return (req,res,next)=> roles.indexOf(req.user.role)>=0 ? next() : res.status(403).json({error:'нет прав'}); }
 
+// анти-брутфорс: не больше 8 неудачных попыток за 10 минут на связку логин+IP
+const loginFails = new Map();
+function loginKey(login,ip){ return String(login||'').toLowerCase().trim()+'|'+ip; }
+function tooManyFails(key){ const e=loginFails.get(key); if(!e) return false; if(Date.now()-e.t>600000){ loginFails.delete(key); return false; } return e.n>=8; }
+function noteFail(key){ const e=loginFails.get(key); if(!e||Date.now()-e.t>600000) loginFails.set(key,{n:1,t:Date.now()}); else { e.n++; e.t=Date.now(); } }
 app.post('/api/auth/login', async (req,res)=>{
   const { login, password } = req.body||{};
   if(!login||!password) return res.status(400).json({error:'укажите логин и пароль'});
+  const ip = (req.headers['x-forwarded-for']||req.socket.remoteAddress||'').split(',')[0].trim();
+  const key = loginKey(login,ip);
+  if(tooManyFails(key)) return res.status(429).json({error:'слишком много попыток, подождите 10 минут'});
   const r = await pool.query('SELECT * FROM users WHERE login=$1',[String(login).toLowerCase().trim()]);
   const u = r.rows[0];
-  if(!u || !bcrypt.compareSync(String(password).trim(), u.pass_hash)) return res.status(401).json({error:'неверный логин или пароль'});
+  if(!u || !bcrypt.compareSync(String(password).trim(), u.pass_hash)){ noteFail(key); return res.status(401).json({error:'неверный логин или пароль'}); }
+  loginFails.delete(key);
   res.json({ token: sign(u), user:{ name:u.name, role:u.role, login:u.login } });
 });
 app.get('/api/me', auth, (req,res)=> res.json({ user:{ name:req.user.name, role:req.user.role, login:req.user.login } }));
 
 app.post('/api/auth/password', auth, async (req,res)=>{
   const { old_pass, new_pass } = req.body||{};
-  if(!new_pass || String(new_pass).length<5) return res.status(400).json({error:'новый пароль — минимум 5 символов'});
+  const np = String(new_pass||'').trim();   // тримим так же, как при входе — иначе пароль с пробелами не введёшь
+  if(!np || np.length<5) return res.status(400).json({error:'новый пароль — минимум 5 символов'});
   const r = await pool.query('SELECT * FROM users WHERE id=$1',[req.user.id]);
   const u = r.rows[0];
-  if(!u || !bcrypt.compareSync(old_pass||'', u.pass_hash)) return res.status(401).json({error:'текущий пароль неверный'});
+  if(!u || !bcrypt.compareSync(String(old_pass||'').trim(), u.pass_hash)) return res.status(401).json({error:'текущий пароль неверный'});
   // смена пароля отзывает все прежние токены (token_ver++), но текущему устройству выдаём свежий, чтобы не разлогинить
-  const upd = await pool.query('UPDATE users SET pass_hash=$1, token_ver=token_ver+1 WHERE id=$2 RETURNING id,role,name,login,token_ver',[bcrypt.hashSync(new_pass,10), u.id]);
+  const upd = await pool.query('UPDATE users SET pass_hash=$1, token_ver=token_ver+1 WHERE id=$2 RETURNING id,role,name,login,token_ver',[bcrypt.hashSync(np,10), u.id]);
   res.json({ ok:true, token: sign(upd.rows[0]) });
 });
 
@@ -572,9 +583,15 @@ const SCAN_PROMPT = 'Ты распознаёшь фото товарной на�
   'Фискальный чек (Webkassa и т.п., узкая лента): позиции идут нумерованным списком (1., 2., 3.) и название может переноситься на несколько строк — собери его целиком; строки «Скидка», «НДС», «Стоимость», «Итого», «Сдача», «Наценка», «Мобильные» — это НЕ позиции, пропусти их. '+
   'Количество бывает дробным («1,500 м» значит 1.5 метра). Все числа возвращай с десятичной ТОЧКОЙ и без пробелов. '+
   'Если позиций нет — items пустой массив.';
-app.post('/api/scan', auth, async (req,res)=>{
+// троттлинг сканера: платный vision-API, не больше 30 распознаваний за 10 минут на пользователя
+const scanHits = new Map();
+app.post('/api/scan', auth, requireAny(['sup','mgr']), async (req,res)=>{
   const image = req.body.image;
-  if(!image || String(image).indexOf('data:')!==0) return res.status(400).json({error:'нет изображения'});
+  if(!image || !/^data:image\/(jpeg|png|webp)/.test(String(image))) return res.status(400).json({error:'нужно фото (JPEG/PNG/WebP)'});
+  if(String(image).length > 8*1024*1024) return res.status(413).json({error:'фото слишком большое — до 5 МБ'});
+  const sk = req.user.id, se = scanHits.get(sk);
+  if(se && Date.now()-se.t<600000 && se.n>=30) return res.status(429).json({error:'слишком много распознаваний, подождите'});
+  if(!se || Date.now()-se.t>=600000) scanHits.set(sk,{n:1,t:Date.now()}); else se.n++;
   const key = process.env.OPENROUTER_API_KEY;
   if(!key) return res.status(500).json({error:'сканер не настроен'});
   try{
