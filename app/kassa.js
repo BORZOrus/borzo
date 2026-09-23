@@ -135,6 +135,31 @@
     }).catch(function(){ box.innerHTML='<div class="empty">Не удалось загрузить склад.</div>'; });
   }
 
+  // ===== контроль качества закупок снабженца: ловим косяки и показываем руководителю =====
+  function audit(x){
+    if(x.kind!=='expense') return [];
+    var f=[];
+    var items=(x.items||[]).filter(function(i){return (i.name||'').trim();});
+    // 1) нет ни накладной, ни чека (снабженец обязан прикладывать)
+    if(x.by_role==='sup' && !x.invoice && !x.receipt) f.push('нет документа — ни накладной, ни чека');
+    // 2) не указано, что закуплено
+    if(!items.length) f.push('не указано, что закуплено');
+    // 3) сумма расхода расходится с суммой по позициям (цена на бумаге ≠ забитой)
+    if(items.length){
+      var sum=items.reduce(function(a,i){return a+rowSum(i);},0);
+      var diff=Math.abs(sum-(+x.amount||0));
+      if(diff>1) f.push('сумма расхода '+money(x.amount)+' ≠ сумме по позициям '+money(sum)+' (расхождение '+money(diff)+')');
+    }
+    // 4) позиции без количества или цены
+    items.forEach(function(i){ if(!numf(i.qty)||!numf(i.price)) f.push('позиция «'+(i.name||'').slice(0,30)+'» без количества или цены'); });
+    // 5) возможный дубль (тот же документ/состав уже проводили)
+    if(x.dup) f.push('возможный дубль — похожий закуп уже был');
+    // 6) не выбрано направление расхода
+    if(!x.category) f.push('не указано направление (Сырьё/Операционка)');
+    // 7) крупная сумма — обрати внимание
+    if((+x.amount||0)>=300000) f.push('крупная сумма — стоит проверить');
+    return f;
+  }
   // поиск по накладным: дата, название позиции, №, сумма, категория
   var supQ='', mgrQ='';
   function searchInput(id,val){ return '<input id="'+id+'" value="'+esc(val)+'" placeholder="🔍 поиск: дата, название, №, сумма" autocomplete="off" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:10px 12px;background:var(--k-bg);border:1px solid var(--k-line);border-radius:10px;color:var(--k-ink);font-size:14px;font-family:inherit">'; }
@@ -158,6 +183,9 @@
     var byPill = mine ? ' <span class="pill" style="background:rgba(59,130,246,.18);color:var(--k-blue)">закупал Руслан</span>' : '';
     var dupPill = x.dup ? ' <span class="pill" style="background:rgba(240,85,92,.18);color:var(--k-red)">⚠ возможный дубль</span>' : '';
     byPill += dupPill;
+    if(x.review==='bad') byPill += ' <span class="pill" style="background:rgba(240,85,92,.2);color:var(--k-red)">⚠ не норма</span>';
+    else if(x.review==='ok') byPill += ' <span class="pill" style="background:rgba(40,192,122,.18);color:var(--k-green,#28c07a)">✓ проверено</span>';
+    else if(audit(x).length) byPill += ' <span class="pill" style="background:rgba(240,166,33,.2);color:var(--k-amber)">⚑ на проверку</span>';
     var title = (x.items&&x.items.length) ? esc(x.items[0].name)+(x.items.length>1?' +'+(x.items.length-1):'') : 'Расход';
     return '<div class="op'+(mine?' op-mgr':'')+'" data-op="'+x.id+'"><div class="ic ic-out">🛒</div><div class="grow">'+
       '<div style="font-weight:600">'+title+byPill+'</div>'+
@@ -496,8 +524,27 @@
         '<div style="font-weight:700">⏳ Выдача '+money(x.amount)+' — ждёт подтверждения снабженца</div>'+
         '<div class="muted fz12" style="margin-top:2px">'+esc(x.source)+' · '+stamp(x.ts)+' · исчезнет, когда он нажмёт «Подтвердить»</div></div>';
     }).join('');
-    $('mgr-notifs').innerHTML = waitHtml + reqPlates('sup');
+    // контроль качества: закупки с косяками, которые руководитель ещё не отсмотрел
+    var flagged=txs().filter(function(x){return x.kind==='expense' && !x.review && audit(x).length;});
+    var auditHtml=flagged.map(function(x){
+      var probs=audit(x);
+      var who=x.by_role==='mgr'?'Руслан':'снабженец';
+      var title=(x.items&&x.items.length&&x.items[0].name)?esc(x.items[0].name)+(x.items.length>1?' +'+(x.items.length-1):''):'Закуп';
+      return '<div class="card notif" style="border-color:rgba(240,85,92,.5);background:rgba(240,85,92,.08)" data-audit="'+x.id+'">'+
+        '<div style="font-weight:700">⚠️ Проверь закуп: '+title+' · '+money(x.amount)+'</div>'+
+        '<div class="muted fz12" style="margin:3px 0 7px">'+who+' · '+stamp(x.ts)+'</div>'+
+        '<ul style="margin:0 0 10px;padding-left:18px;font-size:13px;line-height:1.5;color:var(--k-ink)">'+probs.map(function(p){return '<li>'+esc(p)+'</li>';}).join('')+'</ul>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button class="btn" data-rvopen="'+x.id+'" style="flex:1;padding:9px;background:var(--k-card2);color:var(--k-ink);border:1px solid var(--k-line)">Открыть</button>'+
+          '<button class="btn" data-rvok="'+x.id+'" style="flex:1;padding:9px;background:var(--k-green,#28c07a);color:#04140b">✓ Всё ок</button>'+
+          '<button class="btn" data-rvbad="'+x.id+'" style="flex:1;padding:9px;background:var(--k-red);color:#fff">⚠ Не норма</button>'+
+        '</div></div>';
+    }).join('');
+    $('mgr-notifs').innerHTML = auditHtml + waitHtml + reqPlates('sup');
     bindReqPlates($('mgr-notifs')); bindOpRows($('mgr-notifs'));
+    Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvok]'),function(b){ b.onclick=function(e){ e.stopPropagation(); API.expenseReview(b.getAttribute('data-rvok'),'ok').then(refresh).catch(fail); }; });
+    Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvbad]'),function(b){ b.onclick=function(e){ e.stopPropagation(); API.expenseReview(b.getAttribute('data-rvbad'),'bad').then(refresh).catch(fail); }; });
+    Array.prototype.forEach.call($('mgr-notifs').querySelectorAll('[data-rvopen]'),function(b){ b.onclick=function(e){ e.stopPropagation(); showOp(b.getAttribute('data-rvopen')); }; });
 
     var issues=txs().filter(function(x){return x.kind==='issue';});
     $('mgr-issues').innerHTML = issues.length ? issues.map(function(x){

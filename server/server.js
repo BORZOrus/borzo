@@ -70,6 +70,7 @@ async function initSchema() {
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS rec_no TEXT DEFAULT '';
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS doc_date TEXT DEFAULT '';
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS req_id TEXT;
+    ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS review TEXT DEFAULT '';
     CREATE UNIQUE INDEX IF NOT EXISTS kassa_tx_req_id_uidx ON kassa_tx(req_id) WHERE req_id IS NOT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS token_ver INTEGER NOT NULL DEFAULT 0;
   `);
@@ -349,6 +350,13 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
   }
 });
 
+// контроль качества: руководитель помечает закуп «проверено» или «не норма» (учит систему)
+app.post('/api/kassa/expense/:id/review', auth, requireRole('mgr'), async (req,res)=>{
+  const verdict = req.body.verdict==='bad' ? 'bad' : (req.body.verdict==='ok' ? 'ok' : '');
+  const r = await pool.query("UPDATE kassa_tx SET review=$1 WHERE id=$2 AND kind='expense' RETURNING id",[verdict, req.params.id]);
+  if(!r.rowCount) return res.status(404).json({error:'не найдено'});
+  res.json({ ok:true, verdict });
+});
 // удаление СВОЕГО закупа руководителем — без согласования (только expense, созданный mgr)
 app.post('/api/kassa/expense/:id/delete', auth, requireRole('mgr'), async (req,res)=>{
   try{
