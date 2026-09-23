@@ -657,9 +657,18 @@
         '<div class="hero" style="margin-bottom:12px"><div class="l">Вместе — семейный бюджет</div><div class="v">'+money(sM+sU)+'</div></div>'+
         '<div style="font-weight:700;margin-bottom:4px">Мои категории</div>'+catBars(mine)+
         '<div style="font-weight:700;margin:14px 0 4px">Категории Ульяны (с моего кошелька)</div>'+catBars(ulya);
-    } else if(anTab==='upers'){ // Ульяна — её личные траты
+    } else if(anTab==='upers'){ // Ульяна — заработок по месяцам + личные траты
       var um=DB.ops.filter(function(o){return o.kind==='out'&&o.acc==='zpUlyana'&&inRangeS(o,r);});
-      bd.innerHTML='<div class="hero" style="margin-bottom:12px"><div class="l">Мои личные траты</div><div class="v">'+money(sumOps(um))+'</div></div>'+catBars(um);
+      // заработок = начисления зарплаты Ульяне + пополнения её кошелька
+      function ulyEarn(o){ return (o.salary&&o.salary.emp==='Ульяна')||(o.kind==='in'&&o.acc==='zpUlyana'); }
+      var earns=DB.ops.filter(ulyEarn);
+      var earnPeriod=earns.filter(function(o){return inRangeS(o,r);}).reduce(function(s,o){return s+o.amount;},0);
+      var byMon={}; earns.forEach(function(o){ var d=new Date(o.per||o.ts); var k=d.getFullYear()+'-'+pad(d.getMonth()+1); byMon[k]=(byMon[k]||0)+o.amount; });
+      var monKeys=Object.keys(byMon).sort().reverse().slice(0,12);
+      bd.innerHTML='<div class="split"><div class="s"><div class="l">Заработала за период</div><div class="v" style="color:var(--green)">'+money(earnPeriod)+'</div></div><div class="s"><div class="l">Потратила</div><div class="v" style="color:var(--red)">'+money(sumOps(um))+'</div></div></div>'+
+        '<div style="font-weight:700;margin:6px 0 4px">💰 Заработок по месяцам</div>'+
+        (monKeys.length?monKeys.map(function(k){var d=k.split('-');return '<div class="anrow"><span>'+MON[+d[1]-1]+' '+d[0]+'</span><b style="color:var(--green)">+'+money(byMon[k])+'</b></div>';}).join(''):'<div class="empty">Пока нет начислений</div>')+
+        '<div style="font-weight:700;margin:16px 0 4px">🛒 Мои траты по категориям</div>'+catBars(um);
     } else if(anTab==='ufam'){ // Ульяна — траты с кошелька Руслана (семейное)
       var uf=DB.ops.filter(function(o){return o.family&&inRangeS(o,r);});
       bd.innerHTML='<div class="hero" style="margin-bottom:12px"><div class="l">Потратила с кошелька Руслана</div><div class="v">'+money(sumOps(uf))+'</div></div>'+catBars(uf);
@@ -902,7 +911,8 @@
 
     $('uzp-balance').textContent=money(balance('zpUlyana'));
     $('uzp-spent').textContent=money(sumW(function(o){return o.kind==='out'&&o.acc==='zpUlyana'&&inRangeS(o,curR);}));
-    wireSearch('s-uzp',$('u-zp-list'),opsSorted().filter(function(o){return (o.kind==='out'&&o.acc==='zpUlyana')||(o.kind==='in'&&o.acc==='zpUlyana')||(o.salary&&o.salary.emp==='Ульяна');}),'Пока пусто.');
+    // прячем 350 исторических начислений ЗП (импорт из Excel, kind out) — данные целы для аналитики компании, лента Ульяны чистая; остаются новые (transfer) + движения кошелька
+    wireSearch('s-uzp',$('u-zp-list'),opsSorted().filter(function(o){return ((o.kind==='out'&&o.acc==='zpUlyana')||(o.kind==='in'&&o.acc==='zpUlyana')||(o.salary&&o.salary.emp==='Ульяна')) && !(o.salary&&o.kind==='out');}),'Пока пусто.');
 
     $('urus-spent').textContent=money(sumW(function(o){return o.family&&inRangeS(o,curR);}));
     wireSearch('s-urus',$('u-rus-list'),opsSorted().filter(function(o){return o.family;}),'Семейных трат пока нет.');
