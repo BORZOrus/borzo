@@ -5,7 +5,9 @@
   var $=function(id){return document.getElementById(id);};
   function money(n){ return (Math.round(+n)||0).toLocaleString('ru-RU')+' ₸'; }
   function pad(x){ return x<10?'0'+x:''+x; }
-  function stamp(ts){ var d=new Date(+ts); return pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+  // время операций всегда по Астане (Asia/Almaty), не по поясу устройства
+  function almP(ts){ var p={}; try{ new Intl.DateTimeFormat('ru-RU',{timeZone:'Asia/Almaty',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(ts)).forEach(function(x){p[x.type]=x.value;}); if(p.hour==='24')p.hour='00'; }catch(e){ var d=new Date(ts); p={day:pad(d.getDate()),month:pad(d.getMonth()+1),year:''+d.getFullYear(),hour:pad(d.getHours()),minute:pad(d.getMinutes())}; } return p; }
+  function stamp(ts){ var p=almP(+ts); return p.day+'.'+p.month+'.'+p.year+' '+p.hour+':'+p.minute; }
   function clone(o){ return JSON.parse(JSON.stringify(o)); }
   function roleName(r){ return r==='mgr'?'управленец':'снабженец'; }
   function numf(v){ return parseFloat(String(v==null?'':v).replace(',','.'))||0; }  // 25,2 → 25.2

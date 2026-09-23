@@ -77,7 +77,7 @@
     $('status').textContent='Обновляю…';
     try{
       var d=await api('GET','/deals');if(sequence!==refreshSequence)return;state.deals=d.deals;
-      $('status').textContent='Обновлено '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      $('status').textContent='Обновлено '+new Date().toLocaleTimeString('ru-RU',{timeZone:'Asia/Almaty',hour:'2-digit',minute:'2-digit'});
       if(state.tab==='deals') renderDeals();
       else if(state.tab==='clients') await loadClients();
       else if(state.tab==='analytics') await renderAnalytics();
