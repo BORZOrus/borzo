@@ -640,16 +640,11 @@
       var sIn=grossIn-retSum;
       var sOut=sumOps(DB.ops.filter(function(o){return inRangeS(o,r)&&isCompanyExpense(o)&&expProject(o)===anProj;}));
       var sRes=sIn-sOut;
-      // кредиты и реальное движение денег — отдельной строкой (прибыль чистая, но видно, куда ушли деньги)
+      // одна простая строка: сколько за период ушло на кредиты (в прибыль не входит, поэтому касса меньше). Показываем только если было.
       var credPaid=sumOps(DB.ops.filter(function(o){return o.creditId&&o.kind==='out'&&o.project===anProj&&inRangeS(o,r);}));
-      var credIn=sumOps(DB.ops.filter(function(o){return o.kind==='in'&&o.category==='Кредит'&&o.project===anProj&&inRangeS(o,r);}));
-      var cashDelta=0; DB.ops.forEach(function(o){ if(!inRange(o,r))return; if(o.kind==='in'&&o.acc===anProj)cashDelta+=o.amount; else if((o.kind==='out'||o.kind==='return')&&o.acc===anProj)cashDelta-=o.amount; else if(o.kind==='transfer'){ if(o.from===anProj)cashDelta-=o.amount; if(o.to===anProj)cashDelta+=o.amount; } });
-      var summaryH='<div class="split" style="margin-bottom:'+(retSum?'4px':'12px')+'"><div class="s"><div class="l">Доход</div><div class="v" style="color:var(--blue);font-size:14px">'+money(sIn)+'</div></div><div class="s"><div class="l">Расход</div><div class="v" style="color:var(--red);font-size:14px">'+money(sOut)+'</div></div><div class="s"><div class="l">Результат</div><div class="v" style="color:'+(sRes>=0?'var(--green)':'var(--red)')+';font-size:14px">'+(sRes>=0?'+':'')+money(sRes)+'</div></div></div>'+
-        (retSum?'<div style="font-size:11px;color:var(--mut);margin-bottom:4px;text-align:center">доход уже за вычетом возвратов '+money(retSum)+'; кредитные поступления в доход не входят</div>':'')+
-        '<div class="card" style="padding:9px 12px;margin-bottom:12px;font-size:12px"><div class="anrow" style="border:none;padding:2px 0"><span class="muted">💳 Погашено кредитов за период</span><b style="color:var(--amber)">'+money(credPaid)+'</b></div>'+
-        (credIn?'<div class="anrow" style="border:none;padding:2px 0"><span class="muted">🏦 Пришло кредитом (долг, не доход)</span><b style="color:var(--violet)">+'+money(credIn)+'</b></div>':'')+
-        '<div class="anrow" style="border:none;padding:2px 0"><span class="muted">💰 Движение денег (реальная касса, вкл. кредиты)</span><b style="color:'+(cashDelta>=0?'var(--green)':'var(--red)')+'">'+(cashDelta>=0?'+':'')+money(cashDelta)+'</b></div>'+
-        '<div style="font-size:10.5px;color:var(--mut);margin-top:4px">Результат — это прибыль от работы (зарплата уже в расходе). Движение денег — насколько реально изменилась касса за период.</div></div>';
+      var summaryH='<div class="split" style="margin-bottom:'+((retSum||credPaid)?'4px':'12px')+'"><div class="s"><div class="l">Доход</div><div class="v" style="color:var(--blue);font-size:14px">'+money(sIn)+'</div></div><div class="s"><div class="l">Расход</div><div class="v" style="color:var(--red);font-size:14px">'+money(sOut)+'</div></div><div class="s"><div class="l">Результат</div><div class="v" style="color:'+(sRes>=0?'var(--green)':'var(--red)')+';font-size:14px">'+(sRes>=0?'+':'')+money(sRes)+'</div></div></div>'+
+        (credPaid?'<div class="anrow" style="border:none;padding:2px 0;margin-bottom:'+(retSum?'2px':'12px')+';font-size:12px"><span class="muted">💳 Ушло на кредиты за период <span style="font-size:10px">(в прибыль не входит)</span></span><b style="color:var(--amber)">−'+money(credPaid)+'</b></div>':'')+
+        (retSum?'<div style="font-size:11px;color:var(--mut);margin-bottom:12px;text-align:center">доход уже за вычетом возвратов '+money(retSum)+'</div>':'');
       var innerH='<div class="antabs">'+[['in','Приход'],['out','Расход'],['sal','Зарплаты']].map(function(t){return '<button data-in="'+t[0]+'"'+(anInner===t[0]?' class="on"':'')+'>'+t[1]+'</button>';}).join('')+'</div>';
       var body='';
       if(anInner==='in'){
