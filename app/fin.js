@@ -154,7 +154,11 @@
   // отделы котла BORZO: стартовый остаток на 24.09 + движения новых операций по who (safeTracked). Снабжение = potSnab (касса снабжения).
   function safeBal(who){
     var b=(DB.safeStart&&DB.safeStart[who])||0;
+    var startTs=(DB.safeStart&&DB.safeStart.ts)||0;
     DB.ops.forEach(function(o){
+      // снабженческие движения (закуп/выдача) приходят из кассы снабжения без метки — новые (после старта отделов) списываем с отдела того, кто их сделал:
+      // выдача снабженцу от Руслана → из его отдела; прямой закуп Руслана → из его отдела; закуп самого снабженца (who=snab) отделы не трогает
+      if((o.supplyExpense||o.supplyIssue)&&(o.ts||0)>startTs){ if(o.who===who)b-=o.amount; return; }
       if(!o.safeTracked)return;
       if(o.kind==='safemove'){ if(o.safeFrom===who)b-=o.amount; if(o.safeTo===who)b+=o.amount; return; }
       if(o.who!==who)return;
