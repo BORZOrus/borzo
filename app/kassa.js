@@ -273,8 +273,10 @@
     if(x.pending){
       var isDel=x.pending.del;
       var d=isDel?[]:genericDiff(x,x.pending.next);
+      var newAmt=(!isDel&&x.pending.next&&('amount' in x.pending.next))?Math.round(+x.pending.next.amount):null;
       body+='<div class="pend"><div class="ph">'+(isDel?'🗑 Запрос на УДАЛЕНИЕ накладной':'✏️ Запрос на изменение')+' · от: '+roleName(x.pending.by)+'</div>'+
-        (isDel?'<div class="fz13" style="margin:4px 0">Накладная на '+money(x.amount)+' будет удалена (уйдёт со склада и из расходов).</div>':diffRows(d))+
+        (isDel?'<div class="fz13" style="margin:4px 0">Накладная на '+money(x.amount)+' будет удалена (уйдёт со склада и из расходов).</div>':
+          ((newAmt!=null&&newAmt!==Math.round(+x.amount)?'<div style="text-align:center;font-weight:800;font-size:17px;margin:6px 0">Итоговая сумма: '+money(x.amount)+' → <span style="color:var(--k-green)">'+money(newAmt)+'</span></div>':'')+diffRows(d)))+
         (x.pending.note?'<div class="muted fz12" style="margin-top:6px">Комментарий: '+esc(x.pending.note)+'</div>':'')+'</div>';
       if(x.pending.by!==R){
         body+='<button class="btn btn-ok" id="op-appr" style="margin-bottom:8px">'+(isDel?'✓ Одобрить удаление':'✓ Одобрить изменение')+'</button>'+
@@ -302,17 +304,19 @@
       }
     }
 
+    // история изменений — свёрнута под кнопку, чтобы основной вид показывал чистую итоговую накладную (без зачёркиваний)
     if(x.log && x.log.length){
-      body+='<div class="logh">История изменений</div>';
-      body+=x.log.slice().reverse().map(function(e){
+      body+='<button class="btn btn-ghost" id="log-toggle" style="margin-bottom:8px;font-size:12px;color:var(--k-mut)">🕓 Показать историю правок ('+x.log.length+')</button>';
+      body+='<div id="log-box" hidden>'+x.log.slice().reverse().map(function(e){
         var head=(e.rejected?'✕ Отклонено':'✓ Одобрено')+' · предложил '+roleName(e.by)+', '+(e.rejected?'отклонил':'одобрил')+' '+roleName(e.approver)+' · '+stamp(e.t);
         return '<div class="logi"><div class="muted fz12">'+head+'</div>'+diffRows(e.changes||[])+'</div>';
-      }).join('');
+      }).join('')+'</div>';
     }
 
     body+='<button class="btn btn-ghost" id="cl">Закрыть</button>';
     openSheet(body);
     $('cl').onclick=closeSheet;
+    if($('log-toggle')) $('log-toggle').onclick=function(){ var b=$('log-box'); if(b){ b.hidden=!b.hidden; this.textContent=(b.hidden?'🕓 Показать историю правок ('+x.log.length+')':'🕓 Скрыть историю правок'); } };
     if($('op-appr')) $('op-appr').onclick=function(){ API.approve(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
     if($('op-rej')) $('op-rej').onclick=function(){ API.reject(id).then(function(){ closeSheet(); return refresh(); }).catch(fail); };
     if($('op-edit')) $('op-edit').onclick=function(){ if(x.kind==='expense') openEdit(id, (R==='mgr'&&x.by_role==='mgr')); else openEditIssue(id); };

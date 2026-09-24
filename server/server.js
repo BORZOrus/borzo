@@ -500,7 +500,8 @@ app.post('/api/kassa/:id/approve', auth, requireAny(['mgr','sup']), async (req,r
       ['amount','source','category','items'].forEach(k=>{ if(k in next){ fields.push(k+'=$'+n); vals.push(k==='items'?JSON.stringify(next[k]):next[k]); n++; } });
       fields.push('pending=NULL'); fields.push('log=$'+n); vals.push(JSON.stringify(log)); n++;
       // снабженец исправил и руководитель одобрил → замечание «не норма» снимается
-      if(tx.kind==='expense' && tx.review==='bad'){ fields.push("review=''"); fields.push("review_note=''"); }
+      // снабженец исправил и руководитель одобрил → закуп сразу «проверен» (не сбрасываем в непроверено, иначе плашка контроля всплывёт заново)
+      if(tx.kind==='expense' && tx.review==='bad'){ fields.push("review='ok'"); fields.push("review_note=''"); }
       vals.push(tx.id);
       await c.query(`UPDATE kassa_tx SET ${fields.join(', ')} WHERE id=$${n}`, vals);
       // пересобрать приход на склад при изменении позиций ИЛИ категории (смена на операционку убирает со склада)
