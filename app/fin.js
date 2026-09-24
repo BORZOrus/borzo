@@ -168,7 +168,9 @@
     });
     return b;
   }
-  function opsSorted(){ return DB.ops.slice().sort(function(a,b){return b.ts-a.ts;}); }
+  // сортировка всей истории — дорогая; кэшируем на время одной перерисовки (сбрасывается в начале render), чтобы не сортировать 6+ раз подряд
+  var _opsSortedCache=null;
+  function opsSorted(){ if(!_opsSortedCache) _opsSortedCache=DB.ops.slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);}); return _opsSortedCache; }
 
   // ---------- подтверждение операции («накладная» перед проведением) ----------
   function prow(l,v){ return '<div class="anrow" style="border:none;padding:1px 0;font-size:12px;color:var(--mut)"><span>'+l+'</span><span>'+v+'</span></div>'; }
@@ -591,7 +593,7 @@
     if(c==='Общие'||c==='Операционка цеха'||c==='Операционные'||c==='Операционка') return 'Операционка';   // общие расходы цеха — одной строкой
     return c||'—';
   }
-  function catBars(ops){ var by={},tot=0; ops.forEach(function(o){var k=catNorm(o.category||o.project);by[k]=(by[k]||0)+o.amount;tot+=o.amount;});
+  function catBars(ops,catFn){ var by={},tot=0; ops.forEach(function(o){var k=catFn?catFn(o):catNorm(o.category||o.project);by[k]=(by[k]||0)+o.amount;tot+=o.amount;});
     var ks=Object.keys(by).sort(function(a,b){return by[b]-by[a];}); var mx=ks.length?by[ks[0]]:1;
     return (ks.length?ks.map(function(k){return '<div class="anrow"><span>'+esc(k)+'</span><b>'+money(by[k])+'</b></div><div class="bar" style="width:'+Math.max(4,by[k]/mx*100)+'%"></div>';}).join(''):'<div class="empty">Нет операций</div>')+(tot?'<div class="anrow" style="border:none;margin-top:6px"><span><b>Итого</b></span><b>'+money(tot)+'</b></div>':''); }
   function sumOps(ops){ return ops.reduce(function(s,o){return s+o.amount;},0); }
@@ -599,6 +601,17 @@
   // Кредит — это долг, а не операционный расход: приход (kind='credit'/'in') и погашение тела в прибыль/убыток не входят. Реальная цена кредита = только проценты.
   function isCreditFlow(o){ return o.category==='Погашение кредита' || o.category==='Кредит' || !!o.creditId; }
   function isProjExp(o){ return PROJECTS.indexOf(o.project)>=0 && !isCreditFlow(o) && (o.kind==='out' || (o.salary&&o.kind==='transfer')); }
+  // РАСХОД КОМПАНИИ (для аналитики проектов): всё, что уходит из котла BORZO/IT наружу —
+  // операционка/снабжение/семейное (out из котла) + зарплата и «взято на личное» (перевод из котла в кошелёк).
+  // Зарплата Руслана (в т.ч. семейные траты Ульяны с котла) = расход компании (по требованию Руслана). Кредиты и внутренние переводы между проектами — НЕ расход.
+  function isCompanyExpense(o){
+    if(isCreditFlow(o)) return false;
+    if(o.kind==='out' && (o.acc==='BORZO'||o.acc==='IT')) return true;              // операционка, снабжение, семейное (family acc=BORZO)
+    if(o.kind==='transfer' && (o.from==='BORZO'||o.from==='IT') && (o.to==='zpRuslan'||o.to==='zpUlyana')) return true;  // зарплата / взято с котла на личное
+    return false;
+  }
+  function expProject(o){ if(o.kind==='out'){ if(o.acc==='BORZO')return 'BORZO'; if(o.acc==='IT')return 'IT'; } if(o.kind==='transfer'){ if(o.from==='BORZO')return 'BORZO'; if(o.from==='IT')return 'IT'; } return o.project; }
+  function projCat(o){ return o.family?'Зарплата Руслана':((o.salary||o.category==='Зарплата')?'Зарплата':catNorm(o.category||o.project)); }
   function rangeFor(scope,off){ var d=new Date();
     if(scope==='year'){ var y=d.getFullYear()+off; return {s:new Date(y,0,1).getTime(),e:new Date(y+1,0,1).getTime(),name:'Год '+y}; }
     if(scope==='all'){ return {s:0,e:8640000000000000,name:'Всё время'}; }
@@ -625,10 +638,18 @@
       var grossIn=sumOps(DB.ops.filter(function(o){return o.kind==='in'&&!isCreditFlow(o)&&o.project===anProj&&inRangeS(o,r);}));
       var retSum=sumOps(DB.ops.filter(function(o){return o.kind==='return'&&o.project===anProj&&inRangeS(o,r);}));
       var sIn=grossIn-retSum;
-      var sOut=sumOps(DB.ops.filter(function(o){return inRangeS(o,r)&&isProjExp(o)&&o.project===anProj;}));
+      var sOut=sumOps(DB.ops.filter(function(o){return inRangeS(o,r)&&isCompanyExpense(o)&&expProject(o)===anProj;}));
       var sRes=sIn-sOut;
+      // кредиты и реальное движение денег — отдельной строкой (прибыль чистая, но видно, куда ушли деньги)
+      var credPaid=sumOps(DB.ops.filter(function(o){return o.creditId&&o.kind==='out'&&o.project===anProj&&inRangeS(o,r);}));
+      var credIn=sumOps(DB.ops.filter(function(o){return o.kind==='in'&&o.category==='Кредит'&&o.project===anProj&&inRangeS(o,r);}));
+      var cashDelta=0; DB.ops.forEach(function(o){ if(!inRange(o,r))return; if(o.kind==='in'&&o.acc===anProj)cashDelta+=o.amount; else if((o.kind==='out'||o.kind==='return')&&o.acc===anProj)cashDelta-=o.amount; else if(o.kind==='transfer'){ if(o.from===anProj)cashDelta-=o.amount; if(o.to===anProj)cashDelta+=o.amount; } });
       var summaryH='<div class="split" style="margin-bottom:'+(retSum?'4px':'12px')+'"><div class="s"><div class="l">Доход</div><div class="v" style="color:var(--blue);font-size:14px">'+money(sIn)+'</div></div><div class="s"><div class="l">Расход</div><div class="v" style="color:var(--red);font-size:14px">'+money(sOut)+'</div></div><div class="s"><div class="l">Результат</div><div class="v" style="color:'+(sRes>=0?'var(--green)':'var(--red)')+';font-size:14px">'+(sRes>=0?'+':'')+money(sRes)+'</div></div></div>'+
-        (retSum?'<div style="font-size:11px;color:var(--mut);margin-bottom:12px;text-align:center">доход уже за вычетом возвратов '+money(retSum)+'; кредитные поступления в доход не входят</div>':'');
+        (retSum?'<div style="font-size:11px;color:var(--mut);margin-bottom:4px;text-align:center">доход уже за вычетом возвратов '+money(retSum)+'; кредитные поступления в доход не входят</div>':'')+
+        '<div class="card" style="padding:9px 12px;margin-bottom:12px;font-size:12px"><div class="anrow" style="border:none;padding:2px 0"><span class="muted">💳 Погашено кредитов за период</span><b style="color:var(--amber)">'+money(credPaid)+'</b></div>'+
+        (credIn?'<div class="anrow" style="border:none;padding:2px 0"><span class="muted">🏦 Пришло кредитом (долг, не доход)</span><b style="color:var(--violet)">+'+money(credIn)+'</b></div>':'')+
+        '<div class="anrow" style="border:none;padding:2px 0"><span class="muted">💰 Движение денег (реальная касса, вкл. кредиты)</span><b style="color:'+(cashDelta>=0?'var(--green)':'var(--red)')+'">'+(cashDelta>=0?'+':'')+money(cashDelta)+'</b></div>'+
+        '<div style="font-size:10.5px;color:var(--mut);margin-top:4px">Результат — это прибыль от работы (зарплата уже в расходе). Движение денег — насколько реально изменилась касса за период.</div></div>';
       var innerH='<div class="antabs">'+[['in','Приход'],['out','Расход'],['sal','Зарплаты']].map(function(t){return '<button data-in="'+t[0]+'"'+(anInner===t[0]?' class="on"':'')+'>'+t[1]+'</button>';}).join('')+'</div>';
       var body='';
       if(anInner==='in'){
@@ -640,8 +661,8 @@
           '<div style="font-weight:700;margin-bottom:4px">По категориям прихода</div>'+catBars(ins)+
           (pk.length?'<button class="an-btn" id="in-prod-btn" style="margin-top:12px">📦 Детализация по изделиям'+(pq?' · '+pq+' шт':'')+(anInProd?' ▲':' ▼')+'</button><div id="in-prod" style="display:'+(anInProd?'':'none')+'">'+pk.map(function(k){return '<div class="anrow"><span>'+esc(k)+' <span class="muted">× '+prod[k].q+'</span></span><b>'+money(prod[k].s)+'</b></div>';}).join('')+'</div>':'');
       } else if(anInner==='out'){
-        var outs=DB.ops.filter(function(o){return inRangeS(o,r)&&isProjExp(o)&&o.project===anProj;});
-        body='<div class="hero" style="margin-bottom:12px"><div class="l">Расход · '+anProj+' (вкл. зарплаты)</div><div class="v">'+money(sumOps(outs))+'</div></div>'+catBars(outs);
+        var outs=DB.ops.filter(function(o){return inRangeS(o,r)&&isCompanyExpense(o)&&expProject(o)===anProj;});
+        body='<div class="hero" style="margin-bottom:12px"><div class="l">Расход · '+anProj+' (вкл. зарплаты и семейное)</div><div class="v">'+money(sumOps(outs))+'</div></div>'+catBars(outs,projCat);
       } else {
         var semp={},stot=0;
         DB.ops.forEach(function(o){ if(o.salary&&o.salary.type==='salary'&&o.project===anProj&&inRangeS(o,r)){ semp[o.salary.emp]=(semp[o.salary.emp]||0)+o.amount; stot+=o.amount; } });
@@ -667,10 +688,10 @@
         (ks.length?ks.map(function(k){return '<div class="anrow"><span>'+k+' <span class="muted">× '+byProd[k].q+'</span></span><b>'+money(byProd[k].s)+'</b></div>';}).join(''):'<div class="empty">Продаж за месяц нет</div>');
     } else if(anTab==='proj'){
       // общая по проектам + провал
-      var byProj={}; DB.ops.forEach(function(o){ if(inRangeS(o,r)&&isProjExp(o)) byProj[o.project]=(byProj[o.project]||0)+o.amount; });
+      var byProj={}; DB.ops.forEach(function(o){ if(inRangeS(o,r)&&isCompanyExpense(o)){ var p=expProject(o); byProj[p]=(byProj[p]||0)+o.amount; } });
       bd.innerHTML='<div style="font-size:12px;color:var(--mut);margin-bottom:8px">Расходы по проектам за период (вкл. зарплаты). Нажмите проект — детали.</div>'+
         PROJECTS.map(function(p){return '<div class="anrow'+(p===anProj?' on':'')+'" data-proj="'+p+'" style="cursor:pointer"><span>'+p+' ›</span><b>'+money(byProj[p]||0)+'</b></div>';}).join('')+'<div id="proj-detail" style="margin-top:10px"></div>';
-      function projDetail(p){ anProj=p; Array.prototype.forEach.call(bd.querySelectorAll('[data-proj]'),function(x){x.className='anrow'+(x.getAttribute('data-proj')===p?' on':'');}); $('proj-detail').innerHTML='<div style="font-weight:700;margin:8px 0">'+p+' — по категориям</div>'+catBars(DB.ops.filter(function(o){return inRangeS(o,r)&&isProjExp(o)&&o.project===p;})); }
+      function projDetail(p){ anProj=p; Array.prototype.forEach.call(bd.querySelectorAll('[data-proj]'),function(x){x.className='anrow'+(x.getAttribute('data-proj')===p?' on':'');}); $('proj-detail').innerHTML='<div style="font-weight:700;margin:8px 0">'+p+' — по категориям</div>'+catBars(DB.ops.filter(function(o){return inRangeS(o,r)&&isCompanyExpense(o)&&expProject(o)===p;}),projCat); }
       Array.prototype.forEach.call(bd.querySelectorAll('[data-proj]'),function(el){el.onclick=function(){projDetail(el.getAttribute('data-proj'));};});
       if(anProj) projDetail(anProj);
     } else if(anTab==='salary'){
@@ -902,8 +923,14 @@
   function listInto(el,ops,empty){ el.innerHTML=ops.length?ops.map(opRow).join(''):'<div class="empty">'+empty+'</div>';
     Array.prototype.forEach.call(el.querySelectorAll('[data-op]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-op'));};}); }
   function opSearchText(o){ return (fdate2(o.ts)+' '+(o.category||'')+' '+(o.note||'')+' '+((o.salary&&o.salary.emp)||'')+' '+(o.emp||'')+' '+o.amount+' '+(o.project||'')+' '+((o.sale&&o.sale.items)?o.sale.items.map(function(i){return i.name;}).join(' '):'')+' '+((o.sale&&o.sale.pay)||'')+' '+((o.sale&&o.sale.client)||'')).toLowerCase(); }
+  // рисуем не всю историю разом, а последние CAP строк (остальное — через поиск): десятки тысяч DOM-узлов = тормоза
+  var LIST_CAP=60;
   function wireSearch(inputId,el,ops,empty){ var inp=$(inputId);
-    function draw(){ var q=(inp?inp.value:'').trim().toLowerCase(); var f=q?ops.filter(function(o){return opSearchText(o).indexOf(q)>=0;}):ops; listInto(el,f,q?'Ничего не найдено':empty); }
+    function draw(){ var q=(inp?inp.value:'').trim().toLowerCase(); var f=q?ops.filter(function(o){return opSearchText(o).indexOf(q)>=0;}):ops;
+      var shown=f.slice(0,LIST_CAP);
+      listInto(el,shown,q?'Ничего не найдено':empty);
+      if(f.length>LIST_CAP) el.insertAdjacentHTML('beforeend','<div class="empty" style="padding:12px 0;font-size:12px">Показаны последние '+LIST_CAP+' из '+f.length+'. Чтобы найти нужное — воспользуйся поиском выше.</div>');
+    }
     if(inp) inp.oninput=draw; draw(); }
 
   // лента BORZO у Ульяны: две вкладки — финансы (ручные) и снабжение (закупки+выдачи снабженцу)
@@ -1034,6 +1061,7 @@
 
   // ---------- рендер панелей ----------
   function render(){
+    _opsSortedCache=null;   // данные могли измениться — пересортируем один раз за эту перерисовку
     // запросы Ульяны на согласование (видит Руслан)
     var reqs=DB.ops.filter(function(o){return o.pending&&o.pending.by==='ulyana';});
     var rb=$('r-reqs');
