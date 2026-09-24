@@ -75,7 +75,7 @@
     if(!cat){ $('q-err').textContent='Выбери категорию'; return; }
     var note=($('q-note').value||'').trim();
     $('q-go').disabled=true; $('q-err').textContent='';
-    var op={ id:'o'+Date.now()+Math.floor(Math.random()*10000), ts:Date.now(), kind:'out', acc:'zpRuslan', project:'Личное', amount:a, category:cat, who:'ruslan' };
+    var op={ id:'o'+Date.now()+Math.floor(Math.random()*10000), ts:Date.now(), kind:'out', acc:'zpRuslan', project:'Личное', amount:a, category:cat, who:'ruslan', safeTracked:true };
     if(note) op.note=note;
     var tries=0;
     function attempt(){
@@ -91,7 +91,7 @@
         var before=balZp(data.ops);
         if(before<a){
           var need=a-before;
-          data.ops.unshift({ id:op.id+'_t', ts:op.ts-1, kind:'transfer', from:'BORZO', to:'zpRuslan', amount:need, project:'BORZO', who:'ruslan', category:'Зарплата', note:'взято с котла на личные траты' });
+          data.ops.unshift({ id:op.id+'_t', ts:op.ts-1, kind:'transfer', from:'BORZO', to:'zpRuslan', amount:need, project:'BORZO', who:'ruslan', category:'Зарплата', note:'взято с котла на личные траты', safeTracked:true });
         }
         data.ops.unshift(op);
         return API.finPut(data,res.rev);

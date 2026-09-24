@@ -150,7 +150,20 @@
     }); return b;
   }
   function sumW(fn){ var s=0; DB.ops.forEach(function(o){ if(fn(o))s+=o.amount; }); return s; }
-  function addOp(o){ o.id=o.id||uid(); o.ts=o.ts||Date.now(); DB.ops.unshift(o); save(); return o; }
+  function addOp(o){ o.id=o.id||uid(); o.ts=o.ts||Date.now(); if(o.safeTracked===undefined)o.safeTracked=true; DB.ops.unshift(o); save(); return o; }
+  // отделы котла BORZO: стартовый остаток на 24.09 + движения новых операций по who (safeTracked). Снабжение = potSnab (касса снабжения).
+  function safeBal(who){
+    var b=(DB.safeStart&&DB.safeStart[who])||0;
+    DB.ops.forEach(function(o){
+      if(!o.safeTracked)return;
+      if(o.kind==='safemove'){ if(o.safeFrom===who)b-=o.amount; if(o.safeTo===who)b+=o.amount; return; }
+      if(o.who!==who)return;
+      if(o.kind==='in'&&o.acc==='BORZO')b+=o.amount;
+      else if((o.kind==='out'||o.kind==='return')&&o.acc==='BORZO')b-=o.amount;
+      else if(o.kind==='transfer'&&o.from==='BORZO')b-=o.amount;   // зарплата/личное взятие/перевод из котла
+    });
+    return b;
+  }
   function opsSorted(){ return DB.ops.slice().sort(function(a,b){return b.ts-a.ts;}); }
 
   // ---------- подтверждение операции («накладная» перед проведением) ----------
@@ -162,6 +175,7 @@
     if(o.kind==='credit') return 'Кредит (остаток) · '+((o.credit&&o.credit.name)||'');
     if(o.kind==='close') return 'Закрытие аванса · '+o.emp;
     if(o.kind==='return') return 'Возврат';
+    if(o.kind==='safemove'){ var nm={ulyana:'Ульяны',ruslan:'Руслана',snab:'Снабжение'}; return 'Перевод: отдел '+(nm[o.safeFrom]||'')+' → '+(nm[o.safeTo]||''); }
     return o.category||'Расход';
   }
   function opPreviewHtml(o){
@@ -450,6 +464,17 @@
   function formTopZp(){ open('<h3>↓ Пополнить мою зарплату</h3><div style="font-size:12px;color:var(--mut);margin-bottom:10px">Перевод из проекта в вашу зарплату.</div>'+squares('f-proj',PROJECTS)+amtField()+acts('Пополнить'));
     var pr=wireSquares('f-proj'); wireActs(function(){var a=getAmt();if(!a)return;commit([{kind:'transfer',from:pr(),to:'zpRuslan',amount:a,project:pr(),who:'ruslan',note:'в зарплату'}]);}); }
 
+  // перевод между отделами котла: деньги едут внутри, общая сумма BORZO не меняется
+  function formSafeMove(){
+    var from=(role()==='ulyana')?'ulyana':'ruslan';
+    var to=(from==='ulyana')?'ruslan':'ulyana';
+    var toName=(to==='ruslan')?'👤 Отдел Руслана':'🧑‍💼 Отдел Ульяны';
+    open('<h3>🔁 Перевод в другой отдел</h3><div style="font-size:12px;color:var(--mut);margin-bottom:12px">Деньги переедут внутри котла из твоего отдела в другой. Общая сумма BORZO НЕ изменится.<br>Мой отдел сейчас: <b style="color:var(--ink)">'+money(safeBal(from))+'</b></div>'+
+      '<div class="fld"><label>Кому</label><input value="'+toName+'" disabled style="opacity:.7"></div>'+
+      amtField()+acts('Перевести'));
+    wireActs(function(){ var a=getAmt(); if(!a)return;
+      if(safeBal(from)<a){ alert('В твоём отделе столько нет. Доступно: '+money(safeBal(from))); return; }
+      commit([{kind:'safemove',safeFrom:from,safeTo:to,amount:a,who:from,category:'Перевод в отдел',note:'между отделами котла'}]); }); }
   function formPersR(){ open('<h3>− Личный расход</h3><div style="font-size:12px;color:var(--mut);margin-bottom:10px">Списывается с зарплаты. Если в зарплате не хватает — недостающее автоматически возьмётся с котла BORZO.</div>'+amtField()+catField('На что','pers_ruslan','f-cat')+acts('Записать'));
     var ct=wireCatField('f-cat','pers_ruslan'); wireActs(function(){var a=getAmt();if(!a)return;
       var ops=[], before=balance('zpRuslan');
@@ -857,7 +882,8 @@
     } else if(o.kind==='close'){ sign=''; cls='amt-tr'; ic='<div class="ic ic-tr">✓</div>'; title='Закрыт аванс · '+o.emp;
     } else if(o.kind==='issue'){ sign='−'; cls='amt-tr'; ic='<div class="ic ic-tr">🛒</div>'; title='Выдано снабженцу';
     } else if(o.kind==='credit'){ sign=''; cls='amt-tr'; ic='<div class="ic ic-tr">🏦</div>'; title='Кредит · '+((o.credit&&o.credit.name)||'');
-    } else { sign='−'; cls='amt-out'; ic='<div class="ic '+(o.family?'ic-fam':'ic-out')+'">'+(o.kind==='return'?'↩':'⬆')+'</div>'; title=(o.kind==='return'?'↩ Возврат':(o.category||'—')); }
+    } else if(o.kind==='safemove'){ var nm={ulyana:'Ульяны',ruslan:'Руслана',snab:'Снабжение'}; sign=''; cls='amt-tr'; ic='<div class="ic ic-tr">🔁</div>'; title='Перевод: отдел '+(nm[o.safeFrom]||'')+' → '+(nm[o.safeTo]||''); }
+    else { sign='−'; cls='amt-out'; ic='<div class="ic '+(o.family?'ic-fam':'ic-out')+'">'+(o.kind==='return'?'↩':'⬆')+'</div>'; title=(o.kind==='return'?'↩ Возврат':(o.category||'—')); }
     var pend=o.pending?' <span class="pill" style="background:rgba(240,166,33,.15);color:var(--amber)">на согласовании</span>':'';
     var ret=o.returned?' <span class="pill" style="background:rgba(240,85,92,.15);color:var(--red)">возвращено</span>':'';
     var permo=((o.salary||o.kind==='close')&&o.per)?(' · за '+perName(o.per)):'';
@@ -902,7 +928,7 @@
     }).join('');
       Array.prototype.forEach.call(rb.querySelectorAll('[data-req]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-req'));};}); }
     $('r-balances').innerHTML=PROJECTS.map(function(p){
-      var sub=(p==='BORZO')?'<div style="font-size:10px;color:var(--mut);margin-top:4px">касса '+money(balance('BORZO')-potSnab)+' · снабжение '+money(potSnab)+'</div>':'';
+      var sub=(p==='BORZO')?'<div style="font-size:10px;color:var(--mut);margin-top:4px">🧑‍💼 Ульяна '+money(safeBal('ulyana'))+' · 👤 я '+money(safeBal('ruslan'))+' · 📦 снаб '+money(potSnab)+'</div>':'';
       return '<div class="bal"><div class="l">'+p+'</div><div class="v">'+money(balance(p))+'</div>'+sub+'</div>';
     }).join('');
     wireSearch('s-work',$('r-work-list'),opsSorted().filter(function(o){return PROJECTS.indexOf(o.project)>=0&&!o.family&&!o.supplyExpense;}),'Операций пока нет.');
@@ -913,7 +939,10 @@
     $('p-balance').textContent=money(balance('zpRuslan'));
     wireSearch('s-pers',$('r-pers-list'),opsSorted().filter(function(o){return (o.kind==='out'&&o.acc==='zpRuslan')||(o.kind==='in'&&o.acc==='zpRuslan')||(o.kind==='transfer'&&o.to==='zpRuslan')||o.family;}),'Личных операций пока нет.');
 
-    $('u-borzo-bal').innerHTML='<div class="bal"><div class="l">Касса BORZO</div><div class="v">'+money(balance('BORZO'))+'</div><div style="font-size:10px;color:var(--mut);margin-top:4px">касса '+money(balance('BORZO')-potSnab)+' · снабжение '+money(potSnab)+'</div></div>';
+    $('u-borzo-bal').innerHTML='<div class="bal" style="flex-basis:100%"><div class="l">Общий котёл BORZO</div><div class="v">'+money(balance('BORZO'))+'</div></div>'+
+      '<div class="bal" style="border-color:rgba(167,139,250,.4)"><div class="l">🧑‍💼 Мой отдел</div><div class="v" style="color:var(--violet)">'+money(safeBal('ulyana'))+'</div></div>'+
+      '<div class="bal" style="border-color:rgba(59,130,246,.4)"><div class="l">👤 Отдел Руслана</div><div class="v" style="color:var(--blue)">'+money(safeBal('ruslan'))+'</div></div>'+
+      '<div class="bal" style="border-color:rgba(240,166,33,.4)"><div class="l">📦 Снабжение</div><div class="v" style="color:var(--amber)">'+money(potSnab)+'</div></div>';
     drawUBorzo();
 
     $('uzp-balance').textContent=money(balance('zpUlyana'));
@@ -954,7 +983,8 @@
     'usalary':function(){formSalaryHub({who:'ulyana',fixedProj:'BORZO'});},
     'ucredits':function(){formCredits({who:'ulyana',fixedProj:'BORZO'});},
     'uperslust':formUPers,
-    'ufamily':formUFamily
+    'ufamily':formUFamily,
+    'usafemove':formSafeMove
   };
   Array.prototype.forEach.call(document.querySelectorAll('[data-act]'),function(b){b.onclick=function(){var f=ACT[b.getAttribute('data-act')];if(f)f();};});
 
