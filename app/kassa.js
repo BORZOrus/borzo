@@ -486,7 +486,7 @@
       '<div class="fld"><label>Кому счёт</label><div class="seg" id="bill-to">'+
         '<button data-to="ulyana" class="'+(buf.to==='ulyana'?'on gen':'')+'">Ульяне</button>'+
         '<button data-to="ruslan" class="'+(buf.to==='ruslan'?'on syr':'')+'">Руслану</button></div></div>'+
-      '<div style="margin-bottom:12px"><div style="flex:1 1 0;min-width:0">'+photoSlot('inv','📎 Накладная (по желанию)')+numRow('inv')+'</div></div>'+
+      '<div style="margin-bottom:12px"><div style="flex:1 1 0;min-width:0">'+photoSlot('inv','📎 Накладная')+numRow('inv')+'</div></div>'+
       '<div class="fld"><label>Дата документа (по желанию)</label><input type="date" id="docdate" value="'+esc(buf.docDate||'')+'" style="width:100%;box-sizing:border-box"></div>'+
       (buf.scanning?'<div class="scanning">🔎 Распознаю накладную…</div>':'')+
       '<div class="fld"><label>Что закупить</label><div id="items"></div>'+

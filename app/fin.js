@@ -991,12 +991,12 @@
         return '<div style="'+base+';border-style:solid;border-color:var(--green);color:var(--green)">'+wand+'✓ Накладная приложена'+prev+
           '<button type="button" id="bill-photo-x" style="position:absolute;top:6px;right:6px;background:var(--red);color:#fff;border:none;border-radius:8px;width:28px;height:28px;font-size:16px;cursor:pointer">×</button></div>';
       }
-      return '<label style="'+base+'">📎 Приложить накладную (по желанию — фото)<input type="file" accept="image/*,application/pdf" id="bill-photo" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label>';
+      return '<label style="'+base+'">📎 Приложить накладную<input type="file" accept="image/*,application/pdf" id="bill-photo" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label>';
     }
     function draw(){
       open('<h3>🧾 Выставить счёт Ульяне</h3>'+
         '<div style="font-size:12px;color:var(--mut);margin-bottom:12px">Ульяне придёт счёт. Она оплатит физически и нажмёт «Оплатил» — закуп сам ляжет в снабжение и на склад, деньги спишутся с её отдела котла. Накладную приложить по желанию (счёт часто без неё).</div>'+
-        '<div class="fld"><label>Накладная (по желанию)</label>'+photoHtml()+'</div>'+
+        '<div class="fld"><label>Накладная</label>'+photoHtml()+'</div>'+
         (st.scanning?'<div style="text-align:center;color:#7fb0ff;font-size:13px;padding:8px;background:rgba(59,130,246,.1);border-radius:10px;margin-bottom:10px">🔎 Распознаю накладную…</div>':'')+
         '<div class="fld"><label>Что закупить · кол-во · цена/шт</label><div id="bill-items">'+iHtml()+'</div><button class="btn btn-ghost" id="bill-add" style="margin-top:2px;font-size:13px;padding:9px">+ позиция</button></div>'+
         '<div class="fld"><label>Направление</label><div class="chips" id="bill-cat"><button data-c="Сырьё" class="'+(st.cat==='Сырьё'?'on':'')+'">Сырьё</button><button data-c="Операционка" class="'+(st.cat==='Операционка'?'on':'')+'">Операционка</button></div></div>'+
