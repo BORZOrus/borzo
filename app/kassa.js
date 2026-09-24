@@ -481,11 +481,14 @@
   }
   function billHtml(){
     var sy=buf.category==='Сырьё';
+    var isSup=(viewRole==='sup');   // снабженец выставляет Ульяне или Руслану; Руслан (управленец) — только Ульяне (себе счёт не нужен, он закупается сам)
     return '<h3>🧾 Выставить счёт на закуп</h3>'+
-      '<div class="muted fz12" style="margin-bottom:12px">Счёт уйдёт выбранному. Он оплатит физически и нажмёт «Оплатил» — тогда закуп сам ляжет в снабжение и на склад, деньги спишутся с его отдела котла. Через кассу деньги гонять не нужно. Накладную приложить по желанию.</div>'+
-      '<div class="fld"><label>Кому счёт</label><div class="seg" id="bill-to">'+
-        '<button data-to="ulyana" class="'+(buf.to==='ulyana'?'on gen':'')+'">Ульяне</button>'+
-        '<button data-to="ruslan" class="'+(buf.to==='ruslan'?'on syr':'')+'">Руслану</button></div></div>'+
+      '<div class="muted fz12" style="margin-bottom:12px">Счёт уйдёт '+(isSup?'выбранному':'Ульяне')+'. '+(isSup?'Он':'Она')+' оплатит физически и нажмёт «Оплатил» — тогда закуп сам ляжет в снабжение и на склад, деньги спишутся с '+(isSup?'его':'её')+' отдела котла. Через кассу деньги гонять не нужно. Накладную приложить по желанию.</div>'+
+      (isSup
+        ? '<div class="fld"><label>Кому счёт</label><div class="seg" id="bill-to">'+
+            '<button data-to="ulyana" class="'+(buf.to==='ulyana'?'on gen':'')+'">Ульяне</button>'+
+            '<button data-to="ruslan" class="'+(buf.to==='ruslan'?'on syr':'')+'">Руслану</button></div></div>'
+        : '')+
       '<div style="margin-bottom:12px"><div style="flex:1 1 0;min-width:0">'+photoSlot('inv','📎 Накладная')+numRow('inv')+'</div></div>'+
       '<div class="fld"><label>Дата документа (по желанию)</label><input type="date" id="docdate" value="'+esc(buf.docDate||'')+'" style="width:100%;box-sizing:border-box"></div>'+
       (buf.scanning?'<div class="scanning">🔎 Распознаю накладную…</div>':'')+
@@ -516,7 +519,7 @@
     Array.prototype.forEach.call(sheetBody.querySelectorAll('.ph-x'),function(b){ b.onclick=function(){ buf.invoice=null; refreshBill(); }; });
     if($('docdate')) $('docdate').onchange=function(){ buf.docDate=$('docdate').value; };
     $('additem').onclick=function(){ buf.items.push({name:'',qty:'',unit:'шт'}); renderItems(); };
-    Array.prototype.forEach.call($('bill-to').querySelectorAll('button'),function(b){ b.onclick=function(){
+    if($('bill-to')) Array.prototype.forEach.call($('bill-to').querySelectorAll('button'),function(b){ b.onclick=function(){
       buf.to=b.getAttribute('data-to');
       Array.prototype.forEach.call($('bill-to').querySelectorAll('button'),function(x){x.className='';});
       b.className='on '+(buf.to==='ulyana'?'gen':'syr');
