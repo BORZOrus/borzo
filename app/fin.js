@@ -959,37 +959,77 @@
     Array.prototype.forEach.call(box.querySelectorAll('[data-bcancel]'),function(b){ b.onclick=function(){
       if(!confirm('Отменить этот счёт?'))return; window.API.billCancel(b.getAttribute('data-bcancel')).then(loadBillsF).catch(function(e){ alert((e&&e.message)||'Ошибка'); }); }; });
   }
-  // Руслан выставляет счёт Ульяне (снабженец делает это в кассе)
+  // фото/скан накладной → сжатый dataURL (PDF/файл — как есть)
+  function readPhotoF(file, cb){
+    var r=new FileReader();
+    r.onload=function(e){
+      if(file.type && file.type.indexOf('image/')!==0){ cb(e.target.result); return; }
+      var img=new Image();
+      img.onload=function(){ var W=760, sc=Math.min(1,W/img.width), w=img.width*sc, h=img.height*sc; var c=document.createElement('canvas'); c.width=w;c.height=h; c.getContext('2d').drawImage(img,0,0,w,h); try{ cb(c.toDataURL('image/jpeg',0.7)); }catch(err){ cb(e.target.result); } };
+      img.onerror=function(){ cb(e.target.result); };
+      img.src=e.target.result;
+    };
+    r.readAsDataURL(file);
+  }
+  function isPdfF(d){ return typeof d==='string' && (d.indexOf('data:application/pdf')===0 || /\.pdf$/i.test(d)); }
+  // Руслан выставляет счёт Ульяне (снабженец делает это в кассе). Накладная — по желанию (счёт часто без неё), только фото, с 🪄.
   function formBillNew(){
-    var items=[{name:'',qty:'1',price:''}], cat='Сырьё';
-    function iHtml(){ return items.map(function(it,i){
+    var st={items:[{name:'',qty:'1',price:''}], cat:'Сырьё', note:'', invoice:null, invNo:'', docDate:'', scanning:false};
+    function total(){ return st.items.reduce(function(s,i){ var q=parseFloat(String(i.qty).replace(',','.'))||0, p=parseFloat(String(i.price).replace(',','.'))||0; return s+Math.round(q*p); },0); }
+    function iHtml(){ return st.items.map(function(it,i){
       return '<div style="display:flex;gap:6px;margin-bottom:6px"><input data-bi="'+i+'" data-bf="name" placeholder="что" value="'+esc(it.name)+'" style="flex:2;min-width:0;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--ink);font-family:inherit">'+
         '<input data-bi="'+i+'" data-bf="qty" inputmode="decimal" placeholder="кол" value="'+esc(it.qty)+'" style="flex:0 0 48px;padding:10px;text-align:center;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--ink);font-family:inherit">'+
         '<input data-bi="'+i+'" data-bf="price" inputmode="decimal" placeholder="цена" value="'+esc(it.price)+'" style="flex:1;min-width:0;padding:10px;text-align:center;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--ink);font-family:inherit">'+
-        (items.length>1?'<button data-bdel="'+i+'" style="flex:0 0 34px;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:9px;cursor:pointer">✕</button>':'')+'</div>';
+        (st.items.length>1?'<button data-bdel="'+i+'" style="flex:0 0 34px;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:9px;cursor:pointer">✕</button>':'')+'</div>';
     }).join(''); }
-    function total(){ return items.reduce(function(s,i){ var q=parseFloat(String(i.qty).replace(',','.'))||0, p=parseFloat(String(i.price).replace(',','.'))||0; return s+Math.round(q*p); },0); }
-    open('<h3>🧾 Выставить счёт Ульяне</h3>'+
-      '<div style="font-size:12px;color:var(--mut);margin-bottom:12px">Ульяне придёт счёт. Она оплатит физически и нажмёт «Оплатил» — закуп сам ляжет в снабжение и на склад, деньги спишутся с её отдела котла. Гонять деньги через снабженца не нужно.</div>'+
-      '<div class="fld"><label>Что закупить · кол-во · цена/шт</label><div id="bill-items">'+iHtml()+'</div><button class="btn btn-ghost" id="bill-add" style="margin-top:2px;font-size:13px;padding:9px">+ позиция</button></div>'+
-      '<div class="fld"><label>Направление</label><div class="chips" id="bill-cat"><button data-c="Сырьё" class="on">Сырьё</button><button data-c="Операционка">Операционка</button></div></div>'+
-      '<div class="fld"><label>Комментарий (необязательно)</label><input id="bill-note" placeholder="напр. МДФ на заказ, направляющие"></div>'+
-      '<div id="bill-tot" style="text-align:center;font-weight:800;font-size:18px;margin:6px 0 10px"></div>'+
-      acts('Отправить счёт Ульяне'));
-    function upTot(){ $('bill-tot').textContent='Итого: '+money(total()); }
-    function wireItems(){
-      Array.prototype.forEach.call(document.querySelectorAll('[data-bi]'),function(inp){ inp.oninput=function(){ items[+inp.getAttribute('data-bi')][inp.getAttribute('data-bf')]=inp.value; upTot(); }; });
-      Array.prototype.forEach.call(document.querySelectorAll('[data-bdel]'),function(b){ b.onclick=function(){ items.splice(+b.getAttribute('data-bdel'),1); redraw(); }; });
+    // слот накладной: пусто → выбор фото/файла; приложено → превью + 🪄 распознать + ✕ убрать
+    function photoHtml(){
+      var base='border:1.5px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:var(--mut);font-size:13px;cursor:pointer;position:relative;display:block';
+      if(st.invoice){
+        var prev = isPdfF(st.invoice)?'<div style="margin-top:6px;font-size:12px">📄 документ</div>':'<img src="'+st.invoice+'" style="max-height:56px;border-radius:8px;margin-top:8px;display:block;margin-left:auto;margin-right:auto">';
+        var wand = !isPdfF(st.invoice) ? '<button type="button" id="bill-scan" title="Распознать позиции, № и дату" style="position:absolute;top:6px;left:6px;background:var(--blue);color:#fff;border:none;border-radius:8px;width:28px;height:28px;font-size:14px;cursor:pointer">🪄</button>' : '';
+        return '<div style="'+base+';border-style:solid;border-color:var(--green);color:var(--green)">'+wand+'✓ Накладная приложена'+prev+
+          '<button type="button" id="bill-photo-x" style="position:absolute;top:6px;right:6px;background:var(--red);color:#fff;border:none;border-radius:8px;width:28px;height:28px;font-size:16px;cursor:pointer">×</button></div>';
+      }
+      return '<label style="'+base+'">📎 Приложить накладную (по желанию — фото)<input type="file" accept="image/*,application/pdf" id="bill-photo" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label>';
     }
-    function redraw(){ $('bill-items').innerHTML=iHtml(); wireItems(); upTot(); }
-    wireItems(); upTot();
-    $('bill-add').onclick=function(){ items.push({name:'',qty:'1',price:''}); redraw(); };
-    Array.prototype.forEach.call(document.querySelectorAll('#bill-cat button'),function(b){ b.onclick=function(){ Array.prototype.forEach.call(document.querySelectorAll('#bill-cat button'),function(x){x.className='';}); b.className='on'; cat=b.getAttribute('data-c'); }; });
-    wireActs(function(){
-      var clean=items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:'шт',price:i.price||'',cat:cat};});
-      var amt=total(); if(!clean.length||amt<=0){ alert('Заполни позиции с ценой'); return; }
-      window.API.billCreate({to:'ulyana',amount:amt,category:cat,items:clean,note:($('bill-note').value||'')}).then(function(){ close(); alert('Счёт отправлен Ульяне.'); loadBillsF(); }).catch(function(e){ alert((e&&e.message)||'Ошибка'); });
-    });
+    function draw(){
+      open('<h3>🧾 Выставить счёт Ульяне</h3>'+
+        '<div style="font-size:12px;color:var(--mut);margin-bottom:12px">Ульяне придёт счёт. Она оплатит физически и нажмёт «Оплатил» — закуп сам ляжет в снабжение и на склад, деньги спишутся с её отдела котла. Накладную приложить по желанию (счёт часто без неё).</div>'+
+        '<div class="fld"><label>Накладная (по желанию)</label>'+photoHtml()+'</div>'+
+        (st.scanning?'<div style="text-align:center;color:#7fb0ff;font-size:13px;padding:8px;background:rgba(59,130,246,.1);border-radius:10px;margin-bottom:10px">🔎 Распознаю накладную…</div>':'')+
+        '<div class="fld"><label>Что закупить · кол-во · цена/шт</label><div id="bill-items">'+iHtml()+'</div><button class="btn btn-ghost" id="bill-add" style="margin-top:2px;font-size:13px;padding:9px">+ позиция</button></div>'+
+        '<div class="fld"><label>Направление</label><div class="chips" id="bill-cat"><button data-c="Сырьё" class="'+(st.cat==='Сырьё'?'on':'')+'">Сырьё</button><button data-c="Операционка" class="'+(st.cat==='Операционка'?'on':'')+'">Операционка</button></div></div>'+
+        '<div class="fld"><label>Комментарий (необязательно)</label><input id="bill-note" value="'+esc(st.note)+'" placeholder="напр. МДФ на заказ, направляющие"></div>'+
+        '<div id="bill-tot" style="text-align:center;font-weight:800;font-size:18px;margin:6px 0 10px">Итого: '+money(total())+'</div>'+
+        acts('Отправить счёт Ульяне'));
+      // позиции
+      Array.prototype.forEach.call(document.querySelectorAll('[data-bi]'),function(inp){ inp.oninput=function(){ st.items[+inp.getAttribute('data-bi')][inp.getAttribute('data-bf')]=inp.value; $('bill-tot').textContent='Итого: '+money(total()); }; });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-bdel]'),function(b){ b.onclick=function(){ st.items.splice(+b.getAttribute('data-bdel'),1); draw(); }; });
+      $('bill-add').onclick=function(){ st.items.push({name:'',qty:'1',price:''}); draw(); };
+      // накладная
+      if($('bill-photo')) $('bill-photo').onchange=function(e){ if(e.target.files[0]) readPhotoF(e.target.files[0],function(d){ st.invoice=d; draw(); }); };
+      if($('bill-photo-x')) $('bill-photo-x').onclick=function(){ st.invoice=null; draw(); };
+      if($('bill-scan')) $('bill-scan').onclick=function(){
+        if(!st.invoice) return; st.scanning=true; draw();
+        window.API.scan(st.invoice).then(function(res){ st.scanning=false;
+          if(res.items && res.items.length) st.items=res.items.map(function(i){return {name:i.name,qty:i.qty||'',price:i.price||''};});
+          if(res.number) st.invNo=res.number;
+          if(res.date) st.docDate=res.date;
+          if(!(res.items&&res.items.length)&&!res.number) alert('Ничего не распозналось — впиши вручную.');
+          draw();
+        }).catch(function(){ st.scanning=false; draw(); alert('Распознавание не сработало — впиши вручную.'); });
+      };
+      // категория / комментарий
+      Array.prototype.forEach.call(document.querySelectorAll('#bill-cat button'),function(b){ b.onclick=function(){ Array.prototype.forEach.call(document.querySelectorAll('#bill-cat button'),function(x){x.className='';}); b.className='on'; st.cat=b.getAttribute('data-c'); }; });
+      if($('bill-note')) $('bill-note').oninput=function(){ st.note=this.value; };
+      wireActs(function(){
+        var clean=st.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:'шт',price:i.price||'',cat:st.cat};});
+        var amt=total(); if(!clean.length||amt<=0){ alert('Заполни позиции с ценой'); return; }
+        window.API.billCreate({to:'ulyana',amount:amt,category:st.cat,items:clean,note:st.note,invoice:st.invoice,invNo:st.invNo,docDate:st.docDate}).then(function(){ close(); alert('Счёт отправлен Ульяне.'); loadBillsF(); }).catch(function(e){ alert((e&&e.message)||'Ошибка'); });
+      });
+    }
+    draw();
   }
 
   // ---------- рендер панелей ----------
