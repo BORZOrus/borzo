@@ -921,6 +921,77 @@
       b.onclick=function(){ uFeed=b.getAttribute('data-uf'); drawUBorzo(); };
     });
   }
+  // ---------- счета на закуп (стык с кассой снабжения) ----------
+  var billsCacheF=[];
+  function loadBillsF(){ if(!(window.API&&window.API.token&&window.API.bills))return; window.API.bills().then(function(d){ billsCacheF=d.bills||[]; drawBillsF(); }).catch(function(){}); }
+  // после оплаты счёта серверная supplyExpense появляется в котле — подтягиваем свежий fin_state, чтобы отдел/котёл сразу пересчитались
+  function pullFin(){ if(!CLOUD)return; window.API.finGet().then(function(res){ var sd=res&&res.data; if(sd&&Array.isArray(sd.ops)){ curRev=(res&&res.rev!=null)?res.rev:curRev; DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); render(); } }).catch(function(){}); }
+  function billStatusPillF(b){ return b.status==='paid'?'<span class="pill" style="background:rgba(40,192,122,.15);color:var(--green)">оплачен</span>':(b.status==='cancelled'?'<span class="pill" style="background:rgba(240,85,92,.15);color:var(--red)">отменён</span>':'<span class="pill" style="background:rgba(240,166,33,.15);color:var(--amber)">ждёт оплаты</span>'); }
+  function billItemsStr(b){ return (b.items||[]).map(function(i){return i.name+' ×'+i.qty;}).join(', '); }
+  function drawBillsF(){
+    var me=role(), box=$(me==='ulyana'?'u-bills':'r-bills'); if(!box) return;
+    var toMe=billsCacheF.filter(function(b){ return b.to_whom===me && b.status==='wait'; });
+    var h='';
+    if(toMe.length){
+      h+='<div class="h1" style="color:var(--amber)">🧾 Счёт на оплату ('+toMe.length+')</div>';
+      h+=toMe.map(function(b){ var who=b.by_role==='sup'?'снабженец':'Руслан';
+        return '<div class="card" style="border-color:rgba(240,166,33,.5);background:rgba(240,166,33,.06);margin-bottom:10px;padding:12px 14px">'+
+          '<div style="font-weight:700">🧾 '+money(b.amount)+' · '+esc(billItemsStr(b)||b.category)+'</div>'+
+          '<div class="sub-t" style="margin:3px 0 2px">от: '+who+' · '+fdate(b.ts)+' · '+esc(b.category)+(b.note?' · '+esc(b.note):'')+'</div>'+
+          (b.invoice?'<a href="'+esc(b.invoice)+'" target="_blank" style="color:var(--blue);font-size:12px">📎 накладная</a>':'')+
+          '<button class="btn" data-bpay="'+b.id+'" style="background:var(--green);color:#04140b;margin-top:10px">✓ Оплатил — провести закуп</button>'+
+          '<button class="btn btn-ghost" data-bcancel="'+b.id+'" style="margin-top:8px;font-size:13px">Отклонить счёт</button>'+
+        '</div>';
+      }).join('');
+    }
+    if(me==='ruslan'){
+      var lim=Date.now()-30*86400000;
+      var mine=billsCacheF.filter(function(b){ return b.by_role==='mgr' && b.to_whom!=='ruslan' && (b.status==='wait'||b.ts>lim); });
+      if(mine.length){ h+='<div class="h1" style="margin-top:'+(toMe.length?'12px':'2px')+'">🧾 Мои выставленные счета</div>'+mine.map(function(b){
+        return '<div class="card" style="margin-bottom:8px;padding:10px 14px"><div class="anrow" style="border:none;padding:0"><span>'+esc(billItemsStr(b)||b.category)+' · Ульяне</span><b>'+money(b.amount)+' '+billStatusPillF(b)+'</b></div>'+
+          (b.status==='wait'?'<button class="btn btn-ghost" data-bcancel="'+b.id+'" style="margin-top:8px;font-size:13px">Отменить</button>':'')+'</div>';
+      }).join(''); }
+    }
+    box.innerHTML=h;
+    Array.prototype.forEach.call(box.querySelectorAll('[data-bpay]'),function(b){ b.onclick=function(){
+      if(!confirm('Подтвердить оплату? Закуп ляжет в снабжение и на склад, сумма спишется с твоего отдела котла.'))return;
+      b.disabled=true; window.API.billPay(b.getAttribute('data-bpay')).then(function(){ loadPot(); pullFin(); loadBillsF(); alert('Оплата проведена. Закуп в снабжении, склад пополнен.'); }).catch(function(e){ b.disabled=false; alert((e&&e.message)||'Ошибка'); }); }; });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-bcancel]'),function(b){ b.onclick=function(){
+      if(!confirm('Отменить этот счёт?'))return; window.API.billCancel(b.getAttribute('data-bcancel')).then(loadBillsF).catch(function(e){ alert((e&&e.message)||'Ошибка'); }); }; });
+  }
+  // Руслан выставляет счёт Ульяне (снабженец делает это в кассе)
+  function formBillNew(){
+    var items=[{name:'',qty:'1',price:''}], cat='Сырьё';
+    function iHtml(){ return items.map(function(it,i){
+      return '<div style="display:flex;gap:6px;margin-bottom:6px"><input data-bi="'+i+'" data-bf="name" placeholder="что" value="'+esc(it.name)+'" style="flex:2;min-width:0;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--ink);font-family:inherit">'+
+        '<input data-bi="'+i+'" data-bf="qty" inputmode="decimal" placeholder="кол" value="'+esc(it.qty)+'" style="flex:0 0 48px;padding:10px;text-align:center;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--ink);font-family:inherit">'+
+        '<input data-bi="'+i+'" data-bf="price" inputmode="decimal" placeholder="цена" value="'+esc(it.price)+'" style="flex:1;min-width:0;padding:10px;text-align:center;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--ink);font-family:inherit">'+
+        (items.length>1?'<button data-bdel="'+i+'" style="flex:0 0 34px;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:9px;cursor:pointer">✕</button>':'')+'</div>';
+    }).join(''); }
+    function total(){ return items.reduce(function(s,i){ var q=parseFloat(String(i.qty).replace(',','.'))||0, p=parseFloat(String(i.price).replace(',','.'))||0; return s+Math.round(q*p); },0); }
+    open('<h3>🧾 Выставить счёт Ульяне</h3>'+
+      '<div style="font-size:12px;color:var(--mut);margin-bottom:12px">Ульяне придёт счёт. Она оплатит физически и нажмёт «Оплатил» — закуп сам ляжет в снабжение и на склад, деньги спишутся с её отдела котла. Гонять деньги через снабженца не нужно.</div>'+
+      '<div class="fld"><label>Что закупить · кол-во · цена/шт</label><div id="bill-items">'+iHtml()+'</div><button class="btn btn-ghost" id="bill-add" style="margin-top:2px;font-size:13px;padding:9px">+ позиция</button></div>'+
+      '<div class="fld"><label>Направление</label><div class="chips" id="bill-cat"><button data-c="Сырьё" class="on">Сырьё</button><button data-c="Операционка">Операционка</button></div></div>'+
+      '<div class="fld"><label>Комментарий (необязательно)</label><input id="bill-note" placeholder="напр. МДФ на заказ, направляющие"></div>'+
+      '<div id="bill-tot" style="text-align:center;font-weight:800;font-size:18px;margin:6px 0 10px"></div>'+
+      acts('Отправить счёт Ульяне'));
+    function upTot(){ $('bill-tot').textContent='Итого: '+money(total()); }
+    function wireItems(){
+      Array.prototype.forEach.call(document.querySelectorAll('[data-bi]'),function(inp){ inp.oninput=function(){ items[+inp.getAttribute('data-bi')][inp.getAttribute('data-bf')]=inp.value; upTot(); }; });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-bdel]'),function(b){ b.onclick=function(){ items.splice(+b.getAttribute('data-bdel'),1); redraw(); }; });
+    }
+    function redraw(){ $('bill-items').innerHTML=iHtml(); wireItems(); upTot(); }
+    wireItems(); upTot();
+    $('bill-add').onclick=function(){ items.push({name:'',qty:'1',price:''}); redraw(); };
+    Array.prototype.forEach.call(document.querySelectorAll('#bill-cat button'),function(b){ b.onclick=function(){ Array.prototype.forEach.call(document.querySelectorAll('#bill-cat button'),function(x){x.className='';}); b.className='on'; cat=b.getAttribute('data-c'); }; });
+    wireActs(function(){
+      var clean=items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:'шт',price:i.price||'',cat:cat};});
+      var amt=total(); if(!clean.length||amt<=0){ alert('Заполни позиции с ценой'); return; }
+      window.API.billCreate({to:'ulyana',amount:amt,category:cat,items:clean,note:($('bill-note').value||'')}).then(function(){ close(); alert('Счёт отправлен Ульяне.'); loadBillsF(); }).catch(function(e){ alert((e&&e.message)||'Ошибка'); });
+    });
+  }
+
   // ---------- рендер панелей ----------
   function render(){
     // запросы Ульяны на согласование (видит Руслан)
@@ -968,7 +1039,7 @@
 
   var _role='ruslan';
   function role(r){ if(r){_role=r;} return _role; }
-  function setRole(r){ _role=r; var ru=r==='ruslan'; $('view-ruslan').style.display=ru?'':'none'; $('view-ulyana').style.display=ru?'none':''; $('role-ruslan').className=ru?'on':''; $('role-ulyana').className=ru?'':'on'; render(); }
+  function setRole(r){ _role=r; var ru=r==='ruslan'; $('view-ruslan').style.display=ru?'':'none'; $('view-ulyana').style.display=ru?'none':''; $('role-ruslan').className=ru?'on':''; $('role-ulyana').className=ru?'':'on'; render(); loadBillsF(); }
   $('role-ruslan').onclick=function(){setRole('ruslan');};
   $('role-ulyana').onclick=function(){setRole('ulyana');};
 
@@ -978,6 +1049,7 @@
     'transfer':formTransfer,
     'salary':function(){formSalaryHub({who:'ruslan',projects:PROJECTS});},
     'credits':function(){formCredits({who:'ruslan',projects:PROJECTS});},
+    'billnew':formBillNew,
     'topzp':formTopZp,
     'perslust':formPersR,
     'perincome':function(){formPersIncome({who:'ruslan',acc:'zpRuslan',project:'Личное'});},
@@ -1071,6 +1143,8 @@
     };
     setRole(owner?'ruslan':'ulyana');
     loadPot();
+    loadBillsF();
+    setInterval(function(){ if(!sheet.classList.contains('on')) loadBillsF(); }, 20000);   // счета прилетают сами
     window.API.finGet().then(function(res){
       var sd=res&&res.data;
       var sc=(sd&&Array.isArray(sd.ops))?sd.ops.length:0;

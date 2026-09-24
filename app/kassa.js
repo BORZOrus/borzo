@@ -124,6 +124,7 @@
     if($('sup-q')) $('sup-q').oninput=function(){ supQ=this.value.trim(); drawSupOut(); };
     bindOpRows($('sup-in'));
     renderSupAnal(outs); if($('sup-sklad').style.display!=='none') renderSupSklad();
+    renderBills();
   }
   // мелкая аналитика снабжения: сумма закупок за месяц по направлениям
   function renderSupAnal(outs){
@@ -471,6 +472,107 @@
   }
   function refreshBuy(){ sheetBody.innerHTML=buyHtml(); wireBuy(); }
 
+  // ===== ВЫСТАВИТЬ СЧЁТ НА ЗАКУП (без гоняния денег снабженцу) =====
+  var billsCache=[];
+  function openBill(defTo){
+    editingId=null;
+    buf={to:defTo||'ulyana',invoice:null,receipt:null,items:[{name:'',qty:'',unit:'шт'}],category:'Сырьё',amount:'',invNo:'',recNo:'',docDate:'',note:''};
+    openSheet(billHtml()); wireBill();
+  }
+  function billHtml(){
+    var sy=buf.category==='Сырьё';
+    return '<h3>🧾 Выставить счёт на закуп</h3>'+
+      '<div class="muted fz12" style="margin-bottom:12px">Счёт уйдёт выбранному. Он оплатит физически и нажмёт «Оплатил» — тогда закуп сам ляжет в снабжение и на склад, деньги спишутся с его отдела котла. Через кассу деньги гонять не нужно. Накладную приложить по желанию.</div>'+
+      '<div class="fld"><label>Кому счёт</label><div class="seg" id="bill-to">'+
+        '<button data-to="ulyana" class="'+(buf.to==='ulyana'?'on gen':'')+'">Ульяне</button>'+
+        '<button data-to="ruslan" class="'+(buf.to==='ruslan'?'on syr':'')+'">Руслану</button></div></div>'+
+      '<div style="margin-bottom:12px"><div style="flex:1 1 0;min-width:0">'+photoSlot('inv','📎 Накладная (по желанию)')+numRow('inv')+'</div></div>'+
+      '<div class="fld"><label>Дата документа (по желанию)</label><input type="date" id="docdate" value="'+esc(buf.docDate||'')+'" style="width:100%;box-sizing:border-box"></div>'+
+      (buf.scanning?'<div class="scanning">🔎 Распознаю накладную…</div>':'')+
+      '<div class="fld"><label>Что закупить</label><div id="items"></div>'+
+        '<button class="btn-ghost" id="additem" style="border:1px dashed var(--k-line);border-radius:10px">+ Добавить позицию</button></div>'+
+      '<div class="fld"><label>Направление расхода</label><div class="seg" id="cat">'+
+        '<button data-c="Сырьё" class="'+(sy?'on syr':'')+'">Сырьё</button><button data-c="Операционка" class="'+(sy?'':'on gen')+'">Операционка</button></div></div>'+
+      '<div class="fld"><label>Сумма счёта, ₸ · считается из позиций</label><input type="number" inputmode="numeric" id="amt" placeholder="0" value="'+(buf.amount||'')+'"></div>'+
+      '<div class="fld"><label>Комментарий (по желанию)</label><input id="bill-note" value="'+esc(buf.note||'')+'" placeholder="напр. МДФ на заказ, направляющие"></div>'+
+      '<button class="btn btn-buy" id="do-bill">Отправить счёт</button>'+
+      '<button class="btn btn-ghost" id="cancel" style="margin-top:8px">Отмена</button>';
+  }
+  function refreshBill(){ sheetBody.innerHTML=billHtml(); wireBill(); }
+  function wireBill(){
+    renderItems();
+    if($('ph-inv')) $('ph-inv').onchange=function(e){ if(e.target.files[0]) readPhoto(e.target.files[0],function(d){ buf.invoice=d; refreshBill(); }); };
+    Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-scan]'),function(b){ b.onclick=function(){
+      var img=buf.invoice; if(!img) return; buf.scanning=true; refreshBill();
+      API.scan(img).then(function(res){ buf.scanning=false;
+        if(res.items && res.items.length) buf.items=res.items.map(function(i){return {name:i.name,qty:i.qty,unit:i.unit||'шт',price:i.price};});
+        if(res.number) buf.invNo=res.number;
+        if(res.date) buf.docDate=res.date;
+        if(!(res.items&&res.items.length)&&!res.number) alert('Ничего не распозналось — впиши вручную.');
+        refreshBill();
+      }).catch(function(){ buf.scanning=false; refreshBill(); alert('Распознавание не сработало — впиши вручную.'); });
+    }; });
+    Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-num]'),function(inp){ inp.oninput=function(){ if(inp.getAttribute('data-num')==='inv')buf.invNo=inp.value; }; });
+    Array.prototype.forEach.call(sheetBody.querySelectorAll('.ph-x'),function(b){ b.onclick=function(){ buf.invoice=null; refreshBill(); }; });
+    if($('docdate')) $('docdate').onchange=function(){ buf.docDate=$('docdate').value; };
+    $('additem').onclick=function(){ buf.items.push({name:'',qty:'',unit:'шт'}); renderItems(); };
+    Array.prototype.forEach.call($('bill-to').querySelectorAll('button'),function(b){ b.onclick=function(){
+      buf.to=b.getAttribute('data-to');
+      Array.prototype.forEach.call($('bill-to').querySelectorAll('button'),function(x){x.className='';});
+      b.className='on '+(buf.to==='ulyana'?'gen':'syr');
+    }; });
+    Array.prototype.forEach.call($('cat').querySelectorAll('button'),function(b){ b.onclick=function(){
+      buf.category=b.getAttribute('data-c'); buf.items.forEach(function(it){ it.cat=buf.category; });
+      Array.prototype.forEach.call($('cat').querySelectorAll('button'),function(x){x.className='';});
+      b.className='on '+(buf.category==='Сырьё'?'syr':'gen'); renderItems();
+    }; });
+    $('amt').oninput=function(){ buf.amount=$('amt').value; };
+    if($('bill-note')) $('bill-note').oninput=function(){ buf.note=this.value; };
+    $('cancel').onclick=closeSheet;
+    $('do-bill').onclick=doBill;
+  }
+  function doBill(){
+    if($('docdate')) buf.docDate=$('docdate').value;
+    if($('bill-note')) buf.note=$('bill-note').value;
+    var items=buf.items.filter(function(i){return (i.name||'').trim();}).map(function(i){return {name:i.name.trim(),qty:i.qty||'',unit:i.unit||'шт',price:i.price||'',sum:rowSum(i),cat:i.cat||buf.category};});
+    var amt=parseInt($('amt').value)||items.reduce(function(a,i){return a+rowSum(i);},0);
+    if(amt<=0){ alert('Укажи сумму или позиции'); return; }
+    if(!items.length && !confirm('Позиции не заполнены — на склад ничего не встанет, счёт спишется только суммой. Продолжить?')) return;
+    $('do-bill').disabled=true;
+    API.billCreate({to:buf.to,amount:amt,category:buf.category,items:items,invoice:buf.invoice,invNo:buf.invNo||'',docDate:buf.docDate||'',note:buf.note||''})
+      .then(function(){ closeSheet(); alert('Счёт отправлен '+(buf.to==='ulyana'?'Ульяне':'Руслану')+'. Когда оплатит — закуп сам ляжет в снабжение.'); return renderBills(); })
+      .catch(function(e){ if($('do-bill'))$('do-bill').disabled=false; fail(e); });
+  }
+  function billStatusPill(b){ return b.status==='paid'?'<span class="pill pill-doc">оплачен</span>':(b.status==='cancelled'?'<span class="pill pill-nodoc">отменён</span>':'<span class="pill pill-wait">ждёт оплаты</span>'); }
+  function billCard(b,canPay){
+    var toName=b.to_whom==='ulyana'?'Ульяне':'Руслану';
+    var title=(b.items&&b.items.length&&b.items[0].name)?esc(b.items[0].name)+(b.items.length>1?' +'+(b.items.length-1):''):'Счёт';
+    var h='<div class="card"><div class="row"><div class="grow"><div style="font-weight:700">🧾 '+title+' · '+money(b.amount)+'</div>'+
+      '<div class="muted fz12" style="margin-top:2px">кому: '+toName+' · '+stamp(b.ts)+' '+billStatusPill(b)+'</div>'+
+      (b.note?'<div class="fz12" style="margin-top:3px">'+esc(b.note)+'</div>':'')+'</div></div>';
+    if(canPay && b.status==='wait') h+='<button class="btn btn-ok" data-billpay="'+b.id+'" style="margin-top:10px">✓ Оплатил — провести закуп</button>';
+    if(b.status==='wait') h+='<button class="btn btn-ghost" data-billcancel="'+b.id+'" style="margin-top:8px;font-size:13px">Отменить счёт</button>';
+    return h+'</div>';
+  }
+  function renderBills(){ return API.bills().then(function(d){ billsCache=d.bills||[]; drawBills(); }).catch(function(){}); }
+  function drawBills(){
+    var R=viewRole||STATE.role, box=$(R==='sup'?'sup-bills':'mgr-bills'); if(!box) return;
+    // счета, адресованные Руслану и ещё не оплаченные — Руслан может оплатить прямо здесь
+    var toPay = (R==='mgr') ? billsCache.filter(function(b){return b.to_whom==='ruslan'&&b.status==='wait';}) : [];
+    // мои выставленные (ждут/оплачены за 30 дней), чтобы видеть статус
+    var lim=Date.now()-30*86400000;
+    var mine = billsCache.filter(function(b){ return b.created_by===(STATE.user&&STATE.user.id) && (b.status==='wait' || (+b.ts)>lim); });
+    var h='';
+    if(toPay.length) h+='<div class="h1" style="margin:6px 0 8px">🧾 Счета на оплату</div>'+toPay.map(function(b){return billCard(b,true);}).join('');
+    if(mine.length) h+='<div class="h1" style="margin:'+(toPay.length?'14px':'6px')+' 0 8px">🧾 Мои счета</div>'+mine.map(function(b){return billCard(b,false);}).join('');
+    box.innerHTML=h;
+    Array.prototype.forEach.call(box.querySelectorAll('[data-billpay]'),function(b){ b.onclick=function(){
+      if(!confirm('Подтвердить оплату? Закуп ляжет в снабжение и на склад, сумма спишется с твоего отдела котла.')) return;
+      b.disabled=true; API.billPay(b.getAttribute('data-billpay')).then(function(){ return renderBills(); }).then(refresh).catch(function(e){ b.disabled=false; fail(e); }); }; });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-billcancel]'),function(b){ b.onclick=function(){
+      if(!confirm('Отменить этот счёт?')) return; API.billCancel(b.getAttribute('data-billcancel')).then(function(){ return renderBills(); }).catch(fail); }; });
+  }
+
   function doBuy(){
     var amt=parseInt($('amt').value)||0;
     var isMgr=(viewRole!=='sup');   // правила по открытому кабинету: в режиме «как снабженец» — правила снабженца (лимит кассы, документ)
@@ -613,6 +715,7 @@
         }).join('')+'</tbody></table>' :
         '<div class="empty">Склад пуст. Позиции появятся после закупок снабженца.</div>';
     }).catch(function(){});
+    renderBills();
   }
   function openGive(){
     openSheet('<h3>💸 Выдать деньги снабженцу</h3>'+
@@ -632,6 +735,8 @@
   $('btn-buy').onclick=openBuy;
   var bbm=$('btn-buy-mgr'); if(bbm) bbm.onclick=openBuy;
   $('btn-give').onclick=openGive;
+  var bbl=$('btn-bill'); if(bbl) bbl.onclick=function(){ openBill('ulyana'); };
+  var bblm=$('btn-bill-mgr'); if(bblm) bblm.onclick=function(){ openBill('ulyana'); };
   function supTab(which){
     var map={'in':'sup-in','out':'sup-out','sklad':'sup-sklad'};
     ['in','out','sklad'].forEach(function(k){ var v=$(map[k]); if(v)v.style.display=(k===which?'':'none'); });

@@ -65,6 +65,25 @@ async function initSchema() {
       role TEXT,
       sub JSONB NOT NULL
     );
+    -- счета на закуп: снабженец/Руслан выставляет → Ульяна/Руслан жмёт «Оплатил» → закуп проводится напрямую (без гоняния денег снабженцу)
+    CREATE TABLE IF NOT EXISTS bills (
+      id TEXT PRIMARY KEY,
+      ts BIGINT NOT NULL,
+      created_by INTEGER,
+      created_role TEXT,
+      to_whom TEXT NOT NULL,
+      amount NUMERIC NOT NULL DEFAULT 0,
+      category TEXT,
+      items JSONB,
+      invoice TEXT,
+      inv_no TEXT DEFAULT '',
+      doc_date TEXT DEFAULT '',
+      note TEXT DEFAULT '',
+      status TEXT DEFAULT 'wait',
+      paid_by INTEGER,
+      paid_ts BIGINT,
+      kassa_tx_id TEXT
+    );
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS sig TEXT;
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS dup BOOLEAN DEFAULT false;
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS inv_no TEXT DEFAULT '';
@@ -75,6 +94,7 @@ async function initSchema() {
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS review_note TEXT DEFAULT '';
     CREATE UNIQUE INDEX IF NOT EXISTS kassa_tx_req_id_uidx ON kassa_tx(req_id) WHERE req_id IS NOT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS token_ver INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS bill_id TEXT;
   `);
   await crm.initSchema(pool);
 }
@@ -176,7 +196,7 @@ app.post('/api/auth/login', async (req,res)=>{
   loginFails.delete(key);
   res.json({ token: sign(u), user:{ name:u.name, role:u.role, login:u.login } });
 });
-app.get('/api/me', auth, (req,res)=> res.json({ user:{ name:req.user.name, role:req.user.role, login:req.user.login } }));
+app.get('/api/me', auth, (req,res)=> res.json({ user:{ id:req.user.id, name:req.user.name, role:req.user.role, login:req.user.login } }));
 
 app.post('/api/auth/password', auth, async (req,res)=>{
   const { old_pass, new_pass } = req.body||{};
@@ -546,6 +566,96 @@ app.post('/api/kassa/:id/reject', auth, requireAny(['mgr','sup']), async (req,re
   if(tx.pending.byId!=null && tx.pending.byId===req.user.id) return res.status(403).json({error:'нельзя решать собственный запрос'});
   const entry = { t:Date.now(), by:tx.pending.by, approver:req.user.role, rejected:true, changes:(tx.pending.del?[{label:'Удаление накладной', from:'удалить', to:'оставить'}]:genericDiff(tx,tx.pending.next)), note:tx.pending.note };
   await pool.query('UPDATE kassa_tx SET pending=NULL, log=$1 WHERE id=$2',[JSON.stringify((tx.log||[]).concat([entry])), tx.id]);
+  res.json({ ok:true });
+});
+
+// ---------- счета на закуп (без гоняния денег снабженцу) ----------
+// снабженец/Руслан выставляет счёт Ульяне или Руслану → получатель платит физически и жмёт «Оплатил» →
+// закуп проводится напрямую: накладная в снабжение + приход на склад + расход с отдела оплатившего.
+const BILL_LOCK = 0x0b12b111;
+function billItems(raw, cat){
+  const norm = v => String(v==null?'':v).replace(',','.');
+  return (Array.isArray(raw)?raw:[]).filter(i=>i&&(i.name||'').trim())
+    .map(i=>({name:String(i.name).trim(), qty:norm(i.qty), unit:i.unit||'шт', price:norm(i.price), sum:rowSum(i), cat:i.cat||cat}));
+}
+function billRoleForWhom(w){ return w==='ulyana' ? 'fin' : 'mgr'; }  // кому выставлен → какая роль оплачивает
+// список счетов (видят Руслан, Ульяна, снабженец)
+app.get('/api/bills', auth, requireAny(['mgr','fin','sup']), async (req,res)=>{
+  const r = await pool.query(`SELECT b.*, u.name AS by_name, u.role AS by_role FROM bills b LEFT JOIN users u ON u.id=b.created_by ORDER BY b.ts DESC LIMIT 500`);
+  res.json({ bills: r.rows });
+});
+// выставить счёт (снабженец или Руслан)
+app.post('/api/bills', auth, requireAny(['mgr','sup']), async (req,res)=>{
+  const to = req.body.to==='ulyana' ? 'ulyana' : (req.body.to==='ruslan' ? 'ruslan' : null);
+  if(!to) return res.status(400).json({error:'выберите, кому счёт: Ульяне или Руслану'});
+  const category = req.body.category==='Сырьё' ? 'Сырьё' : 'Операционка';
+  const items = billItems(req.body.items, category);
+  let amount = money(req.body.amount);
+  const itemsSum = items.reduce((s,i)=>s+(i.sum||0),0);
+  if(amount<=0) amount = itemsSum;                       // сумма не задана — берём из позиций
+  if(amount<=0) return res.status(400).json({error:'укажите сумму или позиции'});
+  const invoice = savePhoto(req.body.invoice);          // накладная — по желанию (направляющие её не дают)
+  const invNo = String(req.body.invNo||'').trim().slice(0,40);
+  let docDate = docDateClean(req.body.docDate); if(docDate===null) docDate='';
+  const note = String(req.body.note||'').slice(0,300);
+  const id = crypto.randomUUID();
+  await pool.query(`INSERT INTO bills(id,ts,created_by,created_role,to_whom,amount,category,items,invoice,inv_no,doc_date,note,status)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'wait')`,
+    [id, Date.now(), req.user.id, req.user.role, to, amount, category, JSON.stringify(items), invoice, invNo, docDate, note]);
+  // уведомить того, кому счёт: Ульяна(fin) / Руслан(mgr)
+  const names = items.map(i=>i.name).filter(Boolean).slice(0,3).join(', ');
+  sendPushToRole(billRoleForWhom(to), { title:'BORZO · счёт на оплату', body:'Счёт на '+money(amount).toLocaleString('ru-RU')+' ₸'+(names?' · '+names:'')+' — нажми «Оплатил», когда переведёшь', url:'/fin.html' }).catch(()=>{});
+  res.json({ ok:true, id });
+});
+// «Оплатил» — получатель провёл оплату физически: закуп ложится напрямую, деньги с его отдела котла
+app.post('/api/bills/:id/pay', auth, requireAny(['mgr','fin']), async (req,res)=>{
+  try{
+    const out = await withTx(async (c)=>{
+      await c.query('SELECT pg_advisory_xact_lock($1)',[BILL_LOCK]);
+      const r = await c.query('SELECT * FROM bills WHERE id=$1 FOR UPDATE',[req.params.id]);
+      const b = r.rows[0];
+      if(!b) throw httpErr(404,'счёт не найден');
+      if(b.status!=='wait') throw httpErr(400,'счёт уже '+(b.status==='paid'?'оплачен':'отменён'));
+      // платит только адресат: Ульяне → роль fin, Руслану → роль mgr
+      if(billRoleForWhom(b.to_whom)!==req.user.role) throw httpErr(403,'этот счёт выставлен не тебе');
+      const who = b.to_whom;                       // расход спишется с отдела оплатившего
+      const items = Array.isArray(b.items)? b.items : [];
+      const cat = b.category||'Сырьё';
+      const kassaId = crypto.randomUUID(), now = Date.now();
+      const sig = sigOf(items, b.amount, cat);
+      const names = items.map(i=>i&&i.name).filter(Boolean).slice(0,3).join(', ');
+      // накладная в снабжение (created_by = оплативший → кассу снабженца НЕ трогает; помечаем bill_id и review=ok)
+      await c.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,created_by,sig,inv_no,doc_date,req_id,review,bill_id)
+        VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'ok',$12)`,
+        [kassaId, now, money(b.amount), cat, JSON.stringify(items), b.invoice||null, req.user.id, sig, b.inv_no||'', b.doc_date||'', 'bill_'+b.id, b.id]);
+      // приход на склад — только сырьё
+      for(const i of items){
+        if((i.cat||cat)!=='Сырьё') continue;
+        await c.query(`INSERT INTO sklad_intake(ts,date,name,qty,unit,price,sum,category,tx_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [now, new Date(now).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'}), i.name, i.qty, i.unit, i.price, i.sum!=null?i.sum:rowSum(i), (i.cat||cat), kassaId]);
+      }
+      // расход из котла с отдела оплатившего (who=ulyana/ruslan) — как прямой закуп на его имя
+      const noteTxt = 'по счёту'+(b.created_role==='sup'?' снабженца':' Руслана')+', оплатил '+(who==='ulyana'?'Ульяна':'Руслан')+(names?': '+names:'');
+      await bookSupplyExpense(money(b.amount), cat, noteTxt, kassaId, who, c, monthPerNow(), items);
+      await c.query(`UPDATE bills SET status='paid', paid_by=$1, paid_ts=$2, kassa_tx_id=$3 WHERE id=$4`,[req.user.id, now, kassaId, b.id]);
+      return { kassaId, createdBy:b.created_by };
+    });
+    // уведомить того, кто выставил счёт
+    if(out.createdBy!=null){ const cr=await pool.query('SELECT role FROM users WHERE id=$1',[out.createdBy]);
+      if(cr.rows[0]) sendPushToRole(cr.rows[0].role, { title:'BORZO · счёт оплачен', body:'Твой счёт оплачен — закуп попал в снабжение и на склад', url:'/kassa.html' }).catch(()=>{}); }
+    res.json({ ok:true, kassaId:out.kassaId });
+  }catch(e){ if(e&&e.httpCode) return res.status(e.httpCode).json({error:e.message}); console.error('bill pay error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'}); }
+});
+// отменить счёт (кто выставил — снабженец/Руслан, либо адресат) — только пока не оплачен
+app.post('/api/bills/:id/cancel', auth, requireAny(['mgr','fin','sup']), async (req,res)=>{
+  const r = await pool.query('SELECT * FROM bills WHERE id=$1',[req.params.id]);
+  const b = r.rows[0];
+  if(!b) return res.status(404).json({error:'счёт не найден'});
+  if(b.status!=='wait') return res.status(400).json({error:'счёт уже '+(b.status==='paid'?'оплачен — отменять нечего':'отменён')});
+  const isCreator = b.created_by===req.user.id;
+  const isAddressee = billRoleForWhom(b.to_whom)===req.user.role;
+  if(!isCreator && !isAddressee && req.user.role!=='mgr') return res.status(403).json({error:'нет прав отменить этот счёт'});
+  await pool.query("UPDATE bills SET status='cancelled' WHERE id=$1",[b.id]);
   res.json({ ok:true });
 });
 

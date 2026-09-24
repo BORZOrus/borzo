@@ -44,6 +44,10 @@ window.API = (function(){
     reject:      function(id){ return req('POST','/kassa/'+id+'/reject'); },
     finGet:      function(){ return req('GET','/fin'); },
     finPut:      function(data,baseRev){ return req('PUT','/fin',{data:data,baseRev:baseRev}); },
+    bills:       function(){ return req('GET','/bills'); },
+    billCreate:  function(b){ return req('POST','/bills', b); },
+    billPay:     function(id){ return req('POST','/bills/'+id+'/pay'); },
+    billCancel:  function(id){ return req('POST','/bills/'+id+'/cancel'); },
     crm: function(method,path,body){ return req(method,'/crm'+path,body); },
     logout: logout
   };

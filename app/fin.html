@@ -119,6 +119,7 @@
 
     <div id="pane-work">
       <div id="r-reqs"></div>
+      <div id="r-bills"></div>
       <div class="balances" id="r-balances"></div>
       <div class="btns">
         <button class="b-in" data-act="in">+ Приход</button>
@@ -130,6 +131,7 @@
       </div>
       <div class="btns">
         <button class="b-tr" data-act="credits" style="flex:1">🏦 Кредиты</button>
+        <button class="b-tr" data-act="billnew" style="flex:1">🧾 Выставить счёт</button>
       </div>
       <button class="an-btn" data-an="work">📊 Аналитика</button>
       <div class="h1">Операции</div>
@@ -168,6 +170,7 @@
     </div>
 
     <div id="pane-uborzo">
+      <div id="u-bills"></div>
       <div class="balances" id="u-borzo-bal"></div>
       <div class="btns">
         <button class="b-in" data-act="uin">+ Приход (продажа)</button>
@@ -226,8 +229,8 @@
 <div class="sheet" id="sheet"><div id="sheet-body"></div></div>
 
 <script src="theme.js?v=1"></script>
-<script src="api.js?v=8"></script>
+<script src="api.js?v=11"></script>
 <script src="push.js?v=1"></script>
-<script src="fin.js?v=55"></script>
+<script src="fin.js?v=56"></script>
 </body>
 </html>

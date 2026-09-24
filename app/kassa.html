@@ -149,7 +149,11 @@
       <div class="sub" id="sup-balance-sub">касса снабжения</div>
     </div>
     <div id="sup-notifs"></div>
-    <button class="btn btn-buy" id="btn-buy" style="margin-bottom:16px">🛒 Закупаюсь</button>
+    <div id="sup-bills"></div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-buy" id="btn-buy" style="flex:1">🛒 Закупаюсь</button>
+      <button class="btn btn-give" id="btn-bill" style="flex:1">🧾 Выставить счёт</button>
+    </div>
     <div id="sup-anal"></div>
     <div class="tabbar">
       <button id="tab-in" class="on">Приход</button>
@@ -169,11 +173,13 @@
       <div class="k"><div class="l">Потратил за месяц</div><div class="v" id="mgr-spent">0</div></div>
       <div class="k"><div class="l">Сейчас в кассе</div><div class="v" id="mgr-left" style="color:var(--k-green)">0</div></div>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:16px">
+    <div style="display:flex;gap:8px;margin-bottom:10px">
       <button class="btn btn-give" id="btn-give" style="flex:1">💸 Выдать снабженцу</button>
       <button class="btn btn-buy" id="btn-buy-mgr" style="flex:1">🛒 Закупаюсь сам</button>
     </div>
+    <button class="btn btn-give" id="btn-bill-mgr" style="margin-bottom:16px;background:var(--k-card2);color:var(--k-ink)">🧾 Выставить счёт Ульяне</button>
     <div id="mgr-notifs"></div>
+    <div id="mgr-bills"></div>
     <div class="tabbar">
       <button id="tab-inv" class="on">Накладные</button>
       <button id="tab-issues">Выдачи</button>
@@ -191,7 +197,7 @@
 <div class="sheet" id="sheet"><div id="sheet-body"></div></div>
 
 <script src="theme.js?v=1"></script>
-<script src="api.js?v=10"></script>
-<script src="kassa.js?v=34"></script>
+<script src="api.js?v=11"></script>
+<script src="kassa.js?v=35"></script>
 </body>
 </html>
