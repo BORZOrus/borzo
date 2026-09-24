@@ -62,6 +62,12 @@
     });
     $('q-go').onclick=submit;
   }
+  // баланс зарплатного кошелька Руслана (та же формула, что в финмодуле)
+  function balZp(ops){ var b=0; ops.forEach(function(o){
+    if(o.kind==='in'&&o.acc==='zpRuslan')b+=o.amount;
+    else if((o.kind==='out'||o.kind==='return')&&o.acc==='zpRuslan')b-=o.amount;
+    else if(o.kind==='transfer'){ if(o.from==='zpRuslan')b-=o.amount; if(o.to==='zpRuslan')b+=o.amount; }
+  }); return b; }
   // сохранение через штатный «безопасный» путь: свежий GET → добавить операцию → PUT с версией; конфликт → перечитать и повторить
   function submit(){
     var a=parseInt($('q-amt').value,10)||0;
@@ -81,6 +87,12 @@
         // категория «плюсиком» видна и в финансах
         data.cats=data.cats||{}; data.cats[KEYCTX]=data.cats[KEYCTX]||DEF.slice();
         if(data.cats[KEYCTX].indexOf(cat)<0) data.cats[KEYCTX].push(cat);
+        // «и так, и так»: если в зарплате не хватает — недостающее автоматически берём с котла BORZO и садим в зарплату
+        var before=balZp(data.ops);
+        if(before<a){
+          var need=a-before;
+          data.ops.unshift({ id:op.id+'_t', ts:op.ts-1, kind:'transfer', from:'BORZO', to:'zpRuslan', amount:need, project:'BORZO', who:'ruslan', category:'Зарплата', note:'взято с котла на личные траты' });
+        }
         data.ops.unshift(op);
         return API.finPut(data,res.rev);
       }).then(function(){

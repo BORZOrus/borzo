@@ -450,8 +450,12 @@
   function formTopZp(){ open('<h3>↓ Пополнить мою зарплату</h3><div style="font-size:12px;color:var(--mut);margin-bottom:10px">Перевод из проекта в вашу зарплату.</div>'+squares('f-proj',PROJECTS)+amtField()+acts('Пополнить'));
     var pr=wireSquares('f-proj'); wireActs(function(){var a=getAmt();if(!a)return;commit([{kind:'transfer',from:pr(),to:'zpRuslan',amount:a,project:pr(),who:'ruslan',note:'в зарплату'}]);}); }
 
-  function formPersR(){ open('<h3>− Личный расход</h3><div style="font-size:12px;color:var(--mut);margin-bottom:10px">Списывается с вашей зарплаты.</div>'+amtField()+catField('На что','pers_ruslan','f-cat')+acts('Записать'));
-    var ct=wireCatField('f-cat','pers_ruslan'); wireActs(function(){var a=getAmt();if(!a)return;commit([{kind:'out',acc:'zpRuslan',project:'Личное',amount:a,category:ct(),who:'ruslan'}]);}); }
+  function formPersR(){ open('<h3>− Личный расход</h3><div style="font-size:12px;color:var(--mut);margin-bottom:10px">Списывается с зарплаты. Если в зарплате не хватает — недостающее автоматически возьмётся с котла BORZO.</div>'+amtField()+catField('На что','pers_ruslan','f-cat')+acts('Записать'));
+    var ct=wireCatField('f-cat','pers_ruslan'); wireActs(function(){var a=getAmt();if(!a)return;
+      var ops=[], before=balance('zpRuslan');
+      if(before<a) ops.push({kind:'transfer',from:'BORZO',to:'zpRuslan',amount:a-before,project:'BORZO',who:'ruslan',category:'Зарплата',note:'взято с котла на личные траты'});
+      ops.push({kind:'out',acc:'zpRuslan',project:'Личное',amount:a,category:ct(),who:'ruslan'});
+      commit(ops);}); }
 
   function formUPers(){ open('<h3>− Мой расход</h3><div style="font-size:12px;color:var(--mut);margin-bottom:10px">Из вашего кошелька.</div>'+amtField()+catField('На что','pers_ulyana','f-cat')+acts('Записать'));
     var ct=wireCatField('f-cat','pers_ulyana'); wireActs(function(){var a=getAmt();if(!a)return;commit([{kind:'out',acc:'zpUlyana',project:'Личное Ульяны',amount:a,category:ct(),who:'ulyana'}]);}); }
