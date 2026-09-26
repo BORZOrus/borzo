@@ -183,7 +183,9 @@
     var inc=/^📩/.test(e.text||'');
     var t=String(e.text||'').replace(/^📩\s*/,'');
     var m=inc&&t.indexOf(':')>0?t.slice(t.indexOf(':')+1).trim():t;
-    return '<div class="wa-row '+(inc?'in':'out')+'"><div class="wa-b">'+esc(inc?m:t)+
+    var prev=String(inc?m:t).replace(/\s+/g,' ').slice(0,60);
+    var rbtn='<button class="wa-reply" data-reply="1" data-rw="" data-rt="'+esc(prev)+'" title="Ответить">↩</button>';
+    return '<div class="wa-row '+(inc?'in':'out')+'"><div class="wa-b">'+rbtn+esc(inc?m:t)+
       '<span class="wa-meta">'+chTime(e.ts)+(inc?'':' <span class="wa-tick">✓✓</span>')+'</span></div></div>';
   }
   function renderLog(evs){
@@ -215,7 +217,10 @@
   function waBubble(m){
     var inc=m.direction==='in';
     var bodyHtml=m.type==='text'?esc(m.text||''):waMediaLabel(m);
-    return '<div class="wa-row '+(inc?'in':'out')+'"><div class="wa-b">'+bodyHtml+
+    var quote=m.reply_text?'<div class="wa-quote">'+esc(m.reply_text)+'</div>':(m.reply_to?'<div class="wa-quote">↩ ответ на сообщение</div>':'');
+    var prev=String(m.text||m.caption||m.type||'').replace(/\s+/g,' ').slice(0,60);
+    var rbtn='<button class="wa-reply" data-reply="1" data-rw="'+esc(m.wamid||'')+'" data-rt="'+esc(prev)+'" title="Ответить">↩</button>';
+    return '<div class="wa-row '+(inc?'in':'out')+'"><div class="wa-b">'+rbtn+quote+bodyHtml+
       '<span class="wa-meta">'+chTime(m.ts)+(inc?'':' '+tickOf(m.status))+'</span></div></div>';
   }
   // единая лента: заметки/статусы (crm_events) + реальные сообщения (wa_messages), по времени
@@ -425,6 +430,7 @@
         '<div class="wa-log" id="ch-log">'+renderTimeline(buildTimeline(evs,msgs))+'</div>'+
         (waConnected?'':'<div class="wa-note">WhatsApp подключим при переезде — пока сообщения сохраняются как заметки в ленте</div>')+
         '<div class="ch-tpl" id="ch-tpl" hidden></div>'+
+        '<div class="ch-reply" id="ch-reply" hidden></div>'+
         '<div class="wa-input">'+
           '<div class="wa-field">'+
             '<button class="wa-in-ic" id="ch-tplbtn" title="Шаблоны">📋</button>'+
@@ -435,8 +441,12 @@
           '<button class="wa-mic" id="ch-mic" title="Голосовое">🎤</button>'+
         '</div>';
       var log=$('ch-log'); log.scrollTop=log.scrollHeight;
-      // ленивая загрузка вложения по кнопке (медиа скачивается с 360dialog и кэшируется на сервере)
+      var chReply=null;
+      function renderReplyBar(){ var bar=$('ch-reply'); if(!bar)return; if(!chReply){bar.hidden=true;bar.innerHTML='';return;} bar.innerHTML='<div class="ch-reply-in"><span>↩ '+esc(chReply.text||'сообщение')+'</span><button id="ch-reply-x">✕</button></div>'; bar.hidden=false; $('ch-reply-x').onclick=function(){ chReply=null; renderReplyBar(); }; var ta=$('ch-text'); if(ta)ta.focus(); }
+      // ленивая загрузка вложения + ответ на сообщение (reply)
       log.addEventListener('click',async function(e){
+        var rp=e.target.closest('[data-reply]');
+        if(rp){ chReply={wamid:rp.dataset.rw||'', text:rp.dataset.rt||''}; renderReplyBar(); e.stopPropagation(); return; }
         var b=e.target.closest('[data-media]'); if(!b)return;
         b.disabled=true; b.textContent='Загрузка…';
         try{ var r=await API.waMedia(b.dataset.media); var wrap=b.closest('.wa-b'); var meta=wrap&&wrap.querySelector('.wa-meta'); if(wrap) wrap.innerHTML=waMediaView(r.url,r.mime||'')+(meta?meta.outerHTML:''); }
@@ -459,15 +469,16 @@
       async function send(){
         var t=$('ch-text').value.trim(); if(!t)return;
         $('ch-send').disabled=true;
+        var quotedNote=function(){ return chReply?('↪ '+(chReply.text||'')+'\n'+t):t; };
         try{
-          // подключён WhatsApp → шлём реально через 360dialog; иначе сохраняем как внутреннюю заметку (чат остаётся рабочим)
-          if(waConnected){ await API.waSend({deal_id:d.id, text:t, reqId:uid()}); }
-          else { await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:t}); }
-          $('ch-text').value=''; chToggle(); await poll();
+          // подключён WhatsApp → шлём реально через 360dialog (с цитатой, если reply); иначе внутренняя заметка
+          if(waConnected){ await API.waSend(Object.assign({deal_id:d.id, text:t, reqId:uid()}, chReply?{reply_to:chReply.wamid, reply_text:chReply.text}:{})); }
+          else { await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:quotedNote()}); }
+          $('ch-text').value=''; chReply=null; renderReplyBar(); chToggle(); await poll();
         }
         catch(e){
           // канал ещё не подключён на сервере — не теряем текст, кладём заметкой
-          if(e&&e.status===503){ try{ await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:t}); $('ch-text').value=''; chToggle(); waConnected=false; await poll(); }catch(e2){ toast(error(e2)); } }
+          if(e&&e.status===503){ try{ await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:quotedNote()}); $('ch-text').value=''; chReply=null; renderReplyBar(); chToggle(); waConnected=false; await poll(); }catch(e2){ toast(error(e2)); } }
           else toast(error(e));
         }
         $('ch-send').disabled=false; $('ch-text').focus();
