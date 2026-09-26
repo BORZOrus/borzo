@@ -51,7 +51,9 @@
 .wa-row.in .wa-b:before{content:'';position:absolute;left:-7px;top:0;border:7px solid transparent;border-top-color:#fff;border-right-color:#fff;border-left:0}
 .wa-row.out .wa-b:before{content:'';position:absolute;right:-7px;top:0;border:7px solid transparent;border-top-color:#d9fdd3;border-left-color:#d9fdd3;border-right:0}
 .wa-meta{display:inline-block;font-size:10.5px;color:rgba(17,27,33,.45);margin-left:8px;vertical-align:bottom;white-space:nowrap}
-.wa-tick{color:#53bdeb}
+.wa-tick{color:#8696a0}
+.wa-tick.read{color:#53bdeb}
+.wa-tick.err{color:#c62830}
 .wa-sys{display:flex;justify-content:center;padding:3px 0}
 .wa-sys>span{background:#fff;color:#54656f;font-size:11px;padding:4px 10px;border-radius:8px;max-width:88%;text-align:center;box-shadow:0 1px 1px rgba(17,27,33,.12)}
 .wa-sys .wa-day{background:#fff;color:#54656f;font-weight:600;text-transform:capitalize}
@@ -62,6 +64,13 @@
 .wa-in-ic{background:none;border:none;color:#54656f;font-size:18px;padding:8px 7px;cursor:pointer}
 .wa-send{width:44px;height:44px;flex:0 0 44px;border-radius:50%;border:none;background:#00a884;color:#fff;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,168,132,.35)}
 .wa-send:disabled{opacity:.6}
+.wa-soon{font-size:10.5px;color:#8696a0;font-style:italic}
+.wa-note{font-size:11.5px;color:#8a6d3b;background:#fdf6e3;border:1px solid #f0e2b8;border-radius:8px;padding:6px 10px;margin:0 -6px 6px;text-align:center}
+.wa-badge{display:inline-block;min-width:18px;height:18px;line-height:18px;padding:0 5px;border-radius:9px;background:#25d366;color:#fff;font-size:11px;font-weight:700;text-align:center;vertical-align:middle;margin-left:6px}
+.deal-wa{font-size:11.5px;font-weight:600;margin:6px 0 2px}
+.deal-wa.unh{color:#c62830}
+.deal-wa.wait{color:#b26a00}
+.take-btn{margin-top:10px;background:#25d366;border:0;border-radius:8px;color:#fff;padding:9px;width:100%;min-height:40px;font-size:12px;font-weight:700}
 .ch-tpl{display:flex;flex-direction:column;gap:4px;margin:6px 0;max-height:30vh;overflow-y:auto}
 .dragging{opacity:.45;outline:1.5px dashed var(--amber)}
 </style>
@@ -77,7 +86,7 @@
 <div class="sheet-bg" id="sheet-bg" hidden></div>
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden><header><h2 id="sheet-title"></h2><button class="iconbtn" id="sheet-close" aria-label="Закрыть">✕</button></header><div id="sheet-body"></div></section>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="api.js?v=crm1"></script>
-<script src="crm.js?v=crm12"></script>
+<script src="api.js?v=crm2"></script>
+<script src="crm.js?v=crm13"></script>
 </body>
 </html>

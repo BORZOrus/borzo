@@ -90,6 +90,15 @@
     return !state.q||text.indexOf(state.q)>=0||(digits.length>2&&String(d.phone||'').indexOf(digits)>=0);
   }
   var lastBoardQuery='';
+  // «сколько прошло» человекочитаемо: мин/ч/дн
+  function ago(ts){ if(!ts)return ''; var m=Math.floor((Date.now()-new Date(ts).getTime())/60000); if(m<1)return 'только что'; if(m<60)return m+' мин'; var h=Math.floor(m/60); if(h<24)return h+' ч'; return Math.floor(h/24)+' дн'; }
+  // строка состояния лида на карточке: необработанный (в первом этапе) или ждёт нашего ответа
+  function waLine(d,s){
+    if(s.code==='new') return '<div class="deal-wa unh">🔴 Необработан · '+esc(ago(d.created_at))+'</div>';
+    if(!s.is_won&&!s.is_lost&&d.last_in_at&&(!d.last_msg_at||new Date(d.last_in_at)>new Date(d.last_msg_at)))
+      return '<div class="deal-wa wait">⏰ Ждёт ответа · '+esc(ago(d.last_in_at))+'</div>';
+    return '';
+  }
   function renderDeals(){
     var oldBoard=$('main').querySelector('.board'),oldScroll=oldBoard?oldBoard.scrollLeft:0;
     var deals=state.deals.filter(matches);
@@ -97,7 +106,9 @@
       var rows=deals.filter(function(d){return d.stage_id===s.id;});
       return '<section class="column '+(s.is_won?'won':s.is_lost?'lost':'')+'"><header class="col-head"><h2><span class="dot"></span>'+esc(s.name)+'</h2><div class="muted">'+esc(rows.length)+' · '+esc(money(rows.reduce(function(n,d){return n+Number(d.amount);},0)))+'</div></header>'+rows.map(function(d){
         var days=d.stage_entered_at?Math.max(0,Math.floor((Date.now()-new Date(d.stage_entered_at).getTime())/86400000))+' дн. в этапе':'Срок неизвестен';
-        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div><div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button><button class="stage-btn" data-move="'+esc(d.id)+'">Сменить этап →</button></article>';
+        var badge=Number(d.wa_unread)>0?' <span class="wa-badge">'+esc(d.wa_unread)+'</span>':'';
+        var take=s.code==='new'?'<button class="take-btn" data-take="'+esc(d.id)+'">▶ Взять в работу</button>':'';
+        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<button class="stage-btn" data-move="'+esc(d.id)+'">Сменить этап →</button></article>';
       }).join('')+(rows.length?'':'<div class="empty">'+(state.q?'Нет совпадений':'Пока нет сделок')+'</div>')+'</section>';
     }).join('')+'</div>';
     var board=$('main').querySelector('.board');
@@ -108,6 +119,19 @@
   function bindDeals(root){
     root.querySelectorAll('[data-deal]').forEach(function(b){b.onclick=function(){showDeal(b.dataset.deal);};});
     root.querySelectorAll('[data-move]').forEach(function(b){b.onclick=function(){showStage(b.dataset.move);};});
+    // «взять в работу»: назначить лида на себя и перевести из «Новой заявки» в «В работе»
+    root.querySelectorAll('[data-take]').forEach(function(b){b.onclick=async function(e){
+      e.stopPropagation();
+      var d=state.deals.find(function(x){return String(x.id)===b.dataset.take;});
+      var working=state.stages.find(function(s){return s.code==='working';})||state.stages.find(function(s){return !s.is_won&&!s.is_lost&&s.code!=='new';});
+      if(!d||!working)return;
+      b.disabled=true;
+      try{
+        var r1=await api('PATCH','/deals/'+d.id,{baseRev:d.rev,manager_id:state.userId});
+        await api('POST','/deals/'+d.id+'/stage',{reqId:uid(),baseRev:r1.deal.rev,stage_id:working.id});
+        toast('Взято в работу'); await reload();
+      }catch(err){ toast(error(err)); b.disabled=false; }
+    };});
   }
   function clientForm(c){return field('Имя клиента','name',c.name,'text','required maxlength="200" autocomplete="name"')+field('Телефон','phone',c.phone,'tel','autocomplete="tel" placeholder="+7 700 000 00 00"')+field('Instagram','instagram',c.instagram,'text','maxlength="200"')+source(c.source)+area('Заметка о клиенте','note',c.note);}
   function quickDeal(c){
@@ -122,7 +146,7 @@
     return '<div class="actions"><a class="ghost" href="tel:'+esc(p)+'">'+esc(p)+'</a><a class="ghost" href="https://wa.me/'+esc(p.slice(1))+'" target="_blank" rel="noopener noreferrer">WhatsApp ↗</a></div>';
   }
   // ---------- карточка лида = ЧАТ, скин WhatsApp (тёмный, по скрину Руслана) ----------
-  var chatTimer=null, chatDealId=null, chatLastEventId=0;
+  var chatTimer=null, chatDealId=null, chatLastEventId=0, waConnected=false, waChecked=false;
   function stopChat(){ clearTimeout(chatTimer); chatTimer=null; chatDealId=null; }
   function chDay(ts){ return new Date(new Date(ts).getTime()+5*3600000).toISOString().slice(0,10); }
   function chDayLabel(ts){
@@ -148,16 +172,55 @@
     });
     return out||'<div class="wa-sys"><span>Пока нет сообщений</span></div>';
   }
+  // галочки статуса исходящего WhatsApp
+  function tickOf(s){ if(s==='read')return '<span class="wa-tick read">✓✓</span>'; if(s==='delivered')return '<span class="wa-tick">✓✓</span>'; if(s==='failed')return '<span class="wa-tick err">⚠</span>'; return '<span class="wa-tick">✓</span>'; }
+  // не-текстовое сообщение: ярлык типа (само медиа качаем следующим шагом)
+  function waMediaLabel(m){
+    var lbl=({audio:'🎤 Голосовое',voice:'🎤 Голосовое',image:'🖼 Фото',video:'🎬 Видео',document:'📄 Документ',sticker:'🩷 Стикер'})[m.type]||('📎 '+esc(m.type||'файл'));
+    return lbl+(m.caption?': '+esc(m.caption):'')+' <span class="wa-soon">(медиа на след. шаге)</span>';
+  }
+  // пузырь реального WhatsApp-сообщения
+  function waBubble(m){
+    var inc=m.direction==='in';
+    var bodyHtml=m.type==='text'?esc(m.text||''):waMediaLabel(m);
+    return '<div class="wa-row '+(inc?'in':'out')+'"><div class="wa-b">'+bodyHtml+
+      '<span class="wa-meta">'+chTime(m.ts)+(inc?'':' '+tickOf(m.status))+'</span></div></div>';
+  }
+  // единая лента: заметки/статусы (crm_events) + реальные сообщения (wa_messages), по времени
+  function buildTimeline(evs, msgs){
+    var items=[];
+    evs.forEach(function(e){ items.push({ ts:new Date(e.ts).getTime(), html:bubble(e) }); });
+    (msgs||[]).forEach(function(m){ var t=Number(m.ts)||0; items.push({ ts:t, html:waBubble(Object.assign({},m,{ts:t})) }); });
+    items.sort(function(a,b){ return a.ts-b.ts; });
+    return items;
+  }
+  function renderTimeline(items){
+    var out='',lastDay='';
+    items.forEach(function(it){
+      var d=chDay(it.ts);
+      if(d!==lastDay){ out+='<div class="wa-sys"><span class="wa-day">'+esc(chDayLabel(it.ts))+'</span></div>'; lastDay=d; }
+      out+=it.html;
+    });
+    return out||'<div class="wa-sys"><span>Пока нет сообщений</span></div>';
+  }
+  // подпись изменения ленты, чтобы перерисовывать только при новых данных
+  function chatSig(evs, msgs){ return (evs.length?evs[evs.length-1].id:0)+'|'+(msgs?msgs.length:0)+'|'+(msgs&&msgs.length?(msgs[msgs.length-1].status||''):''); }
   async function showDeal(id){
     stopChat();
     openSheet('Чат','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
     try{
-      var all=await Promise.all([api('GET','/deals/'+id),api('GET','/deals/'+id+'/events'),api('GET','/templates')]);
+      var all=await Promise.all([api('GET','/deals/'+id),api('GET','/deals/'+id+'/events'),api('GET','/templates'),
+        API.waMessages(id).catch(function(){return {messages:[]};}),
+        waChecked?Promise.resolve(null):API.waStatus().catch(function(){return {connected:false};})]);
       if(gen!==sheetGeneration)return;
       var d=all[0].deal, evs=all[1].events.slice().reverse();
       state.templates=all[2].templates;
+      var msgs=all[3].messages||[];
+      if(all[4]){ waConnected=!!all[4].connected; waChecked=true; }
       chatDealId=d.id; chatLastEventId=evs.length?evs[evs.length-1].id:0;
-      var lastDayShown=evs.length?chDay(evs[evs.length-1].ts):'';
+      var chatLastSig=chatSig(evs, msgs);
+      // открыли чат → сбрасываем непрочитанные (сервер + локально, чтобы бейдж на доске исчез)
+      if(Number(d.wa_unread)>0){ API.waRead(id).catch(function(){}); var bd=state.deals.find(function(x){return x.id===d.id;}); if(bd)bd.wa_unread=0; }
       $('sheet-title').textContent='';
       var p=d.phone&&/^\+[1-9]\d{7,14}$/.test(d.phone)?d.phone:null;
       var initial=(d.client_name||'?').trim().charAt(0).toUpperCase();
@@ -180,12 +243,13 @@
           var cur=s.id===d.stage_id;
           return '<button class="st-chip'+(cur?' on':'')+(s.is_won?' won':'')+(s.is_lost?' lost':'')+'" data-st="'+s.id+'">'+(s.is_won?'✅ ':'')+esc(s.name)+'</button>';
         }).join('')+'</div>'+
-        '<div class="wa-log" id="ch-log">'+renderLog(evs)+'</div>'+
+        '<div class="wa-log" id="ch-log">'+renderTimeline(buildTimeline(evs,msgs))+'</div>'+
+        (waConnected?'':'<div class="wa-note">WhatsApp подключим при переезде — пока сообщения сохраняются как заметки в ленте</div>')+
         '<div class="ch-tpl" id="ch-tpl" hidden></div>'+
         '<div class="wa-input">'+
           '<div class="wa-field">'+
             '<button class="wa-in-ic" id="ch-tplbtn" title="Шаблоны">📋</button>'+
-            '<textarea id="ch-text" rows="1" placeholder="Сообщение"></textarea>'+
+            '<textarea id="ch-text" rows="1" placeholder="'+(waConnected?'Сообщение':'Заметка (WhatsApp позже)')+'"></textarea>'+
             '<label class="wa-in-ic" style="cursor:pointer" title="Прикрепить">📎<input id="ch-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden></label>'+
           '</div>'+
           '<button class="wa-send" id="ch-send">➤</button>'+
@@ -208,8 +272,17 @@
       async function send(){
         var t=$('ch-text').value.trim(); if(!t)return;
         $('ch-send').disabled=true;
-        try{ await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:t}); $('ch-text').value=''; await poll(); }
-        catch(e){ toast(error(e)); }
+        try{
+          // подключён WhatsApp → шлём реально через 360dialog; иначе сохраняем как внутреннюю заметку (чат остаётся рабочим)
+          if(waConnected){ await API.waSend({deal_id:d.id, text:t, reqId:uid()}); }
+          else { await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:t}); }
+          $('ch-text').value=''; await poll();
+        }
+        catch(e){
+          // канал ещё не подключён на сервере — не теряем текст, кладём заметкой
+          if(e&&e.status===503){ try{ await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:t}); $('ch-text').value=''; waConnected=false; await poll(); }catch(e2){ toast(error(e2)); } }
+          else toast(error(e));
+        }
         $('ch-send').disabled=false; $('ch-text').focus();
       }
       $('ch-send').onclick=send;
@@ -218,17 +291,16 @@
         if(chatDealId!==d.id)return;
         clearTimeout(chatTimer);
         try{
-          var r=await api('GET','/deals/'+d.id+'/events');
+          var r=await Promise.all([api('GET','/deals/'+d.id+'/events'), API.waMessages(d.id).catch(function(){return {messages:[]};})]);
           if(chatDealId!==d.id||gen!==sheetGeneration)return;
-          var list=r.events.slice().reverse().filter(function(e){return e.id>chatLastEventId;});
-          if(list.length){
-            chatLastEventId=list[list.length-1].id;
-            list.forEach(function(e){
-              var day=chDay(e.ts);
-              if(day!==lastDayShown){ log.insertAdjacentHTML('beforeend','<div class="wa-sys"><span class="wa-day">'+esc(chDayLabel(e.ts))+'</span></div>'); lastDayShown=day; }
-              log.insertAdjacentHTML('beforeend',bubble(e));
-            });
-            log.scrollTop=log.scrollHeight;
+          var ev2=r[0].events.slice().reverse(), m2=r[1].messages||[];
+          var s2=chatSig(ev2,m2);
+          if(s2!==chatLastSig){
+            chatLastSig=s2;
+            var atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<40;
+            log.innerHTML=renderTimeline(buildTimeline(ev2,m2));
+            if(atBottom)log.scrollTop=log.scrollHeight;
+            if(m2.length)API.waRead(d.id).catch(function(){});
           }
         }catch(e){}
         chatTimer=setTimeout(poll,7000);

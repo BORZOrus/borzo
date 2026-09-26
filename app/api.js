@@ -49,6 +49,11 @@ window.API = (function(){
     billPay:     function(id){ return req('POST','/bills/'+id+'/pay'); },
     billCancel:  function(id){ return req('POST','/bills/'+id+'/cancel'); },
     crm: function(method,path,body){ return req(method,'/crm'+path,body); },
+    // WhatsApp (360dialog): статус канала, лента чата, отправка, сброс непрочитанных
+    waStatus:   function(){ return req('GET','/wa/status'); },
+    waMessages: function(dealId){ return req('GET','/wa/messages/'+dealId); },
+    waSend:     function(b){ return req('POST','/wa/send', b); },
+    waRead:     function(dealId){ return req('POST','/wa/read/'+dealId); },
     logout: logout
   };
   return self;
