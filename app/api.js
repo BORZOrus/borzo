@@ -54,6 +54,7 @@ window.API = (function(){
     waMessages: function(dealId){ return req('GET','/wa/messages/'+dealId); },
     waSend:     function(b){ return req('POST','/wa/send', b); },
     waRead:     function(dealId){ return req('POST','/wa/read/'+dealId); },
+    waMedia:    function(msgId){ return req('GET','/wa/media/'+msgId); },
     logout: logout
   };
   return self;

@@ -133,7 +133,7 @@
       }catch(err){ toast(error(err)); b.disabled=false; }
     };});
   }
-  function clientForm(c){return field('Имя клиента','name',c.name,'text','required maxlength="200" autocomplete="name"')+field('Телефон','phone',c.phone,'tel','autocomplete="tel" placeholder="+7 700 000 00 00"')+field('Instagram','instagram',c.instagram,'text','maxlength="200"')+source(c.source)+area('Заметка о клиенте','note',c.note);}
+  function clientForm(c){return field('Имя клиента','name',c.name,'text','required maxlength="200" autocomplete="name"')+field('Телефон','phone',c.phone,'tel','autocomplete="tel" placeholder="+7 700 000 00 00"')+field('Город','city',c.city,'text','maxlength="100"')+field('Адрес доставки','address',c.address,'text','maxlength="300"')+field('Instagram','instagram',c.instagram,'text','maxlength="200"')+source(c.source)+area('Заметка о клиенте','note',c.note);}
   function quickDeal(c){
     openSheet('Новая заявка','<form id="quick-form">'+(c?'<p class="pre">'+esc(c.name)+' · '+esc(c.phone||'Без телефона')+'</p>':field('Имя клиента','name','','text','required maxlength="200" autocomplete="name"')+field('Телефон','phone','','tel','required autocomplete="tel" placeholder="+7 700 000 00 00"'))+source(c?c.source:'')+'<p class="hint">Заявка появится в первом этапе. Сумму и состав можно заполнить позже.</p>'+submit('Создать заявку')+'</form>');
     var f=$('quick-form');
@@ -174,10 +174,19 @@
   }
   // галочки статуса исходящего WhatsApp
   function tickOf(s){ if(s==='read')return '<span class="wa-tick read">✓✓</span>'; if(s==='delivered')return '<span class="wa-tick">✓✓</span>'; if(s==='failed')return '<span class="wa-tick err">⚠</span>'; return '<span class="wa-tick">✓</span>'; }
-  // не-текстовое сообщение: ярлык типа (само медиа качаем следующим шагом)
+  // отрисовка скачанного вложения по mime
+  function waMediaView(url,mime){
+    mime=mime||'';
+    if(/^image\//.test(mime)) return '<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer"><img class="wa-img" src="'+esc(url)+'" alt="фото"></a>';
+    if(/^audio\//.test(mime)) return '<audio controls preload="none" src="'+esc(url)+'"></audio>';
+    if(/^video\//.test(mime)) return '<video class="wa-img" controls preload="none" src="'+esc(url)+'"></video>';
+    return '<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">📄 Открыть вложение</a>';
+  }
+  // не-текстовое сообщение: если уже скачано — плеер, иначе ярлык + кнопка «Загрузить»
   function waMediaLabel(m){
     var lbl=({audio:'🎤 Голосовое',voice:'🎤 Голосовое',image:'🖼 Фото',video:'🎬 Видео',document:'📄 Документ',sticker:'🩷 Стикер'})[m.type]||('📎 '+esc(m.type||'файл'));
-    return lbl+(m.caption?': '+esc(m.caption):'')+' <span class="wa-soon">(медиа на след. шаге)</span>';
+    if(m.media_url) return waMediaView(m.media_url,m.mime)+(m.caption?'<div>'+esc(m.caption)+'</div>':'');
+    return lbl+(m.caption?': '+esc(m.caption):'')+(m.media_id?' <button class="wa-load" data-media="'+esc(m.id)+'">▶ Загрузить</button>':'');
   }
   // пузырь реального WhatsApp-сообщения
   function waBubble(m){
@@ -255,6 +264,13 @@
           '<button class="wa-send" id="ch-send">➤</button>'+
         '</div>';
       var log=$('ch-log'); log.scrollTop=log.scrollHeight;
+      // ленивая загрузка вложения по кнопке (медиа скачивается с 360dialog и кэшируется на сервере)
+      log.addEventListener('click',async function(e){
+        var b=e.target.closest('[data-media]'); if(!b)return;
+        b.disabled=true; b.textContent='Загрузка…';
+        try{ var r=await API.waMedia(b.dataset.media); var wrap=b.closest('.wa-b'); var meta=wrap&&wrap.querySelector('.wa-meta'); if(wrap) wrap.innerHTML=waMediaView(r.url,r.mime||'')+(meta?meta.outerHTML:''); }
+        catch(err){ b.disabled=false; b.textContent='▶ Загрузить'; toast(error(err)); }
+      });
       var menu=$('wa-menu');
       $('wa-menu-btn').onclick=function(){menu.hidden=!menu.hidden;};
       // полоска воронки: текущий этап подсвечен, тап по другому — переход; «Продажа» открывает оформление
@@ -333,27 +349,54 @@
       $('wm-client').onclick=function(){ stopChat(); showClient(d.client_id); };
     }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
   }
-  // ℹ️ детали сделки: сумма, состав, файлы, менеджер — всё, что убрано из чата
+  // строка задачи с чекбоксом и удалением
+  function taskRow(t){
+    var due=t.due_at?' · до '+stamp(t.due_at):'';
+    return '<div class="task-row'+(t.done?' done':'')+'"><label><input type="checkbox" data-task-done="'+esc(t.id)+'" data-on="'+(t.done?'1':'0')+'"'+(t.done?' checked':'')+'> <span>'+esc(t.title)+due+'</span></label><button class="ghost danger" data-task-del="'+esc(t.id)+'">✕</button></div>';
+  }
+  // ℹ️ детали сделки: сумма, поступления/остаток, доставка, состав, задачи, файлы
   async function showDealInfo(id){
     openSheet('Детали','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
     try{
       var r=await api('GET','/deals/'+id);if(gen!==sheetGeneration)return;
-      var d=r.deal, files=r.files;
+      var d=r.deal, files=r.files, payments=r.payments||[], tasks=r.tasks||[], paid=r.paid||0, due=r.due||0;
       $('sheet-title').textContent=d.client_name;
+      var deliveryBits=[d.city,d.address].filter(Boolean).join(', ');
+      var deliveryWhen=[day(d.ship_date)!=='Не указана'?day(d.ship_date):'', d.ship_time].filter(Boolean).join(' · ');
+      var openTasks=tasks.filter(function(t){return !t.done;}), doneTasks=tasks.filter(function(t){return t.done;});
       body.innerHTML='<button class="ghost" id="di-back" style="margin-bottom:8px">← в чат</button>'+
         '<span class="pill">'+esc(d.stage_name)+'</span><div class="amount">'+esc(money(d.amount))+'</div><p class="pre">'+esc(d.title)+'</p>'+
         '<p class="hint">'+esc(d.manager_name||'—')+' · '+esc(d.source||'Без источника')+(d.note?' · '+esc(d.note):'')+'</p>'+
         (d.lost_reason?'<p class="pre danger">Причина отказа: '+esc(d.lost_reason)+'</p>':'')+
+        '<h3>💳 Поступления</h3>'+
+        '<div class="metric"><span>Оплачено</span><b>'+esc(money(paid))+'</b></div>'+
+        '<div class="metric"><span>Остаток</span><b class="'+(due>0?'danger':'')+'">'+esc(money(due))+'</b></div>'+
+        payments.map(function(p){return '<div class="pay-row"><span>'+esc(money(p.amount))+' · '+esc(day(p.ts))+(p.note?' · '+esc(p.note):'')+'</span><button class="ghost danger" data-pay="'+esc(p.id)+'">✕</button></div>';}).join('')+
+        '<form id="pay-form" class="sub-form">'+field('Добавить поступление, ₸','pay_amount','','number','min="1" max="1000000000000" step="0.01"')+field('Комментарий','pay_note','','text','maxlength="300"')+'<button class="ghost" type="submit">+ Добавить оплату</button><p class="error" data-error role="alert"></p></form>'+
+        '<h3>🚚 Доставка</h3><p class="muted">'+(deliveryBits?esc(deliveryBits):'Адрес не указан — заполни в «Клиент и доставка»')+(deliveryWhen?' · '+esc(deliveryWhen):'')+'</p>'+
         (d.is_won&&!files.length?'<p class="hint">⚠ Документ оплаты (Kaspi) не прикреплён — добавьте в чате скрепкой.</p>':'')+
-        '<h3>Состав и отгрузка</h3><p class="muted">Дата: '+esc(day(d.ship_date))+'</p>'+(d.items.length?d.items.map(function(x){return '<div class="metric"><span>'+esc(x.name)+' × '+esc(x.qty)+'</span><b>'+esc(money(x.price*x.qty))+'</b></div>';}).join(''):'<p class="muted">Состав не заполнен</p>')+
+        '<h3>Состав</h3>'+(d.items.length?d.items.map(function(x){return '<div class="metric"><span>'+esc(x.name)+' × '+esc(x.qty)+'</span><b>'+esc(money(x.price*x.qty))+'</b></div>';}).join(''):'<p class="muted">Состав не заполнен</p>')+
+        '<h3>✅ Задачи</h3>'+
+        (openTasks.length?openTasks.map(taskRow).join(''):'<p class="muted">Текущих задач нет</p>')+
+        (doneTasks.length?'<p class="muted" style="margin:8px 0 2px">Завершённые</p>'+doneTasks.map(taskRow).join(''):'')+
+        '<form id="task-form" class="sub-form">'+field('Новая задача','task_title','','text','maxlength="300"')+field('Срок (необязательно)','task_due','','datetime-local')+'<button class="ghost" type="submit">+ Задача</button><p class="error" data-error role="alert"></p></form>'+
         '<h3>Файлы</h3><div class="files">'+files.map(function(f){
           var safe=/^\/uploads\/[\w-]+\.(jpg|png|webp|pdf)$/.test(f.url);if(!safe)return '';
           return '<a class="file" href="'+esc(f.url)+'" target="_blank" rel="noopener noreferrer">'+(f.mime.indexOf('image/')===0?'<img loading="lazy" src="'+esc(f.url)+'" alt="'+esc(f.name)+'">':'PDF · ')+esc(f.name)+'</a>';
         }).join('')+(files.length?'':'<p class="muted">Файлов нет</p>')+'</div>'+
-        '<div class="actions" style="margin-top:10px"><button class="ghost" id="di-edit">✏️ Изменить сделку</button><button class="ghost" id="di-client">Клиент</button></div>';
+        '<div class="actions" style="margin-top:10px"><button class="ghost" id="di-edit">✏️ Изменить сделку</button><button class="ghost" id="di-client">Клиент и доставка</button></div>';
       $('di-back').onclick=function(){showDeal(d.id);};
       $('di-edit').onclick=function(){editDeal(d);};
       $('di-client').onclick=function(){showClient(d.client_id);};
+      // добавить поступление
+      $('pay-form').onsubmit=async function(e){e.preventDefault();var f=e.target,errb=f.querySelector('[data-error]');errb.textContent='';var amt=f.elements.namedItem('pay_amount').value;if(!(Number(amt)>0)){errb.textContent='Укажите сумму больше нуля';return;}var btn=f.querySelector('[type=submit]');btn.disabled=true;try{await api('POST','/deals/'+d.id+'/payments',{reqId:uid(),amount:amt,note:f.elements.namedItem('pay_note').value});toast('Поступление добавлено');await showDealInfo(d.id);}catch(err){errb.textContent=error(err);btn.disabled=false;}};
+      // удалить поступление
+      body.querySelectorAll('[data-pay]').forEach(function(b){b.onclick=async function(){if(!confirm('Удалить это поступление?'))return;try{await api('DELETE','/deals/'+d.id+'/payments/'+b.dataset.pay,{reqId:uid()});toast('Удалено');await showDealInfo(d.id);}catch(err){toast(error(err));}};});
+      // создать задачу
+      $('task-form').onsubmit=async function(e){e.preventDefault();var f=e.target,errb=f.querySelector('[data-error]');errb.textContent='';var title=f.elements.namedItem('task_title').value.trim();if(!title){errb.textContent='Впишите задачу';return;}var duev=f.elements.namedItem('task_due').value;var btn=f.querySelector('[type=submit]');btn.disabled=true;try{await api('POST','/deals/'+d.id+'/tasks',{reqId:uid(),title:title,due_at:duev?duev+':00+05:00':''});toast('Задача создана');await showDealInfo(d.id);}catch(err){errb.textContent=error(err);btn.disabled=false;}};
+      // отметить/удалить задачу
+      body.querySelectorAll('[data-task-done]').forEach(function(b){b.onclick=async function(){try{await api('POST','/tasks/'+b.dataset.taskDone+'/done',{reqId:uid(),done:b.dataset.on!=='1'});await showDealInfo(d.id);}catch(err){toast(error(err));}};});
+      body.querySelectorAll('[data-task-del]').forEach(function(b){b.onclick=async function(){try{await api('DELETE','/tasks/'+b.dataset.taskDel,{reqId:uid()});await showDealInfo(d.id);}catch(err){toast(error(err));}};});
     }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
   }
   function itemHtml(x){return '<div class="item" data-variant="'+esc(x.variant_id||'')+'">'+field('Изделие','item_name',x.name,'text','required maxlength="200"')+'<div class="item-grid">'+field('Количество','item_qty',x.qty==null?1:x.qty,'number','required min="0.01" step="0.01"')+field('Цена, ₸','item_price',x.price==null?0:x.price,'number','required min="0" max="1000000000000" step="0.01"')+'</div><button type="button" class="ghost danger" data-remove>Убрать позицию</button></div>';}
@@ -411,8 +454,9 @@
   async function showClient(id){
     openSheet('Клиент','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
     try{var r=await api('GET','/clients/'+id);if(gen!==sheetGeneration)return;var c=r.client;$('sheet-title').textContent=c.name;
-      body.innerHTML=contactLinks(c)+'<p class="muted">'+esc(c.source||'Без источника')+(c.instagram?' · Instagram: '+esc(c.instagram):'')+'</p><p class="pre">'+esc(c.note)+'</p><div class="actions"><button class="btn" id="client-new">+ Заявка</button><button class="ghost" id="client-edit">Изменить клиента</button></div><h3>История сделок</h3>'+r.deals.map(function(d){return '<button class="card client-row" data-deal="'+esc(d.id)+'"><strong>'+esc(d.title)+'</strong><div class="muted">'+esc(d.stage_name)+' · '+esc(money(d.amount))+' · '+esc(stamp(d.created_at))+'</div></button>';}).join('');bindDeals(body);
-      $('client-new').onclick=function(){quickDeal(c);};$('client-edit').onclick=function(){openSheet('Изменить клиента','<form id="client-form">'+clientForm(c)+submit()+'</form>');var f=$('client-form');mutation(f,'PATCH','/clients/'+c.id,function(){return {baseRev:c.rev,name:val(f,'name'),phone:val(f,'phone'),instagram:val(f,'instagram'),source:val(f,'source'),note:val(f,'note')};},async function(){toast('Клиент сохранён');await showClient(c.id);await reload();});};
+      var delivery=(c.city||c.address)?'<p class="muted">📍 '+esc([c.city,c.address].filter(Boolean).join(', '))+'</p>':'';
+      body.innerHTML=contactLinks(c)+'<p class="muted">'+esc(c.source||'Без источника')+(c.instagram?' · Instagram: '+esc(c.instagram):'')+'</p>'+delivery+'<p class="pre">'+esc(c.note)+'</p><div class="actions"><button class="btn" id="client-new">+ Заявка</button><button class="ghost" id="client-edit">Изменить клиента</button></div><h3>История сделок</h3>'+r.deals.map(function(d){return '<button class="card client-row" data-deal="'+esc(d.id)+'"><strong>'+esc(d.title)+'</strong><div class="muted">'+esc(d.stage_name)+' · '+esc(money(d.amount))+' · '+esc(stamp(d.created_at))+'</div></button>';}).join('');bindDeals(body);
+      $('client-new').onclick=function(){quickDeal(c);};$('client-edit').onclick=function(){openSheet('Изменить клиента','<form id="client-form">'+clientForm(c)+submit()+'</form>');var f=$('client-form');mutation(f,'PATCH','/clients/'+c.id,function(){return {baseRev:c.rev,name:val(f,'name'),phone:val(f,'phone'),city:val(f,'city'),address:val(f,'address'),instagram:val(f,'instagram'),source:val(f,'source'),note:val(f,'note')};},async function(){toast('Клиент сохранён');await showClient(c.id);await reload();});};
     }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
   }
   var range=null,analyticsSeq=0;

@@ -3,6 +3,9 @@
    Строится «вхолостую»: без ключа отправка отдаёт 503, приём работает всегда. Ключ воткнём в день переезда.
    Инъекция хелперов из server.js — как в crm.js (pool, auth, requireAny, withTx, savePhoto, sendPushToRole). */
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
 const PHONE_LOCK = 7383;          // тот же смысл, что PHONE в crm.js — сериализуем find-or-create клиента по телефону
 const API_URL = (process.env.WA_API_URL || 'https://waba-v2.360dialog.io').replace(/\/+$/,'');
@@ -79,7 +82,8 @@ function messageContent(m){
   return { type:t, text:'', mediaId:obj.id || null, mime:obj.mime_type || null, caption:obj.caption || '' };
 }
 
-function register(app, { pool, auth, requireAny, withTx, sendPushToRole }) {
+function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadDir }) {
+  const UPLOAD_DIR = uploadDir || '/var/www/borzo/uploads';
   const pub = express.Router();     // публичный (без токена): 360dialog постит сюда
   const api = express.Router();     // авторизованный
 
@@ -187,6 +191,32 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole }) {
     res.json({ connected: !!API_KEY, phone_id: OUR_PHONE_ID || null });
   }));
 
+  // скачать вложение (голосовое/фото/видео/документ) с 360dialog, сохранить в uploads, вернуть ссылку
+  api.get('/media/:msgId', route(async (req,res)=>{
+    const mid = Number(req.params.msgId);
+    if(!Number.isSafeInteger(mid) || mid<1) throw err(400,'некорректное сообщение');
+    const m = (await pool.query('SELECT * FROM wa_messages WHERE id=$1',[mid])).rows[0];
+    if(!m) throw err(404,'сообщение не найдено');
+    if(m.media_url) return res.json({ url:m.media_url, mime:m.mime||'' });     // уже скачано
+    if(!m.media_id) throw err(400,'у сообщения нет вложения');
+    if(!API_KEY) throw err(503,'WhatsApp ещё не подключён — вложения появятся после переезда');
+    // 1) метаданные медиа (Meta/360dialog: GET /{media-id} → {url, mime_type})
+    const meta = await fetch(API_URL+'/'+encodeURIComponent(m.media_id), { headers:{ 'D360-API-KEY':API_KEY } });
+    const mj = await meta.json().catch(()=>({}));
+    if(!meta.ok || !mj.url) throw err(502,'не удалось получить ссылку на вложение');
+    // 2) сами байты (у 360dialog ссылка требует тот же ключ)
+    const bin = await fetch(mj.url, { headers:{ 'D360-API-KEY':API_KEY } });
+    if(!bin.ok) throw err(502,'не удалось скачать вложение');
+    const buf = Buffer.from(await bin.arrayBuffer());
+    if(!buf.length || buf.length > 25*1024*1024) throw err(413,'вложение слишком большое (до 25 МБ)');
+    const mime = mj.mime_type || m.mime || 'application/octet-stream';
+    const ext = (mime.split('/')[1]||'bin').split(';')[0].replace('jpeg','jpg');
+    const name = crypto.randomUUID()+'.'+ext.replace(/[^a-z0-9]/gi,'').slice(0,8);
+    fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
+    const url = '/uploads/'+name;
+    await pool.query('UPDATE wa_messages SET media_url=$1, mime=$2 WHERE id=$3',[url, mime, mid]);
+    res.json({ url:url, mime:mime });
+  }));
   // лента чата по сделке
   api.get('/messages/:dealId', route(async (req,res)=>{
     const dealId = Number(req.params.dealId);

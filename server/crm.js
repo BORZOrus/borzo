@@ -79,6 +79,26 @@ async function initSchema(db) {
     ALTER TABLE crm_cat_variants ADD COLUMN IF NOT EXISTS photo TEXT NOT NULL DEFAULT '';
     ALTER TABLE crm_cat_variants ADD COLUMN IF NOT EXISTS ord INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS agent_on BOOLEAN NOT NULL DEFAULT true;
+    -- профиль-доставка (по Mindsales): город и адрес клиента, время доставки на сделке (дата уже есть — ship_date)
+    ALTER TABLE crm_clients ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';
+    ALTER TABLE crm_clients ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT '';
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS ship_time TEXT NOT NULL DEFAULT '';
+    -- частичные оплаты по сделке (Поступления / Остаток). Это витрина продаж CRM, НЕ касса/котёл — деньги там не двигаются.
+    CREATE TABLE IF NOT EXISTS crm_payments (
+      id SERIAL PRIMARY KEY, deal_id INTEGER NOT NULL REFERENCES crm_deals(id),
+      amount NUMERIC(16,2) NOT NULL CHECK(amount > 0), ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+      note TEXT NOT NULL DEFAULT '', author_id INTEGER REFERENCES users(id), author_name TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS crm_payments_deal_idx ON crm_payments(deal_id, ts, id);
+    -- задачи по сделке (Текущие / Завершённые)
+    CREATE TABLE IF NOT EXISTS crm_tasks (
+      id SERIAL PRIMARY KEY, deal_id INTEGER REFERENCES crm_deals(id),
+      title TEXT NOT NULL, due_at TIMESTAMPTZ, done BOOLEAN NOT NULL DEFAULT false, done_at TIMESTAMPTZ,
+      author_id INTEGER REFERENCES users(id), author_name TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS crm_tasks_deal_idx ON crm_tasks(deal_id);
+    CREATE INDEX IF NOT EXISTS crm_tasks_open_idx ON crm_tasks(done, due_at);
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) VALUES
       ('new','Новая заявка',1,false,false), ('working','В работе',2,false,false),
       ('selection','Подбор решения',3,false,false), ('agreed','Договорились/Предоплата',4,false,false),
@@ -141,7 +161,7 @@ function canonical(x) {
   if(x && typeof x==='object') return Object.fromEntries(Object.keys(x).sort().map(k=>[k,canonical(x[k])]));
   return x;
 }
-const DEAL_SELECT = `SELECT d.*, d.ship_date::text AS ship_date, c.name AS client_name, c.phone,
+const DEAL_SELECT = `SELECT d.*, d.ship_date::text AS ship_date, c.name AS client_name, c.phone, c.city, c.address,
   s.name AS stage_name, s.is_won, s.is_lost, u.name AS manager_name
   FROM crm_deals d JOIN crm_clients c ON c.id=d.client_id
   JOIN crm_stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.manager_id`;
@@ -172,8 +192,8 @@ async function clientCreate(db,b,requirePhone=true) {
     const existing=await db.query('SELECT * FROM crm_clients WHERE phone=$1 ORDER BY id LIMIT 1',[p]);
     if(existing.rowCount) return existing.rows[0];
   }
-  const r=await db.query(`INSERT INTO crm_clients(name,phone,instagram,source,note) VALUES($1,$2,$3,$4,$5) RETURNING *`,
-    [name,p,str(b.instagram,'Instagram',200),str(b.source,'Источник',100),str(b.note,'Заметка',10000)]);
+  const r=await db.query(`INSERT INTO crm_clients(name,phone,instagram,source,note,city,address) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [name,p,str(b.instagram,'Instagram',200),str(b.source,'Источник',100),str(b.note,'Заметка',10000),str(b.city,'Город',100),str(b.address,'Адрес доставки',300)]);
   return r.rows[0];
 }
 function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,uploadDir}) {
@@ -236,9 +256,9 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     if(!r.rowCount) throw err(404,'Клиент не найден');
     version(r.rows[0],req.body.baseRev);
     const c={...r.rows[0]}, b=req.body;
-    for(const k of ['name','instagram','source','note']) if(k in b) c[k]=str(b[k],k,k==='note'?10000:k==='source'?100:200,k==='name');
+    for(const k of ['name','instagram','source','note','city','address']) if(k in b) c[k]=str(b[k],k,k==='note'?10000:k==='address'?300:k==='source'||k==='city'?100:200,k==='name');
     if('phone' in b) c.phone=phone(b.phone);
-    const out=await db.query(`UPDATE crm_clients SET name=$1,phone=$2,instagram=$3,source=$4,note=$5,rev=rev+1,updated_at=now() WHERE id=$6 RETURNING *`,[c.name,c.phone,c.instagram,c.source,c.note,c.id]);
+    const out=await db.query(`UPDATE crm_clients SET name=$1,phone=$2,instagram=$3,source=$4,note=$5,city=$6,address=$7,rev=rev+1,updated_at=now() WHERE id=$8 RETURNING *`,[c.name,c.phone,c.instagram,c.source,c.note,c.city,c.address,c.id]);
     return {client:out.rows[0]};
   }));
   router.get('/deals',route(async(req,res)=>{
@@ -246,8 +266,47 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
   }));
   router.get('/deals/:id',route(async(req,res)=>{
     const d=await dealBy(pool,req.params.id);
-    const f=await pool.query('SELECT * FROM crm_files WHERE deal_id=$1 ORDER BY id',[d.id]);
-    res.json({deal:d,files:f.rows});
+    const [f,p,t]=await Promise.all([
+      pool.query('SELECT * FROM crm_files WHERE deal_id=$1 ORDER BY id',[d.id]),
+      pool.query('SELECT * FROM crm_payments WHERE deal_id=$1 ORDER BY ts,id',[d.id]),
+      pool.query('SELECT * FROM crm_tasks WHERE deal_id=$1 ORDER BY done,due_at NULLS LAST,id',[d.id])]);
+    const paid=p.rows.reduce((s,x)=>s+Number(x.amount),0);
+    res.json({deal:d,files:f.rows,payments:p.rows,paid:paid,due:Math.max(0,Number(d.amount)-paid),tasks:t.rows});
+  }));
+  // добавить поступление (частичную оплату) по сделке
+  router.post('/deals/:id/payments',mutate(async(req,db)=>{
+    const d=await dealBy(db,req.params.id);
+    const amount=number(req.body.amount,'Сумма поступления',true);
+    const r=await db.query('INSERT INTO crm_payments(deal_id,amount,note,author_id,author_name) VALUES($1,$2,$3,$4,$5) RETURNING *',
+      [d.id,amount,str(req.body.note,'Комментарий',300),req.user.id,req.user.name]);
+    await event(db,req.user,d.id,'note','💳 Поступление: '+Math.round(amount).toLocaleString('ru-RU')+' ₸'+(req.body.note?' · '+str(req.body.note,'Комментарий',300):''));
+    return {payment:r.rows[0]};
+  }));
+  // удалить поступление (исправление ошибки)
+  router.delete('/deals/:id/payments/:pid',mutate(async(req,db)=>{
+    const d=await dealBy(db,req.params.id);
+    const r=await db.query('DELETE FROM crm_payments WHERE id=$1 AND deal_id=$2 RETURNING amount',[id(req.params.pid),d.id]);
+    if(!r.rowCount) throw err(404,'Поступление не найдено');
+    await event(db,req.user,d.id,'note','↩️ Удалено поступление: '+Math.round(Number(r.rows[0].amount)).toLocaleString('ru-RU')+' ₸');
+    return {ok:true};
+  }));
+  // задачи по сделке
+  router.post('/deals/:id/tasks',mutate(async(req,db)=>{
+    const d=await dealBy(db,req.params.id);
+    const title=str(req.body.title,'Задача',300,true);
+    const due=timestamp(req.body.due_at,'Срок');
+    const r=await db.query('INSERT INTO crm_tasks(deal_id,title,due_at,author_id,author_name) VALUES($1,$2,$3,$4,$5) RETURNING *',
+      [d.id,title,due,req.user.id,req.user.name]);
+    return {task:r.rows[0]};
+  }));
+  router.post('/tasks/:id/done',mutate(async(req,db)=>{
+    const done=req.body.done!==false;
+    const r=await db.query('UPDATE crm_tasks SET done=$1,done_at=CASE WHEN $1 THEN now() ELSE NULL END WHERE id=$2 RETURNING *',[done,id(req.params.id)]);
+    if(!r.rowCount) throw err(404,'Задача не найдена');
+    return {task:r.rows[0]};
+  }));
+  router.delete('/tasks/:id',mutate(async(req,db)=>{
+    await db.query('DELETE FROM crm_tasks WHERE id=$1',[id(req.params.id)]); return {ok:true};
   }));
   router.post('/deals',mutate(async(req,db)=>{
     const b=req.body;
@@ -267,7 +326,7 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
   router.patch('/deals/:id',mutate(async(req,db)=>{
     const d=await dealBy(db,req.params.id,true), b=req.body; version(d,b.baseRev);
     if('stage_id' in b) throw err(400,'Меняйте этап через действие «Сменить этап»');
-    for(const k of ['title','source','note','lost_reason']) if(k in b) d[k]=str(b[k],k,k==='note'?10000:k==='lost_reason'?1000:k==='source'?100:200,k==='title');
+    for(const k of ['title','source','note','lost_reason','ship_time']) if(k in b) d[k]=str(b[k],k,k==='note'?10000:k==='lost_reason'?1000:k==='ship_time'?100:k==='source'?100:200,k==='title');
     if('amount' in b) d.amount=number(b.amount,'Сумма');
     if('items' in b) d.items=items(b.items);
     if('ship_date' in b) d.ship_date=date(b.ship_date);
@@ -278,8 +337,8 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
       d.closed_at=timestamp(b.closed_at,'Дата закрытия');
       if(!d.closed_at) throw err(400,'Укажите дату закрытия');
     }
-    await db.query(`UPDATE crm_deals SET title=$1,amount=$2,manager_id=$3,source=$4,note=$5,items=$6,ship_date=$7,lost_reason=$8,closed_at=$9,imported_incomplete=false,rev=rev+1,updated_at=now() WHERE id=$10`,
-      [d.title,d.amount,d.manager_id,d.source,d.note,JSON.stringify(d.items),d.ship_date,d.lost_reason,d.closed_at,d.id]);
+    await db.query(`UPDATE crm_deals SET title=$1,amount=$2,manager_id=$3,source=$4,note=$5,items=$6,ship_date=$7,lost_reason=$8,closed_at=$9,ship_time=$10,imported_incomplete=false,rev=rev+1,updated_at=now() WHERE id=$11`,
+      [d.title,d.amount,d.manager_id,d.source,d.note,JSON.stringify(d.items),d.ship_date,d.lost_reason,d.closed_at,d.ship_time==null?'':d.ship_time,d.id]);
     await event(db,req.user,d.id,'note','Обновлены поля сделки');
     return {deal:await dealBy(db,d.id)};
   }));

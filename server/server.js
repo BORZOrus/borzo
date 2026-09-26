@@ -819,7 +819,7 @@ app.post('/api/push/subscribe', auth, async (req,res)=>{
 // CRM uses the existing helpers without modifying other modules.
 crm.register(app, {pool, auth, requireAny, requireRole, withTx, savePhoto, uploadDir:UPLOAD_DIR});
 // WhatsApp (360dialog): вебхук приёма (публичный) + отправка/чат (авторизованные)
-wa.register(app, {pool, auth, requireAny, withTx, savePhoto, sendPushToRole});
+wa.register(app, {pool, auth, requireAny, withTx, savePhoto, sendPushToRole, uploadDir:UPLOAD_DIR});
 
 app.get('/api/health', (req,res)=> res.json({ ok:true }));
 
