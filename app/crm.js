@@ -104,24 +104,23 @@
   function renderDeals(){
     var oldBoard=$('main').querySelector('.board'),oldScroll=oldBoard?oldBoard.scrollLeft:0;
     var deals=state.deals.filter(matches);
-    $('main').innerHTML='<div class="agbar">🤖 Агент: <b>'+(state.agentGlobal?'вкл всем':'выкл всем')+'</b><button class="ghost" id="agent-cfg">Настроить</button></div>'+
-      '<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
+    $('main').innerHTML='<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
       var rows=deals.filter(function(d){return d.stage_id===s.id;});
-      return '<section class="column '+(s.is_won?'won':s.is_lost?'lost':'')+'"><header class="col-head"><h2><span class="dot"></span>'+esc(s.name)+'</h2><div class="muted">'+esc(rows.length)+' · '+esc(money(rows.reduce(function(n,d){return n+Number(d.amount);},0)))+'</div></header>'+rows.map(function(d){
+      var agOn=state.agentStages[s.code]===true;
+      return '<section class="column '+(s.is_won?'won':s.is_lost?'lost':'')+'"><header class="col-head"><div class="col-top"><h2><span class="dot"></span>'+esc(s.name)+'</h2><button class="col-ag'+(agOn?' on':'')+'" data-agstage="'+esc(s.code)+'" title="Агент на этой стадии: '+(agOn?'вкл':'выкл')+'">🤖</button></div><div class="muted">'+esc(rows.length)+' · '+esc(money(rows.reduce(function(n,d){return n+Number(d.amount);},0)))+'</div></header>'+rows.map(function(d){
         var days=d.stage_entered_at?Math.max(0,Math.floor((Date.now()-new Date(d.stage_entered_at).getTime())/86400000))+' дн. в этапе':'Срок неизвестен';
         var badge=Number(d.wa_unread)>0?' <span class="wa-badge">'+esc(d.wa_unread)+'</span>':'';
         var ag=effAgent(d)?' <span class="ag-on" title="Агент отвечает">🤖</span>':'';
         var take=s.code==='new'?'<button class="take-btn" data-take="'+esc(d.id)+'">▶ Взять в работу</button>':'';
-        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+ag+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<button class="stage-btn" data-move="'+esc(d.id)+'">Сменить этап →</button></article>';
+        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+ag+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move"><button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
       }).join('')+(rows.length?'':'<div class="empty">'+(state.q?'Нет совпадений':'Пока нет сделок')+'</div>')+'</section>';
     }).join('')+'</div>';
     var board=$('main').querySelector('.board');
     if(state.q&&state.q!==lastBoardQuery){var first=board.querySelector('.deal');if(first)board.scrollLeft=first.parentElement.offsetLeft-16;}
     else board.scrollLeft=oldScroll;lastBoardQuery=state.q;
     bindDeals($('main'));
-    if($('agent-cfg'))$('agent-cfg').onclick=openAgentPanel;
   }
-  // панель управления агентом: глобально + по стадиям воронки (точечно — в самом чате)
+  // (устар.) панель управления агентом целиком — заменена мини-тумблерами на колонках; оставлена на всякий
   function openAgentPanel(){
     function render(){
       var stages=state.stages.map(function(s){
@@ -154,6 +153,26 @@
         await api('POST','/deals/'+d.id+'/stage',{reqId:uid(),baseRev:r1.deal.rev,stage_id:working.id});
         toast('Взято в работу'); await reload();
       }catch(err){ toast(error(err)); b.disabled=false; }
+    };});
+    // перемещение карточки по воронке влево/вправо на одну стадию
+    root.querySelectorAll('[data-mv]').forEach(function(b){b.onclick=async function(e){
+      e.stopPropagation();
+      var p=b.dataset.mv.split('|'), id=p[0], dir=Number(p[1]);
+      var d=state.deals.find(function(x){return String(x.id)===String(id);}); if(!d)return;
+      var idx=-1; state.stages.forEach(function(s,i){if(s.id===d.stage_id)idx=i;});
+      var target=state.stages[idx+dir]; if(!target)return;
+      if(target.is_won){ showSale(d.id); return; }
+      if(target.is_lost){ showStage(d.id,d); return; }
+      b.disabled=true;
+      try{ await api('POST','/deals/'+d.id+'/stage',{reqId:uid(),baseRev:d.rev,stage_id:target.id}); toast('Этап: '+target.name); await reload(); }
+      catch(err){ toast(error(err)); b.disabled=false; }
+    };});
+    // мини-тумблер агента на колонке (стадии)
+    root.querySelectorAll('[data-agstage]').forEach(function(b){b.onclick=async function(e){
+      e.stopPropagation();
+      var code=b.dataset.agstage, val=!(state.agentStages[code]===true);
+      try{ var r=await api('POST','/agent-settings',{reqId:uid(),stageCode:code,value:val}); state.agentGlobal=r.agentGlobal; state.agentStages=r.agentStages||{}; if(state.tab==='deals')renderDeals(); }
+      catch(err){ toast(error(err)); }
     };});
   }
   function clientForm(c){return field('Имя клиента','name',c.name,'text','required maxlength="200" autocomplete="name"')+field('Телефон','phone',c.phone,'tel','autocomplete="tel" placeholder="+7 700 000 00 00"')+field('Город','city',c.city,'text','maxlength="100"')+field('Адрес доставки','address',c.address,'text','maxlength="300"')+field('Instagram','instagram',c.instagram,'text','maxlength="200"')+source(c.source)+area('Заметка о клиенте','note',c.note);}
@@ -628,7 +647,7 @@
     mutation(f,'PATCH','/deals/'+d.id,function(){var b={baseRev:d.rev,title:val(f,'title'),amount:val(f,'amount'),manager_id:Number(val(f,'manager_id')),source:val(f,'source'),note:val(f,'note'),items:readItems(),ship_date:val(f,'ship_date')};if(f.elements.namedItem('closed_date')&&val(f,'closed_date')){var original=d.closed_at?new Date(new Date(d.closed_at).getTime()+5*3600000).toISOString().slice(0,10):'';if(val(f,'closed_date')!==original)b.closed_at=val(f,'closed_date')+'T12:00:00+05:00';}return b;},async function(){toast('Сделка сохранена');await showDeal(d.id);await reload();});
   }
   var clientSeq=0;
-  async function loadClients(){var seq=++clientSeq;try{var r=await api('GET','/clients?q='+encodeURIComponent(state.q));if(state.tab!=='clients'||seq!==clientSeq)return;state.clients=r.clients;$('main').innerHTML='<div class="content">'+(r.clients.length?r.clients.map(function(c){return '<button class="card client-row" data-client="'+esc(c.id)+'"><strong>'+esc(c.name)+'</strong><div class="muted">'+esc(c.phone||'Без телефона')+' · Сделок: '+esc(c.deals_count)+'</div></button>';}).join(''):'<div class="empty">'+(state.q?'Клиенты не найдены':'Клиенты появятся после создания первой заявки')+'</div>')+'</div>';$('main').querySelectorAll('[data-client]').forEach(function(b){b.onclick=function(){showClient(b.dataset.client);};});}catch(e){if(state.tab==='clients')$('status').textContent=error(e);}}
+  async function loadClients(){var seq=++clientSeq;try{var r=await api('GET','/clients?q='+encodeURIComponent(state.q));if(state.tab!=='clients'||seq!==clientSeq)return;state.clients=r.clients;$('main').innerHTML='<div class="content"><button class="btn block" id="new-deal-c" style="margin-bottom:12px">+ Новая заявка вручную</button>'+(r.clients.length?r.clients.map(function(c){return '<button class="card client-row" data-client="'+esc(c.id)+'"><strong>'+esc(c.name)+'</strong><div class="muted">'+esc(c.phone||'Без телефона')+' · Сделок: '+esc(c.deals_count)+'</div></button>';}).join(''):'<div class="empty">'+(state.q?'Клиенты не найдены':'Клиенты появятся после создания первой заявки')+'</div>')+'</div>';$('new-deal-c').onclick=function(){quickDeal();};$('main').querySelectorAll('[data-client]').forEach(function(b){b.onclick=function(){showClient(b.dataset.client);};});}catch(e){if(state.tab==='clients')$('status').textContent=error(e);}}
   async function showClient(id){
     openSheet('Клиент','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
     try{var r=await api('GET','/clients/'+id);if(gen!==sheetGeneration)return;var c=r.client;$('sheet-title').textContent=c.name;
@@ -887,13 +906,13 @@
   }
   var searchTimer;
   $('search').oninput=function(){state.q=this.value.trim().toLowerCase();clearTimeout(searchTimer);if(state.tab==='deals')renderDeals();else searchTimer=setTimeout(loadClients,200);};
-  $('new-deal').onclick=function(){quickDeal();};$('refresh').onclick=reload;
+  $('refresh').onclick=reload;
   document.querySelectorAll('[data-tab]').forEach(function(b){b.onclick=function(){if(state.user)tab(b.dataset.tab);};});
   if(!API.token){location.replace('login.html?next=crm.html');return;}
   API.me().then(async function(r){
     if(!['mgr','fin'].includes(r.user.role)){location.replace('home.html');return;}
     state.user=r.user;var m=await api('GET','/meta');state.stages=m.stages;state.managers=m.managers;state.userId=m.user_id;state.agentGlobal=m.agentGlobal===true;state.agentStages=m.agentStages||{};
-    $('who').textContent=r.user.name;$('new-deal').disabled=false;$('import-tab').hidden=r.user.role!=='mgr';await reload();
+    $('who').textContent=r.user.name;$('import-tab').hidden=r.user.role!=='mgr';await reload();
   }).catch(function(e){$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p><button class="ghost" id="retry-start">Повторить</button></div>';$('retry-start').onclick=function(){location.reload();};});
   setInterval(function(){if(state.user&&sheet.hidden&&!document.hidden&&state.tab==='deals')reload();},20000);
   window.addEventListener('online',function(){if(state.user)reload();});
