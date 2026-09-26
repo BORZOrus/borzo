@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const webpush = require('web-push');
 const crm = require('./crm');
+const wa = require('./wa');
 if(process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE){
   webpush.setVapidDetails(process.env.VAPID_SUBJECT||'mailto:admin@borzopult.com', process.env.VAPID_PUBLIC, process.env.VAPID_PRIVATE);
 }
@@ -97,6 +98,7 @@ async function initSchema() {
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS bill_id TEXT;
   `);
   await crm.initSchema(pool);
+  await wa.initSchema(pool);
 }
 // подпись накладной (для защиты от дублей): позиции+сумма+категория, устойчива к перезаливке того же
 function sigOf(items, amount, category){
@@ -816,6 +818,8 @@ app.post('/api/push/subscribe', auth, async (req,res)=>{
 
 // CRM uses the existing helpers without modifying other modules.
 crm.register(app, {pool, auth, requireAny, requireRole, withTx, savePhoto, uploadDir:UPLOAD_DIR});
+// WhatsApp (360dialog): вебхук приёма (публичный) + отправка/чат (авторизованные)
+wa.register(app, {pool, auth, requireAny, withTx, savePhoto, sendPushToRole});
 
 app.get('/api/health', (req,res)=> res.json({ ok:true }));
 
