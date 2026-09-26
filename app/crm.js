@@ -2,7 +2,9 @@
 (function(){
   'use strict';
   var $=function(id){return document.getElementById(id);};
-  var state={user:null,stages:[],managers:[],deals:[],clients:[],templates:[],tab:'deals',q:'',userId:null};
+  var state={user:null,stages:[],managers:[],deals:[],clients:[],templates:[],tab:'deals',q:'',userId:null,agentGlobal:false,agentStages:{}};
+  // эффективный статус агента для сделки: точечный override сделки → флаг стадии → глобальный
+  function effAgent(d){ if(d.agent_override===true)return true; if(d.agent_override===false)return false; var st=state.agentStages[d.stage_code]; if(st===true)return true; if(st===false)return false; return state.agentGlobal===true; }
   var sheet=$('sheet'), body=$('sheet-body'), focusBefore=null, toastTimer=null, sheetGeneration=0, loading=false;
   var pendingMutation=false, uncertainMutation=false, refreshSequence=0;
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -102,19 +104,40 @@
   function renderDeals(){
     var oldBoard=$('main').querySelector('.board'),oldScroll=oldBoard?oldBoard.scrollLeft:0;
     var deals=state.deals.filter(matches);
-    $('main').innerHTML='<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
+    $('main').innerHTML='<div class="agbar">🤖 Агент: <b>'+(state.agentGlobal?'вкл всем':'выкл всем')+'</b><button class="ghost" id="agent-cfg">Настроить</button></div>'+
+      '<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
       var rows=deals.filter(function(d){return d.stage_id===s.id;});
       return '<section class="column '+(s.is_won?'won':s.is_lost?'lost':'')+'"><header class="col-head"><h2><span class="dot"></span>'+esc(s.name)+'</h2><div class="muted">'+esc(rows.length)+' · '+esc(money(rows.reduce(function(n,d){return n+Number(d.amount);},0)))+'</div></header>'+rows.map(function(d){
         var days=d.stage_entered_at?Math.max(0,Math.floor((Date.now()-new Date(d.stage_entered_at).getTime())/86400000))+' дн. в этапе':'Срок неизвестен';
         var badge=Number(d.wa_unread)>0?' <span class="wa-badge">'+esc(d.wa_unread)+'</span>':'';
+        var ag=effAgent(d)?' <span class="ag-on" title="Агент отвечает">🤖</span>':'';
         var take=s.code==='new'?'<button class="take-btn" data-take="'+esc(d.id)+'">▶ Взять в работу</button>':'';
-        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<button class="stage-btn" data-move="'+esc(d.id)+'">Сменить этап →</button></article>';
+        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+ag+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<button class="stage-btn" data-move="'+esc(d.id)+'">Сменить этап →</button></article>';
       }).join('')+(rows.length?'':'<div class="empty">'+(state.q?'Нет совпадений':'Пока нет сделок')+'</div>')+'</section>';
     }).join('')+'</div>';
     var board=$('main').querySelector('.board');
     if(state.q&&state.q!==lastBoardQuery){var first=board.querySelector('.deal');if(first)board.scrollLeft=first.parentElement.offsetLeft-16;}
     else board.scrollLeft=oldScroll;lastBoardQuery=state.q;
     bindDeals($('main'));
+    if($('agent-cfg'))$('agent-cfg').onclick=openAgentPanel;
+  }
+  // панель управления агентом: глобально + по стадиям воронки (точечно — в самом чате)
+  function openAgentPanel(){
+    function render(){
+      var stages=state.stages.map(function(s){
+        var v=state.agentStages[s.code]; // undefined=по глобалу, true=вкл, false=выкл
+        function b(val,lbl){ var on=(val==='inherit'&&v===undefined)||(val==='on'&&v===true)||(val==='off'&&v===false); return '<button class="seg-b'+(on?' on':'')+'" data-stage="'+esc(s.code)+'" data-val="'+val+'">'+lbl+'</button>'; }
+        return '<div class="ag-strow"><div class="ag-stname">'+esc(s.name)+'</div><div class="seg">'+b('inherit','Глобал')+b('on','Вкл')+b('off','Выкл')+'</div></div>';
+      }).join('');
+      body.innerHTML='<p class="hint">Порядок старшинства: <b>точечно в чате</b> → по стадии → глобально. В чате можно перекрыть для одного клиента.</p>'+
+        '<h3>Глобально (все чаты)</h3><div class="seg"><button class="seg-b'+(state.agentGlobal?' on':'')+'" data-g="on">Вкл всем</button><button class="seg-b'+(!state.agentGlobal?' on':'')+'" data-g="off">Выкл всем</button></div>'+
+        '<h3>По стадиям воронки</h3>'+stages+
+        '<p class="hint">Пока WhatsApp не подключён, тумблеры настраиваются впрок — агент начнёт отвечать после переезда.</p>';
+      body.querySelectorAll('[data-g]').forEach(function(bt){bt.onclick=async function(){ try{ var r=await api('POST','/agent-settings',{reqId:uid(),global:bt.dataset.g==='on'}); state.agentGlobal=r.agentGlobal; state.agentStages=r.agentStages||{}; render(); if(state.tab==='deals')renderDeals(); }catch(e){toast(error(e));} };});
+      body.querySelectorAll('[data-stage]').forEach(function(bt){bt.onclick=async function(){ var val=bt.dataset.val; try{ var r=await api('POST','/agent-settings',{reqId:uid(),stageCode:bt.dataset.stage,value:val==='inherit'?'inherit':(val==='on')}); state.agentGlobal=r.agentGlobal; state.agentStages=r.agentStages||{}; render(); if(state.tab==='deals')renderDeals(); }catch(e){toast(error(e));} };});
+    }
+    openSheet('🤖 Управление агентом','<div class="empty">…</div>');
+    render();
   }
   function bindDeals(root){
     root.querySelectorAll('[data-deal]').forEach(function(b){b.onclick=function(){showDeal(b.dataset.deal);};});
@@ -380,14 +403,17 @@
       body.innerHTML=
         '<div class="wa-head">'+
           '<span class="wa-ava">'+esc(initial)+'</span>'+
-          '<span class="wa-who"><b>'+esc(d.client_name)+'</b><small>'+esc(d.stage_name)+(d.agent_on?' · 🤖 агент':'')+'</small></span>'+
+          '<span class="wa-who"><b>'+esc(d.client_name)+'</b><small>'+esc(d.stage_name)+(effAgent(d)?' · 🤖 агент':'')+'</small></span>'+
           (p?'<a class="wa-ic" href="tel:'+esc(p)+'" title="Позвонить">📞</a>':'')+
           '<button class="wa-ic" id="wa-menu-btn" title="Меню">⋮</button>'+
         '</div>'+
         '<div class="wa-menu" id="wa-menu" hidden>'+
           '<button id="wm-sale">✅ Оформить продажу</button>'+
           (p?'<a href="https://wa.me/'+esc(p.slice(1))+'" target="_blank" rel="noopener noreferrer">🟢 Открыть в WhatsApp</a>':'')+
-          '<button id="wm-agent">🤖 Агент: '+(d.agent_on?'вкл — выключить тут':'выкл — включить тут')+'</button>'+
+          '<div class="wa-menu-h">🤖 Агент здесь: '+(d.agent_override===true?'включён':d.agent_override===false?'выключен':'по воронке ('+(effAgent(d)?'вкл':'выкл')+')')+'</div>'+
+          '<button data-agent="on"'+(d.agent_override===true?' class="am-on"':'')+'>Включить тут</button>'+
+          '<button data-agent="off"'+(d.agent_override===false?' class="am-on"':'')+'>Выключить тут</button>'+
+          '<button data-agent="inherit"'+(d.agent_override==null?' class="am-on"':'')+'>По воронке</button>'+
           '<button id="wm-stage">📊 Сменить этап</button>'+
           '<button id="wm-info">ℹ️ Детали сделки</button>'+
           '<button id="wm-client">👤 Клиент</button>'+
@@ -482,9 +508,9 @@
         this.value='';
       };
       $('wm-sale').onclick=function(){ stopChat(); showSale(d.id); };
-      $('wm-agent').onclick=async function(){
-        try{ await api('POST','/deals/'+d.id+'/agent',{reqId:uid(),on:!d.agent_on}); showDeal(d.id); }catch(e){toast(error(e));}
-      };
+      menu.querySelectorAll('[data-agent]').forEach(function(b){ b.onclick=async function(){
+        try{ await api('POST','/deals/'+d.id+'/agent',{reqId:uid(),mode:b.dataset.agent}); toast('Готово'); showDeal(d.id); reload(); }catch(e){toast(error(e));}
+      };});
       $('wm-stage').onclick=function(){ stopChat(); showStage(d.id,d); };
       $('wm-info').onclick=function(){ stopChat(); showDealInfo(d.id); };
       $('wm-client').onclick=function(){ stopChat(); showClient(d.client_id); };
@@ -855,7 +881,7 @@
   if(!API.token){location.replace('login.html?next=crm.html');return;}
   API.me().then(async function(r){
     if(!['mgr','fin'].includes(r.user.role)){location.replace('home.html');return;}
-    state.user=r.user;var m=await api('GET','/meta');state.stages=m.stages;state.managers=m.managers;state.userId=m.user_id;
+    state.user=r.user;var m=await api('GET','/meta');state.stages=m.stages;state.managers=m.managers;state.userId=m.user_id;state.agentGlobal=m.agentGlobal===true;state.agentStages=m.agentStages||{};
     $('who').textContent=r.user.name;$('new-deal').disabled=false;$('import-tab').hidden=r.user.role!=='mgr';await reload();
   }).catch(function(e){$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p><button class="ghost" id="retry-start">Повторить</button></div>';$('retry-start').onclick=function(){location.reload();};});
   setInterval(function(){if(state.user&&sheet.hidden&&!document.hidden&&state.tab==='deals')reload();},20000);

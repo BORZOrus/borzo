@@ -99,6 +99,11 @@ async function initSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS crm_tasks_deal_idx ON crm_tasks(deal_id);
     CREATE INDEX IF NOT EXISTS crm_tasks_open_idx ON crm_tasks(done, due_at);
+    -- настройки агента: глобальный тумблер + по стадиям воронки (per-deal override — в crm_deals.agent_override)
+    CREATE TABLE IF NOT EXISTS crm_settings (id INTEGER PRIMARY KEY DEFAULT 1, data JSONB NOT NULL DEFAULT '{}');
+    INSERT INTO crm_settings(id,data) VALUES(1,'{"agentGlobal":false,"agentStages":{}}') ON CONFLICT(id) DO NOTHING;
+    -- точечный перекрыватель агента на сделке: NULL=наследовать (воронка/глобал), true/false=жёстко тут
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS agent_override BOOLEAN;
     -- скрипты продаж (магистраль + инструменты): один blob той же формы, что сайт скриптов Руслана (blocks/mainOrder/sectionOrder/sections)
     CREATE TABLE IF NOT EXISTS crm_scripts (
       id INTEGER PRIMARY KEY DEFAULT 1, data JSONB NOT NULL DEFAULT '{}',
@@ -167,7 +172,7 @@ function canonical(x) {
   return x;
 }
 const DEAL_SELECT = `SELECT d.*, d.ship_date::text AS ship_date, c.name AS client_name, c.phone, c.city, c.address,
-  s.name AS stage_name, s.is_won, s.is_lost, u.name AS manager_name
+  s.name AS stage_name, s.code AS stage_code, s.is_won, s.is_lost, u.name AS manager_name
   FROM crm_deals d JOIN crm_clients c ON c.id=d.client_id
   JOIN crm_stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.manager_id`;
 async function stageBy(db,v) {
@@ -240,8 +245,26 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     res.json(out);
   });
   router.get('/meta',route(async(req,res)=>{
-    const [s,u]=await Promise.all([pool.query('SELECT * FROM crm_stages ORDER BY ord,id'),pool.query("SELECT id,name,role FROM users WHERE role IN ('mgr','fin') ORDER BY id")]);
-    res.json({stages:s.rows,managers:u.rows,user_id:req.user.id});
+    const [s,u,set]=await Promise.all([pool.query('SELECT * FROM crm_stages ORDER BY ord,id'),pool.query("SELECT id,name,role FROM users WHERE role IN ('mgr','fin') ORDER BY id"),pool.query('SELECT data FROM crm_settings WHERE id=1')]);
+    const cfg=(set.rowCount&&set.rows[0].data)||{};
+    res.json({stages:s.rows,managers:u.rows,user_id:req.user.id,agentGlobal:cfg.agentGlobal===true,agentStages:cfg.agentStages||{}});
+  }));
+  // настройки агента: глобальный тумблер и по стадиям (код стадии → вкл/выкл)
+  router.get('/agent-settings',route(async(req,res)=>{
+    const r=await pool.query('SELECT data FROM crm_settings WHERE id=1'); const c=(r.rowCount&&r.rows[0].data)||{};
+    res.json({agentGlobal:c.agentGlobal===true,agentStages:c.agentStages||{}});
+  }));
+  router.post('/agent-settings',mutate(async(req,db)=>{
+    const r=await db.query('SELECT data FROM crm_settings WHERE id=1 FOR UPDATE'); const c=(r.rowCount&&r.rows[0].data)||{agentGlobal:false,agentStages:{}};
+    if(!c.agentStages)c.agentStages={};
+    if('global' in req.body) c.agentGlobal=req.body.global===true;
+    if('stageCode' in req.body){
+      const code=str(req.body.stageCode,'Стадия',60,true);
+      if(req.body.value===null||req.body.value==='inherit') delete c.agentStages[code];
+      else c.agentStages[code]=req.body.value===true;
+    }
+    await db.query('UPDATE crm_settings SET data=$1 WHERE id=1',[JSON.stringify(c)]);
+    return {agentGlobal:c.agentGlobal===true,agentStages:c.agentStages};
   }));
   router.get('/clients',route(async(req,res)=>{
     const q=str(req.query.q,'Поиск',200), digits=q.replace(/\D/g,'');
@@ -369,13 +392,14 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     await event(db,req.user,d.id,'status',prev.name+' → '+s.name+(reason?' · '+reason:''),prev.id,s.id);
     return {deal:await dealBy(db,d.id)};
   }));
-  // тумблер агента на конкретный чат (глобальный появится вместе с WhatsApp-интеграцией)
+  // точечный тумблер агента на сделке: mode on/off/inherit → agent_override true/false/NULL
   router.post('/deals/:id/agent',mutate(async(req,db)=>{
     const d=await dealBy(db,req.params.id,true);
-    const on=req.body.on===true;
-    await db.query('UPDATE crm_deals SET agent_on=$1,updated_at=now() WHERE id=$2',[on,d.id]);
-    await event(db,req.user,d.id,'note',on?'🤖 Агент включён в этом чате':'🤖 Агент выключен — отвечает менеджер');
-    return {ok:true,agent_on:on};
+    const mode=['on','off','inherit'].includes(req.body.mode)?req.body.mode:(req.body.on===true?'on':'off');
+    const ov=mode==='on'?true:(mode==='off'?false:null);
+    await db.query('UPDATE crm_deals SET agent_override=$1,updated_at=now() WHERE id=$2',[ov,d.id]);
+    await event(db,req.user,d.id,'note',mode==='on'?'🤖 Агент включён в этом чате':mode==='off'?'🤖 Агент выключен в этом чате':'🤖 Агент — по воронке (наследует)');
+    return {ok:true,agent_override:ov};
   }));
   router.get('/deals/:id/events',route(async(req,res)=>{
     const d=await dealBy(pool,req.params.id);

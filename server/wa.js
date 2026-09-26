@@ -46,6 +46,9 @@ async function initSchema(db) {
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS last_msg_at TIMESTAMPTZ;
     -- имя из профиля WhatsApp (может отличаться от карточного)
     ALTER TABLE crm_clients ADD COLUMN IF NOT EXISTS wa_name TEXT NOT NULL DEFAULT '';
+    -- ответ на сообщение (цитата): id исходного сообщения WhatsApp + короткий текст для превью
+    ALTER TABLE wa_messages ADD COLUMN IF NOT EXISTS reply_to TEXT NOT NULL DEFAULT '';
+    ALTER TABLE wa_messages ADD COLUMN IF NOT EXISTS reply_text TEXT NOT NULL DEFAULT '';
   `);
 }
 
@@ -166,10 +169,11 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
           [deal.id, (clientCreated?'Новый лид из WhatsApp':'Новая заявка из WhatsApp')+' — необработан', st.id]);
       }
 
+      const inReplyTo = (m.context && m.context.id) ? String(m.context.id).slice(0,256) : '';
       await db.query(
-        `INSERT INTO wa_messages(wamid, deal_id, client_id, direction, wa_from, wa_to, type, text, media_id, mime, caption, ts, raw)
-         VALUES($1,$2,$3,'in',$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [wamid, deal.id, client.id, m.from, OUR_PHONE_ID || '', c.type, c.text, c.mediaId, c.mime, c.caption, ts, JSON.stringify(m)]);
+        `INSERT INTO wa_messages(wamid, deal_id, client_id, direction, wa_from, wa_to, type, text, media_id, mime, caption, ts, raw, reply_to)
+         VALUES($1,$2,$3,'in',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [wamid, deal.id, client.id, m.from, OUR_PHONE_ID || '', c.type, c.text, c.mediaId, c.mime, c.caption, ts, JSON.stringify(m), inReplyTo]);
       // сделка всплывает в списке, растёт счётчик непрочитанных
       await db.query('UPDATE crm_deals SET wa_unread=wa_unread+1, last_in_at=now(), last_msg_at=now(), updated_at=now() WHERE id=$1', [deal.id]);
     });
@@ -252,13 +256,17 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     if(!phone) throw err(400,'у клиента нет телефона');
     if(!API_KEY) throw err(503,'WhatsApp ещё не подключён — ключ появится в день переезда');
 
+    const replyTo = String(req.body.reply_to||'').trim().slice(0,256);        // wamid исходного сообщения (цитата)
+    const replyText = String(req.body.reply_text||'').trim().slice(0,200);    // короткий текст для превью цитаты
     const to = phone.replace(/\D/g,'');
     let wamid = null, sendErr = '';
     try {
+      const payload = { messaging_product:'whatsapp', recipient_type:'individual', to, type:'text', text:{ body:text, preview_url:false } };
+      if(replyTo) payload.context = { message_id: replyTo };                  // ответ с цитатой (как в WhatsApp)
       const resp = await fetch(API_URL+'/messages', {
         method:'POST',
         headers:{ 'D360-API-KEY':API_KEY, 'Content-Type':'application/json' },
-        body: JSON.stringify({ messaging_product:'whatsapp', recipient_type:'individual', to, type:'text', text:{ body:text, preview_url:false } })
+        body: JSON.stringify(payload)
       });
       const j = await resp.json().catch(()=>({}));
       if(!resp.ok){ sendErr = (j.error && (j.error.message||j.error.title)) || ('HTTP '+resp.status); throw err(502, 'WhatsApp не принял сообщение: '+sendErr); }
@@ -269,9 +277,9 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     let saved;
     try {
       saved = (await pool.query(
-        `INSERT INTO wa_messages(wamid, deal_id, client_id, direction, wa_from, wa_to, type, text, status, author_id, author_name, req_id, ts)
-         VALUES($1,$2,$3,'out',$4,$5,'text',$6,'sent',$7,$8,$9,$10) RETURNING *`,
-        [wamid, dealId, client_id, OUR_PHONE_ID||'', to, text, req.user.id, req.user.name, reqId, now])).rows[0];
+        `INSERT INTO wa_messages(wamid, deal_id, client_id, direction, wa_from, wa_to, type, text, status, author_id, author_name, req_id, ts, reply_to, reply_text)
+         VALUES($1,$2,$3,'out',$4,$5,'text',$6,'sent',$7,$8,$9,$10,$11,$12) RETURNING *`,
+        [wamid, dealId, client_id, OUR_PHONE_ID||'', to, text, req.user.id, req.user.name, reqId, now, replyTo, replyText])).rows[0];
     } catch(e){
       if(e.code==='23505' && reqId){ const ex=await pool.query('SELECT * FROM wa_messages WHERE req_id=$1',[reqId]); if(ex.rowCount) return res.json({ ok:true, message:ex.rows[0], idem:true }); }
       throw e;
