@@ -214,87 +214,149 @@
   }
   // подпись изменения ленты, чтобы перерисовывать только при новых данных
   function chatSig(evs, msgs){ return (evs.length?evs[evs.length-1].id:0)+'|'+(msgs?msgs.length:0)+'|'+(msgs&&msgs.length?(msgs[msgs.length-1].status||''):''); }
-  // ---------- скрипты продаж: панель «Магистраль + Инструменты» в чате (по кнопке 📋) ----------
-  var scriptsCache=null, scriptsRev=0, scriptsLoading=null, scrTab='main';
+  // ---------- скрипты продаж: панель-конструктор «Магистраль + Инструменты» (по кнопке 📋) ----------
+  var scriptsCache=null, scriptsRev=0, scriptsLoading=null, scrTab='main', scrEdit=false, scrDealId=null;
   function loadScripts(force){
     if(scriptsCache&&!force) return Promise.resolve(scriptsCache);
     if(scriptsLoading) return scriptsLoading;
-    scriptsLoading=api('GET','/scripts').then(function(r){ scriptsCache=(r.data&&typeof r.data==='object')?r.data:{blocks:{},mainOrder:[],sectionOrder:[],sections:{}}; scriptsRev=r.rev||0; scriptsLoading=null; return scriptsCache; }).catch(function(e){ scriptsLoading=null; throw e; });
+    scriptsLoading=api('GET','/scripts').then(function(r){ scriptsCache=(r.data&&typeof r.data==='object')?r.data:{blocks:{},mainOrder:[],sectionOrder:[],sections:{}}; if(!scriptsCache.blocks)scriptsCache.blocks={}; if(!scriptsCache.sections)scriptsCache.sections={}; scriptsRev=r.rev||0; scriptsLoading=null; return scriptsCache; }).catch(function(e){ scriptsLoading=null; throw e; });
     return scriptsLoading;
   }
+  function cssq(s){ return String(s).replace(/["\\]/g,'\\$&'); }
   function scrClose(){ var p=$('scr-panel'); if(p)p.remove(); }
   function scrInsert(text){ var ta=$('ch-text'); if(ta){ ta.value=(ta.value?ta.value+'\n':'')+text; ta.focus(); } scrClose(); }
-  // одна карточка сообщения блока: текст + «Вставить» + «✎»
+  // сохранить всю базу скриптов (compare-and-swap); при конфликте перечитать
+  async function saveScripts(){
+    try{ var r=await api('PUT','/scripts',{data:scriptsCache,baseRev:scriptsRev}); scriptsRev=r.rev; return true; }
+    catch(e){ if(e&&e.status===409){ toast('Скрипты изменили в другом месте — обновляю'); await loadScripts(true).catch(function(){}); scrRenderBody(); } else toast(error(e)); return false; }
+  }
+  // отправить текст клиенту по текущей сделке (реально через WhatsApp или заметкой до переезда)
+  async function scrSend(text){
+    if(!text||!scrDealId) return;
+    try{ if(waConnected){ await API.waSend({deal_id:scrDealId,text:text,reqId:uid()}); } else { await api('POST','/deals/'+scrDealId+'/events',{reqId:uid(),kind:'msg',text:text}); } toast('Отправлено'); }
+    catch(e){ if(e&&e.status===503){ try{ await api('POST','/deals/'+scrDealId+'/events',{reqId:uid(),kind:'msg',text:text}); toast('Отправлено'); }catch(_){ toast(error(e)); } } else toast(error(e)); }
+  }
+  // перерисовать тело раскрытого блока после изменения
+  function scrReopen(block){ var body=$('scr-body')&&$('scr-body').querySelector('[data-body="'+cssq(block)+'"]'); if(body){ body.innerHTML=scrBlockBody(block); body.hidden=false; } }
+  // вложение: превью + подпись + отправка (фото — после переезда) + удаление в режиме правки
+  function scrAttHtml(block,mi,ai){
+    var a=(scriptsCache.blocks[block].messages[mi].attachments||[])[ai]||{};
+    var cap=a.title?'<div class="scr-att-cap">'+esc(a.title)+'</div>':'';
+    var body=a.type==='image'?'<img class="scr-att-img" src="'+esc(a.value||'')+'">':'<div class="scr-att-link">🔗 '+esc(a.value||'')+'</div>';
+    var send='<button class="scr-ins" data-act="send-att" data-k="'+esc(block)+'|'+mi+'|'+ai+'">'+(a.type==='image'?'Отправить фото':'Отправить')+'</button>';
+    var del=scrEdit?'<button class="scr-edit" data-act="del-att" data-k="'+esc(block)+'|'+mi+'|'+ai+'">🗑</button>':'';
+    return '<div class="scr-att">'+cap+body+'<div class="scr-msg-act">'+send+del+'</div></div>';
+  }
+  // карточка сообщения: ярлык, текст, вложения, кнопки, (в правке) редактирование
   function scrMsgHtml(block,mi){
-    var m=(scriptsCache.blocks[block]&&scriptsCache.blocks[block].messages[mi])||{};
+    var m=scriptsCache.blocks[block].messages[mi]||{attachments:[]};
+    var atts=(m.attachments||[]).map(function(_,ai){return scrAttHtml(block,mi,ai);}).join('');
+    var act='<div class="scr-msg-act"><button class="scr-ins" data-act="send-msg" data-k="'+esc(block)+'|'+mi+'">Отправить</button><button class="scr-edit" data-act="ins-msg" data-k="'+esc(block)+'|'+mi+'">Вставить</button></div>';
+    var editRow=scrEdit?'<div class="scr-edit-row">'+
+      '<button class="scr-mini" data-act="edit-msg" data-k="'+esc(block)+'|'+mi+'">✎ текст</button>'+
+      '<button class="scr-mini" data-act="edit-label" data-k="'+esc(block)+'|'+mi+'">✎ ярлык</button>'+
+      '<button class="scr-mini" data-act="add-img" data-k="'+esc(block)+'|'+mi+'">+ фото</button>'+
+      '<button class="scr-mini" data-act="add-link" data-k="'+esc(block)+'|'+mi+'">+ ссылка</button>'+
+      '<button class="scr-mini danger" data-act="del-msg" data-k="'+esc(block)+'|'+mi+'">🗑</button></div>':'';
     return '<div class="scr-msg" data-msgwrap="'+esc(block)+'|'+mi+'">'+
       (m.label?'<div class="scr-msg-lbl">'+esc(m.label)+'</div>':'')+
-      '<div class="scr-msg-text">'+esc(m.text||'')+'</div>'+
-      '<div class="scr-msg-act"><button class="scr-ins" data-ins="'+esc(block)+'|'+mi+'">Вставить</button><button class="scr-edit" data-edit="'+esc(block)+'|'+mi+'">✎</button></div></div>';
+      '<div class="scr-msg-text">'+esc(m.text||'')+'</div>'+atts+act+editRow+'</div>';
   }
-  // тело блока: пояснение/подсказка + сообщения
+  // тело блока: пояснение/подсказка + сообщения (+ в правке добавление сообщения)
   function scrBlockBody(block){
     var b=scriptsCache.blocks[block]||{messages:[]};
-    var meta=(b.note?'<div class="scr-note">📌 '+esc(b.note)+'</div>':'')+(b.hint?'<div class="scr-hint">💡 '+esc(b.hint)+'</div>':'');
+    function meta(field,icon,cls){
+      if(b[field]) return '<div class="'+cls+'">'+icon+' '+esc(b[field])+(scrEdit?' <button class="scr-mini" data-act="edit-'+field+'" data-k="'+esc(block)+'">✎</button>':'')+'</div>';
+      return scrEdit?'<div class="'+cls+' add"><button class="scr-mini" data-act="edit-'+field+'" data-k="'+esc(block)+'">+ '+(field==='note'?'пояснение':'подсказка')+'</button></div>':'';
+    }
     var msgs=(b.messages||[]).map(function(_,mi){return scrMsgHtml(block,mi);}).join('')||'<div class="muted" style="padding:6px">Нет сообщений</div>';
-    return meta+msgs;
+    var add=scrEdit?'<button class="scr-add" data-act="add-msg" data-k="'+esc(block)+'">+ сообщение</button>':'';
+    return meta('note','📌','scr-note')+meta('hint','💡','scr-hint')+msgs+add;
+  }
+  // один блок в списке (шапка + место под тело); в правке инструментов — стрелки и удаление
+  function scrBlockRow(name,sec,idx,total){
+    var ctl='';
+    if(scrEdit&&sec) ctl='<div class="scr-blk-ctl">'+
+      '<button class="scr-mini" data-act="mv-up" data-sec="'+esc(sec)+'" data-idx="'+idx+'"'+(idx===0?' disabled':'')+'>↑</button>'+
+      '<button class="scr-mini" data-act="mv-dn" data-sec="'+esc(sec)+'" data-idx="'+idx+'"'+(idx===total-1?' disabled':'')+'>↓</button>'+
+      '<button class="scr-mini danger" data-act="del-block" data-sec="'+esc(sec)+'" data-blk="'+esc(name)+'">🗑</button></div>';
+    return '<div class="scr-block"><div class="scr-b-row"><button class="scr-b-head" data-toggle="'+esc(name)+'">'+esc(name)+'<span class="scr-caret">▸</span></button>'+ctl+'</div><div class="scr-b-body" data-body="'+esc(name)+'" hidden></div></div>';
   }
   function scrRenderBody(){
     var d=scriptsCache, out='';
     if(scrTab==='main'){
-      out=(d.mainOrder||[]).map(function(name){
-        return '<div class="scr-block"><button class="scr-b-head" data-toggle="'+esc(name)+'"><span class="scr-num"></span>'+esc(name)+'<span class="scr-caret">▸</span></button><div class="scr-b-body" data-body="'+esc(name)+'" hidden></div></div>';
-      }).join('');
+      out=(d.mainOrder||[]).map(function(name){ return scrBlockRow(name,null,0,0); }).join('');
     } else {
       out=(d.sectionOrder||[]).map(function(sec){
         var blocks=(d.sections&&d.sections[sec])||[];
-        return '<div class="scr-sec"><div class="scr-sec-t">'+esc(sec)+'</div>'+blocks.map(function(name){
-          return '<div class="scr-block"><button class="scr-b-head" data-toggle="'+esc(name)+'">'+esc(name)+'<span class="scr-caret">▸</span></button><div class="scr-b-body" data-body="'+esc(name)+'" hidden></div></div>';
-        }).join('')+'</div>';
+        var add=scrEdit?'<button class="scr-add" data-act="add-block" data-sec="'+esc(sec)+'">+ вопрос</button>':'';
+        return '<div class="scr-sec"><div class="scr-sec-t">'+esc(sec)+'</div>'+blocks.map(function(name,i){return scrBlockRow(name,sec,i,blocks.length);}).join('')+add+'</div>';
       }).join('');
     }
     var host=$('scr-body'); if(host)host.innerHTML=out||'<div class="empty">Скрипты не загружены</div>';
   }
-  async function openScripts(){
-    scrClose();
+  // добавить фото-вложение: выбор файла → загрузка на сервер → подпись
+  function scrAddImg(block,mi){
+    var inp=document.createElement('input'); inp.type='file'; inp.accept='image/jpeg,image/png,image/webp';
+    inp.onchange=async function(){ var f=inp.files[0]; if(!f)return; if(f.size>5*1024*1024){toast('Фото — до 5 МБ');return;}
+      toast('Загрузка фото…');
+      try{ var d=await fileData(f); var r=await api('POST','/upload',{reqId:uid(),data:d}); var title=(prompt('Подпись к фото (можно пусто):','')||'').trim();
+        scriptsCache.blocks[block].messages[mi].attachments.push({type:'image',title:title,value:r.url});
+        if(await saveScripts()) scrReopen(block); }
+      catch(e){ toast(error(e)); } };
+    inp.click();
+  }
+  function scrAddLink(block,mi){
+    var url=(prompt('Ссылка (URL):','')||'').trim(); if(!url)return;
+    var title=(prompt('Подпись к ссылке (можно пусто):','')||'').trim();
+    scriptsCache.blocks[block].messages[mi].attachments.push({type:'link',title:title,value:url});
+    saveScripts().then(function(ok){ if(ok)scrReopen(block); });
+  }
+  // инлайн-правка текста сообщения (многострочно)
+  function scrInlineText(block,mi){
+    var wrap=$('scr-body').querySelector('[data-msgwrap="'+cssq(block+'|'+mi)+'"]'); if(!wrap)return;
+    var cur=(scriptsCache.blocks[block].messages[mi]||{}).text||'';
+    wrap.innerHTML='<textarea class="scr-ta">'+esc(cur)+'</textarea><div class="scr-msg-act"><button class="scr-save" data-act="save-text" data-k="'+esc(block)+'|'+mi+'">Сохранить</button><button class="scr-cancel" data-act="cancel-edit" data-k="'+esc(block)+'|'+mi+'">Отмена</button></div>';
+    var ta=wrap.querySelector('.scr-ta'); ta.focus();
+  }
+  async function openScripts(dealId){
+    scrClose(); scrDealId=dealId||null;
     var wrap=document.createElement('div'); wrap.className='scr-panel'; wrap.id='scr-panel';
-    wrap.innerHTML='<div class="scr-head"><b>Скрипты продаж</b><button class="scr-x" id="scr-close">✕</button></div>'+
+    wrap.innerHTML='<div class="scr-head"><b>Скрипты продаж</b><div class="scr-head-r"><button class="scr-mode" id="scr-mode">'+(scrEdit?'✓ Готово':'✎ Правка')+'</button><button class="scr-x" id="scr-close">✕</button></div></div>'+
       '<div class="scr-tabs"><button data-scrtab="main"'+(scrTab==='main'?' class="on"':'')+'>Магистраль</button><button data-scrtab="tools"'+(scrTab==='tools'?' class="on"':'')+'>Инструменты</button></div>'+
       '<div class="scr-body" id="scr-body"><div class="empty">Загрузка…</div></div>';
     sheet.appendChild(wrap);
     $('scr-close').onclick=scrClose;
+    $('scr-mode').onclick=function(){ scrEdit=!scrEdit; this.textContent=scrEdit?'✓ Готово':'✎ Правка'; this.classList.toggle('on',scrEdit); scrRenderBody(); };
+    if(scrEdit)$('scr-mode').classList.add('on');
     wrap.querySelectorAll('[data-scrtab]').forEach(function(b){b.onclick=function(){ scrTab=b.dataset.scrtab; wrap.querySelectorAll('[data-scrtab]').forEach(function(x){x.classList.toggle('on',x===b);}); scrRenderBody(); };});
-    // делегирование: раскрытие блока, вставка, правка
-    $('scr-body').addEventListener('click',function(e){
-      var tg=e.target.closest('[data-toggle]');
-      if(tg){ var body=$('scr-body').querySelector('[data-body="'+cssq(tg.dataset.toggle)+'"]'); if(!body)return; var open=body.hidden; if(open){ body.innerHTML=scrBlockBody(tg.dataset.toggle); } body.hidden=!open; tg.classList.toggle('open',open); return; }
-      var ins=e.target.closest('[data-ins]');
-      if(ins){ var p=ins.dataset.ins.split('|'), m=scriptsCache.blocks[p[0]].messages[Number(p[1])]; if(m)scrInsert(m.text||''); return; }
-      var ed=e.target.closest('[data-edit]');
-      if(ed){ scrEditMsg(ed.dataset.edit); return; }
-    });
+    $('scr-body').addEventListener('click',scrOnClick);
     try{ await loadScripts(); scrRenderBody(); }
     catch(e){ var hb=$('scr-body'); if(hb)hb.innerHTML='<p class="error">'+esc(error(e))+'</p>'; }
   }
-  // экранирование значения для querySelector (имена блоков — произвольный текст)
-  function cssq(s){ return String(s).replace(/["\\]/g,'\\$&'); }
-  // правка текста сообщения прямо в панели → сохранение всего блока скриптов
-  function scrEditMsg(key){
-    var p=key.split('|'), block=p[0], mi=Number(p[1]);
-    var wrap=$('scr-body').querySelector('[data-msgwrap="'+cssq(key)+'"]'); if(!wrap)return;
-    var cur=(scriptsCache.blocks[block].messages[mi]||{}).text||'';
-    wrap.innerHTML='<textarea class="scr-ta">'+esc(cur)+'</textarea><div class="scr-msg-act"><button class="scr-save">Сохранить</button><button class="scr-cancel">Отмена</button></div>';
-    var ta=wrap.querySelector('.scr-ta'); ta.focus();
-    wrap.querySelector('.scr-cancel').onclick=function(){ wrap.outerHTML=scrMsgHtml(block,mi); };
-    wrap.querySelector('.scr-save').onclick=async function(){
-      var nv=ta.value; var save=this; save.disabled=true;
-      var prev=scriptsCache.blocks[block].messages[mi].text;
-      scriptsCache.blocks[block].messages[mi].text=nv;
-      try{ var r=await api('PUT','/scripts',{data:scriptsCache,baseRev:scriptsRev}); scriptsRev=r.rev; toast('Скрипт сохранён'); wrap.outerHTML=scrMsgHtml(block,mi); }
-      catch(e){ scriptsCache.blocks[block].messages[mi].text=prev; save.disabled=false;
-        if(e&&e.status===409){ toast('Скрипты изменили в другом месте — обновляю'); await loadScripts(true).catch(function(){}); scrRenderBody(); }
-        else toast(error(e)); }
-    };
+  // единый обработчик действий панели
+  async function scrOnClick(e){
+    var tg=e.target.closest('[data-toggle]');
+    if(tg){ var body=$('scr-body').querySelector('[data-body="'+cssq(tg.dataset.toggle)+'"]'); if(!body)return; var open=body.hidden; if(open){ body.innerHTML=scrBlockBody(tg.dataset.toggle); } body.hidden=!open; tg.classList.toggle('open',open); return; }
+    var btn=e.target.closest('[data-act]'); if(!btn)return;
+    var act=btn.dataset.act, k=(btn.dataset.k||'').split('|'), block=k[0], mi=Number(k[1]), ai=Number(k[2]);
+    var msg=(block&&scriptsCache.blocks[block]&&scriptsCache.blocks[block].messages)?scriptsCache.blocks[block].messages[mi]:null;
+    if(act==='ins-msg'){ if(msg)scrInsert(msg.text||''); }
+    else if(act==='send-msg'){ if(msg)scrSend(msg.text||''); }
+    else if(act==='send-att'){ var a=msg.attachments[ai]; if(a.type==='link') scrSend((a.title?a.title+'\n':'')+a.value); else toast('Фото уйдёт клиенту после переезда (нужен ключ WhatsApp). Материал сохранён.'); }
+    else if(act==='del-att'){ if(!confirm('Убрать вложение?'))return; msg.attachments.splice(ai,1); if(await saveScripts())scrReopen(block); }
+    else if(act==='edit-msg'){ scrInlineText(block,mi); }
+    else if(act==='save-text'){ var wrap=$('scr-body').querySelector('[data-msgwrap="'+cssq(block+'|'+mi)+'"]'); var nv=wrap.querySelector('.scr-ta').value; var prev=msg.text; msg.text=nv; btn.disabled=true; if(await saveScripts()){toast('Сохранено'); scrReopen(block);} else { msg.text=prev; } }
+    else if(act==='cancel-edit'){ scrReopen(block); }
+    else if(act==='edit-label'){ var nl=prompt('Ярлык сообщения:',msg.label||''); if(nl!==null){ var p=msg.label; msg.label=nl.trim(); if(await saveScripts())scrReopen(block); else msg.label=p; } }
+    else if(act==='del-msg'){ if(!confirm('Удалить это сообщение?'))return; scriptsCache.blocks[block].messages.splice(mi,1); if(await saveScripts())scrReopen(block); }
+    else if(act==='add-msg'){ scriptsCache.blocks[block].messages.push({label:'Новое сообщение',text:'',attachments:[]}); if(await saveScripts())scrReopen(block); }
+    else if(act==='edit-note'||act==='edit-hint'){ var field=act==='edit-note'?'note':'hint'; var nv2=prompt(field==='note'?'Пояснение (для менеджера):':'Подсказка (действие):',scriptsCache.blocks[block][field]||''); if(nv2!==null){ var pp=scriptsCache.blocks[block][field]; scriptsCache.blocks[block][field]=nv2.trim(); if(await saveScripts())scrReopen(block); else scriptsCache.blocks[block][field]=pp; } }
+    else if(act==='add-img'){ scrAddImg(block,mi); }
+    else if(act==='add-link'){ scrAddLink(block,mi); }
+    else if(act==='mv-up'||act==='mv-dn'){ var sec=btn.dataset.sec, idx=Number(btn.dataset.idx), arr=scriptsCache.sections[sec], j=act==='mv-up'?idx-1:idx+1; if(j<0||j>=arr.length)return; var t=arr[idx]; arr[idx]=arr[j]; arr[j]=t; if(await saveScripts())scrRenderBody(); }
+    else if(act==='del-block'){ var s2=btn.dataset.sec, nm=btn.dataset.blk; if(!confirm('Удалить вопрос «'+nm+'»?'))return; scriptsCache.sections[s2]=scriptsCache.sections[s2].filter(function(x){return x!==nm;}); delete scriptsCache.blocks[nm]; if(await saveScripts())scrRenderBody(); }
+    else if(act==='add-block'){ var sec3=btn.dataset.sec; var nm3=(prompt('Название вопроса/ситуации:','')||'').trim(); if(!nm3)return; if(scriptsCache.blocks[nm3]){toast('Такой блок уже есть');return;} scriptsCache.blocks[nm3]={kind:'side',note:'',hint:'',messages:[{label:'Ответ',text:'',attachments:[]}]}; scriptsCache.sections[sec3]=(scriptsCache.sections[sec3]||[]).concat([nm3]); if(await saveScripts())scrRenderBody(); }
   }
   async function showDeal(id){
     stopChat();
@@ -404,8 +466,8 @@
         chatTimer=setTimeout(poll,7000);
       }
       chatTimer=setTimeout(poll,7000);
-      // 📋 → панель скриптов продаж (магистраль + инструменты)
-      $('ch-tplbtn').onclick=function(){ openScripts(); };
+      // 📋 → панель-конструктор скриптов (магистраль + инструменты), с id сделки для отправки
+      $('ch-tplbtn').onclick=function(){ openScripts(d.id); };
       $('ch-file').onchange=async function(){
         var f=this.files[0]; if(!f)return;
         if(f.size>5*1024*1024){toast('Файл — до 5 МБ');return;}

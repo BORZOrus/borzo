@@ -555,6 +555,14 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     const r=await db.query('INSERT INTO crm_scripts(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3) RETURNING rev',[JSON.stringify(data),req.user.id,Date.now()]);
     return {ok:true,rev:r.rows[0].rev};
   }));
+  // загрузка фото для материалов скриптов → возвращает URL (храним в скрипте ссылку, не base64)
+  router.post('/upload',mutate(async(req,db,saved)=>{
+    const data=req.body.data;
+    if(typeof data!=='string'||!/^data:image\/(jpeg|png|webp);base64,/.test(data)) throw err(400,'нужно фото JPEG/PNG/WebP');
+    if(data.length>8*1024*1024) throw err(400,'фото — до 5 МБ');
+    const url=savePhoto(data); if(!url) throw err(400,'не удалось сохранить фото'); saved.push(url);
+    return {url};
+  }));
   // разовая загрузка скриптов из scripts_seed.json (идемпотентно: не перетирает уже отредактированные, если не force)
   router.post('/scripts/seed',requireRole('mgr'),mutate(async(req,db)=>{
     const ex=await db.query('SELECT rev FROM crm_scripts WHERE id=1 FOR UPDATE');

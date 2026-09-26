@@ -86,7 +86,23 @@
 .scr-panel{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:45;width:100%;max-width:520px;height:88dvh;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -6px 30px rgba(17,27,33,.28);display:flex;flex-direction:column;overflow:hidden}
 .scr-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
 .scr-head b{font-size:16px}
+.scr-head-r{display:flex;align-items:center;gap:6px}
+.scr-mode{background:#fff;border:1px solid var(--line);color:#00705c;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:600;min-height:36px}
+.scr-mode.on{background:#00a884;color:#fff;border-color:#00a884}
 .scr-x{background:none;border:none;font-size:18px;color:#54656f;padding:6px 10px}
+.scr-b-row{display:flex;align-items:stretch}
+.scr-b-row .scr-b-head{flex:1}
+.scr-blk-ctl{display:flex;align-items:center;gap:3px;padding:0 6px;background:#fafbfc;border-top-right-radius:11px}
+.scr-mini{background:#fff;border:1px solid var(--line);color:#54656f;border-radius:7px;padding:5px 9px;font-size:12px;min-height:32px}
+.scr-mini.danger{color:#c62830}
+.scr-mini:disabled{opacity:.4}
+.scr-edit-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.scr-add{width:100%;background:#e7f6f1;border:1px dashed #00a884;color:#00705c;border-radius:9px;padding:9px;font-size:13px;font-weight:600;margin:8px 0;min-height:40px}
+.scr-note.add,.scr-hint.add{background:none;border:1px dashed var(--line);padding:4px}
+.scr-att{border:1px solid var(--line);border-radius:9px;padding:8px;margin:8px 0;background:#f7fbff}
+.scr-att-cap{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.scr-att-img{max-width:180px;max-height:180px;border-radius:8px;display:block}
+.scr-att-link{font-size:13px;color:#00705c;overflow-wrap:anywhere}
 .scr-tabs{display:flex;gap:8px;padding:10px 16px}
 .scr-tabs button{flex:1;background:#f0f2f5;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-weight:600;color:var(--mut);min-height:42px}
 .scr-tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
@@ -124,6 +140,6 @@
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden><header><h2 id="sheet-title"></h2><button class="iconbtn" id="sheet-close" aria-label="Закрыть">✕</button></header><div id="sheet-body"></div></section>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm3"></script>
-<script src="crm.js?v=crm15"></script>
+<script src="crm.js?v=crm16"></script>
 </body>
 </html>
