@@ -83,6 +83,31 @@
 .task-row input{width:18px;height:18px;flex:0 0 18px;margin-top:1px}
 .task-row.done span{text-decoration:line-through;color:var(--mut)}
 .task-row .ghost{flex:0 0 auto;padding:5px 10px;min-height:32px}
+.scr-panel{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:45;width:100%;max-width:520px;height:88dvh;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -6px 30px rgba(17,27,33,.28);display:flex;flex-direction:column;overflow:hidden}
+.scr-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
+.scr-head b{font-size:16px}
+.scr-x{background:none;border:none;font-size:18px;color:#54656f;padding:6px 10px}
+.scr-tabs{display:flex;gap:8px;padding:10px 16px}
+.scr-tabs button{flex:1;background:#f0f2f5;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-weight:600;color:var(--mut);min-height:42px}
+.scr-tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.scr-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 12px 20px}
+.scr-sec-t{font-size:12px;font-weight:700;color:#00705c;text-transform:uppercase;letter-spacing:.03em;margin:14px 4px 6px}
+.scr-block{border:1px solid var(--line);border-radius:11px;margin:8px 0;overflow:hidden;background:#fff}
+.scr-b-head{width:100%;text-align:left;background:#fafbfc;border:none;padding:13px 14px;font-size:14px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px;min-height:46px}
+.scr-b-head .scr-caret{margin-left:auto;color:#8696a0;transition:transform .15s}
+.scr-b-head.open .scr-caret{transform:rotate(90deg)}
+.scr-b-body{padding:6px 12px 12px;border-top:1px solid var(--line)}
+.scr-note{font-size:12px;color:#8a6d3b;background:#fdf6e3;border-radius:8px;padding:7px 10px;margin:8px 0;line-height:1.4}
+.scr-hint{font-size:12px;color:#00705c;background:#e7f6f1;border-radius:8px;padding:7px 10px;margin:8px 0;line-height:1.4}
+.scr-msg{border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;background:#fff}
+.scr-msg-lbl{font-size:11px;font-weight:700;color:#8696a0;text-transform:uppercase;margin-bottom:5px}
+.scr-msg-text{font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.scr-msg-act{display:flex;gap:8px;margin-top:9px}
+.scr-ins{flex:1;background:#00a884;border:none;color:#fff;border-radius:8px;padding:9px;font-size:13px;font-weight:600;min-height:40px}
+.scr-edit{flex:0 0 auto;background:#fff;border:1px solid var(--line);color:#54656f;border-radius:8px;padding:9px 14px;font-size:14px;min-height:40px}
+.scr-ta{width:100%;min-height:120px;font-size:14px}
+.scr-save{flex:1;background:var(--blue);border:none;color:#fff;border-radius:8px;padding:9px;font-weight:600;min-height:40px}
+.scr-cancel{flex:0 0 auto;background:#fff;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:9px 14px;min-height:40px}
 .ch-tpl{display:flex;flex-direction:column;gap:4px;margin:6px 0;max-height:30vh;overflow-y:auto}
 .dragging{opacity:.45;outline:1.5px dashed var(--amber)}
 </style>
@@ -99,6 +124,6 @@
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden><header><h2 id="sheet-title"></h2><button class="iconbtn" id="sheet-close" aria-label="Закрыть">✕</button></header><div id="sheet-body"></div></section>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm3"></script>
-<script src="crm.js?v=crm14"></script>
+<script src="crm.js?v=crm15"></script>
 </body>
 </html>

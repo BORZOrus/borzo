@@ -147,7 +147,7 @@
   }
   // ---------- карточка лида = ЧАТ, скин WhatsApp (тёмный, по скрину Руслана) ----------
   var chatTimer=null, chatDealId=null, chatLastEventId=0, waConnected=false, waChecked=false;
-  function stopChat(){ clearTimeout(chatTimer); chatTimer=null; chatDealId=null; }
+  function stopChat(){ clearTimeout(chatTimer); chatTimer=null; chatDealId=null; var p=document.getElementById('scr-panel'); if(p)p.remove(); }
   function chDay(ts){ return new Date(new Date(ts).getTime()+5*3600000).toISOString().slice(0,10); }
   function chDayLabel(ts){
     var d=chDay(ts), today=chDay(Date.now()), yest=chDay(Date.now()-86400000);
@@ -214,6 +214,88 @@
   }
   // подпись изменения ленты, чтобы перерисовывать только при новых данных
   function chatSig(evs, msgs){ return (evs.length?evs[evs.length-1].id:0)+'|'+(msgs?msgs.length:0)+'|'+(msgs&&msgs.length?(msgs[msgs.length-1].status||''):''); }
+  // ---------- скрипты продаж: панель «Магистраль + Инструменты» в чате (по кнопке 📋) ----------
+  var scriptsCache=null, scriptsRev=0, scriptsLoading=null, scrTab='main';
+  function loadScripts(force){
+    if(scriptsCache&&!force) return Promise.resolve(scriptsCache);
+    if(scriptsLoading) return scriptsLoading;
+    scriptsLoading=api('GET','/scripts').then(function(r){ scriptsCache=(r.data&&typeof r.data==='object')?r.data:{blocks:{},mainOrder:[],sectionOrder:[],sections:{}}; scriptsRev=r.rev||0; scriptsLoading=null; return scriptsCache; }).catch(function(e){ scriptsLoading=null; throw e; });
+    return scriptsLoading;
+  }
+  function scrClose(){ var p=$('scr-panel'); if(p)p.remove(); }
+  function scrInsert(text){ var ta=$('ch-text'); if(ta){ ta.value=(ta.value?ta.value+'\n':'')+text; ta.focus(); } scrClose(); }
+  // одна карточка сообщения блока: текст + «Вставить» + «✎»
+  function scrMsgHtml(block,mi){
+    var m=(scriptsCache.blocks[block]&&scriptsCache.blocks[block].messages[mi])||{};
+    return '<div class="scr-msg" data-msgwrap="'+esc(block)+'|'+mi+'">'+
+      (m.label?'<div class="scr-msg-lbl">'+esc(m.label)+'</div>':'')+
+      '<div class="scr-msg-text">'+esc(m.text||'')+'</div>'+
+      '<div class="scr-msg-act"><button class="scr-ins" data-ins="'+esc(block)+'|'+mi+'">Вставить</button><button class="scr-edit" data-edit="'+esc(block)+'|'+mi+'">✎</button></div></div>';
+  }
+  // тело блока: пояснение/подсказка + сообщения
+  function scrBlockBody(block){
+    var b=scriptsCache.blocks[block]||{messages:[]};
+    var meta=(b.note?'<div class="scr-note">📌 '+esc(b.note)+'</div>':'')+(b.hint?'<div class="scr-hint">💡 '+esc(b.hint)+'</div>':'');
+    var msgs=(b.messages||[]).map(function(_,mi){return scrMsgHtml(block,mi);}).join('')||'<div class="muted" style="padding:6px">Нет сообщений</div>';
+    return meta+msgs;
+  }
+  function scrRenderBody(){
+    var d=scriptsCache, out='';
+    if(scrTab==='main'){
+      out=(d.mainOrder||[]).map(function(name){
+        return '<div class="scr-block"><button class="scr-b-head" data-toggle="'+esc(name)+'"><span class="scr-num"></span>'+esc(name)+'<span class="scr-caret">▸</span></button><div class="scr-b-body" data-body="'+esc(name)+'" hidden></div></div>';
+      }).join('');
+    } else {
+      out=(d.sectionOrder||[]).map(function(sec){
+        var blocks=(d.sections&&d.sections[sec])||[];
+        return '<div class="scr-sec"><div class="scr-sec-t">'+esc(sec)+'</div>'+blocks.map(function(name){
+          return '<div class="scr-block"><button class="scr-b-head" data-toggle="'+esc(name)+'">'+esc(name)+'<span class="scr-caret">▸</span></button><div class="scr-b-body" data-body="'+esc(name)+'" hidden></div></div>';
+        }).join('')+'</div>';
+      }).join('');
+    }
+    var host=$('scr-body'); if(host)host.innerHTML=out||'<div class="empty">Скрипты не загружены</div>';
+  }
+  async function openScripts(){
+    scrClose();
+    var wrap=document.createElement('div'); wrap.className='scr-panel'; wrap.id='scr-panel';
+    wrap.innerHTML='<div class="scr-head"><b>Скрипты продаж</b><button class="scr-x" id="scr-close">✕</button></div>'+
+      '<div class="scr-tabs"><button data-scrtab="main"'+(scrTab==='main'?' class="on"':'')+'>Магистраль</button><button data-scrtab="tools"'+(scrTab==='tools'?' class="on"':'')+'>Инструменты</button></div>'+
+      '<div class="scr-body" id="scr-body"><div class="empty">Загрузка…</div></div>';
+    sheet.appendChild(wrap);
+    $('scr-close').onclick=scrClose;
+    wrap.querySelectorAll('[data-scrtab]').forEach(function(b){b.onclick=function(){ scrTab=b.dataset.scrtab; wrap.querySelectorAll('[data-scrtab]').forEach(function(x){x.classList.toggle('on',x===b);}); scrRenderBody(); };});
+    // делегирование: раскрытие блока, вставка, правка
+    $('scr-body').addEventListener('click',function(e){
+      var tg=e.target.closest('[data-toggle]');
+      if(tg){ var body=$('scr-body').querySelector('[data-body="'+cssq(tg.dataset.toggle)+'"]'); if(!body)return; var open=body.hidden; if(open){ body.innerHTML=scrBlockBody(tg.dataset.toggle); } body.hidden=!open; tg.classList.toggle('open',open); return; }
+      var ins=e.target.closest('[data-ins]');
+      if(ins){ var p=ins.dataset.ins.split('|'), m=scriptsCache.blocks[p[0]].messages[Number(p[1])]; if(m)scrInsert(m.text||''); return; }
+      var ed=e.target.closest('[data-edit]');
+      if(ed){ scrEditMsg(ed.dataset.edit); return; }
+    });
+    try{ await loadScripts(); scrRenderBody(); }
+    catch(e){ var hb=$('scr-body'); if(hb)hb.innerHTML='<p class="error">'+esc(error(e))+'</p>'; }
+  }
+  // экранирование значения для querySelector (имена блоков — произвольный текст)
+  function cssq(s){ return String(s).replace(/["\\]/g,'\\$&'); }
+  // правка текста сообщения прямо в панели → сохранение всего блока скриптов
+  function scrEditMsg(key){
+    var p=key.split('|'), block=p[0], mi=Number(p[1]);
+    var wrap=$('scr-body').querySelector('[data-msgwrap="'+cssq(key)+'"]'); if(!wrap)return;
+    var cur=(scriptsCache.blocks[block].messages[mi]||{}).text||'';
+    wrap.innerHTML='<textarea class="scr-ta">'+esc(cur)+'</textarea><div class="scr-msg-act"><button class="scr-save">Сохранить</button><button class="scr-cancel">Отмена</button></div>';
+    var ta=wrap.querySelector('.scr-ta'); ta.focus();
+    wrap.querySelector('.scr-cancel').onclick=function(){ wrap.outerHTML=scrMsgHtml(block,mi); };
+    wrap.querySelector('.scr-save').onclick=async function(){
+      var nv=ta.value; var save=this; save.disabled=true;
+      var prev=scriptsCache.blocks[block].messages[mi].text;
+      scriptsCache.blocks[block].messages[mi].text=nv;
+      try{ var r=await api('PUT','/scripts',{data:scriptsCache,baseRev:scriptsRev}); scriptsRev=r.rev; toast('Скрипт сохранён'); wrap.outerHTML=scrMsgHtml(block,mi); }
+      catch(e){ scriptsCache.blocks[block].messages[mi].text=prev; save.disabled=false;
+        if(e&&e.status===409){ toast('Скрипты изменили в другом месте — обновляю'); await loadScripts(true).catch(function(){}); scrRenderBody(); }
+        else toast(error(e)); }
+    };
+  }
   async function showDeal(id){
     stopChat();
     openSheet('Чат','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;
@@ -322,17 +404,8 @@
         chatTimer=setTimeout(poll,7000);
       }
       chatTimer=setTimeout(poll,7000);
-      $('ch-tplbtn').onclick=function(){
-        var box=$('ch-tpl');
-        if(!box.hidden){box.hidden=true;return;}
-        box.innerHTML=(state.templates.length?state.templates.map(function(t){return '<button class="ghost" data-tpl="'+t.id+'" style="text-align:left">'+esc(t.title)+'</button>';}).join(''):'<span class="muted" style="font-size:12px;padding:6px">Шаблонов нет — добавь во вкладке «Шаблоны»</span>');
-        box.hidden=false;
-        box.querySelectorAll('[data-tpl]').forEach(function(b){b.onclick=function(){
-          var t=state.templates.find(function(x){return x.id===Number(b.dataset.tpl);});
-          if(t){var ta=$('ch-text'); ta.value=(ta.value?ta.value+' ':'')+t.text; ta.focus();}
-          box.hidden=true;
-        };});
-      };
+      // 📋 → панель скриптов продаж (магистраль + инструменты)
+      $('ch-tplbtn').onclick=function(){ openScripts(); };
       $('ch-file').onchange=async function(){
         var f=this.files[0]; if(!f)return;
         if(f.size>5*1024*1024){toast('Файл — до 5 МБ');return;}
