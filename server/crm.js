@@ -99,6 +99,11 @@ async function initSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS crm_tasks_deal_idx ON crm_tasks(deal_id);
     CREATE INDEX IF NOT EXISTS crm_tasks_open_idx ON crm_tasks(done, due_at);
+    -- скрипты продаж (магистраль + инструменты): один blob той же формы, что сайт скриптов Руслана (blocks/mainOrder/sectionOrder/sections)
+    CREATE TABLE IF NOT EXISTS crm_scripts (
+      id INTEGER PRIMARY KEY DEFAULT 1, data JSONB NOT NULL DEFAULT '{}',
+      rev INTEGER NOT NULL DEFAULT 0, updated_by INTEGER, updated_at BIGINT
+    );
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) VALUES
       ('new','Новая заявка',1,false,false), ('working','В работе',2,false,false),
       ('selection','Подбор решения',3,false,false), ('agreed','Договорились/Предоплата',4,false,false),
@@ -532,6 +537,33 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     return {ok:true,counts};
   }));
   router.post('/import',requireRole('mgr'),mutate(async(req,db)=>importMindSales(db,req.body,req.user)));
+  // ---------- скрипты продаж (магистраль + инструменты) ----------
+  router.get('/scripts',route(async(req,res)=>{
+    const r=await pool.query('SELECT data,rev,updated_at FROM crm_scripts WHERE id=1');
+    res.json(r.rowCount?{data:r.rows[0].data,rev:r.rows[0].rev,updated_at:Number(r.rows[0].updated_at)||0}:{data:null,rev:0});
+  }));
+  router.put('/scripts',mutate(async(req,db)=>{
+    const data=req.body.data;
+    if(!data||typeof data!=='object'||Array.isArray(data)) throw err(400,'нужен объект скриптов');
+    if(JSON.stringify(data).length>2000000) throw err(400,'слишком большой объём скриптов');
+    const cur=await db.query('SELECT rev FROM crm_scripts WHERE id=1 FOR UPDATE');
+    if(cur.rowCount){
+      if(req.body.baseRev!=null && Number(req.body.baseRev)!==cur.rows[0].rev) throw err(409,'скрипты уже изменили — обновите панель и повторите');
+      const r=await db.query('UPDATE crm_scripts SET data=$1,rev=rev+1,updated_by=$2,updated_at=$3 WHERE id=1 RETURNING rev',[JSON.stringify(data),req.user.id,Date.now()]);
+      return {ok:true,rev:r.rows[0].rev};
+    }
+    const r=await db.query('INSERT INTO crm_scripts(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3) RETURNING rev',[JSON.stringify(data),req.user.id,Date.now()]);
+    return {ok:true,rev:r.rows[0].rev};
+  }));
+  // разовая загрузка скриптов из scripts_seed.json (идемпотентно: не перетирает уже отредактированные, если не force)
+  router.post('/scripts/seed',requireRole('mgr'),mutate(async(req,db)=>{
+    const ex=await db.query('SELECT rev FROM crm_scripts WHERE id=1 FOR UPDATE');
+    if(ex.rowCount && ex.rows[0].rev>0 && !req.body.force) return {ok:true,skipped:true};
+    let src; try{ src=JSON.parse(fs.readFileSync(path.join(__dirname,'scripts_seed.json'),'utf8')); }catch(e){ throw err(500,'scripts_seed.json не найден на сервере'); }
+    await db.query(`INSERT INTO crm_scripts(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3)
+      ON CONFLICT(id) DO UPDATE SET data=$1,rev=crm_scripts.rev+1,updated_by=$2,updated_at=$3`,[JSON.stringify(src),req.user.id,Date.now()]);
+    return {ok:true,seeded:true,blocks:Object.keys(src.blocks||{}).length};
+  }));
   app.use('/api/crm',router);
 }
 
