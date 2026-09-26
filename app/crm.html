@@ -59,10 +59,10 @@
 .wa-sys .wa-day{background:#fff;color:#54656f;font-weight:600;text-transform:capitalize}
 .wa-input{display:flex;gap:7px;align-items:flex-end}
 .wa-field{flex:1;min-width:0;display:flex;align-items:flex-end;background:#fff;border-radius:22px;padding:4px 6px;border:1px solid var(--line);box-shadow:0 1px 2px rgba(17,27,33,.06)}
-.wa-field textarea{flex:1;min-width:0;resize:none;border:none;background:none;color:var(--ink);font:inherit;font-size:14.5px;padding:8px 4px;max-height:90px;outline:none}
+.wa-field textarea{flex:1;min-width:0;resize:none;border:none;background:none;color:var(--ink);font:inherit;font-size:14.5px;padding:8px 4px;min-height:22px;height:38px;max-height:110px;line-height:1.35;outline:none}
 .wa-field textarea::placeholder{color:#8696a0}
 .wa-in-ic{background:none;border:none;color:#54656f;font-size:18px;padding:8px 7px;cursor:pointer}
-.wa-send{width:44px;height:44px;flex:0 0 44px;border-radius:50%;border:none;background:#00a884;color:#fff;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,168,132,.35)}
+.wa-send,.wa-mic{width:44px;height:44px;flex:0 0 44px;border-radius:50%;border:none;background:#00a884;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,168,132,.35)}
 .wa-send:disabled{opacity:.6}
 .wa-soon{font-size:10.5px;color:#8696a0;font-style:italic}
 .wa-note{font-size:11.5px;color:#8a6d3b;background:#fdf6e3;border:1px solid #f0e2b8;border-radius:8px;padding:6px 10px;margin:0 -6px 6px;text-align:center}
@@ -140,6 +140,6 @@
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden><header><h2 id="sheet-title"></h2><button class="iconbtn" id="sheet-close" aria-label="Закрыть">✕</button></header><div id="sheet-body"></div></section>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm3"></script>
-<script src="crm.js?v=crm16"></script>
+<script src="crm.js?v=crm17"></script>
 </body>
 </html>

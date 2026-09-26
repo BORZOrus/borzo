@@ -405,7 +405,8 @@
             '<textarea id="ch-text" rows="1" placeholder="'+(waConnected?'Сообщение':'Заметка (WhatsApp позже)')+'"></textarea>'+
             '<label class="wa-in-ic" style="cursor:pointer" title="Прикрепить">📎<input id="ch-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden></label>'+
           '</div>'+
-          '<button class="wa-send" id="ch-send">➤</button>'+
+          '<button class="wa-send" id="ch-send" hidden>➤</button>'+
+          '<button class="wa-mic" id="ch-mic" title="Голосовое">🎤</button>'+
         '</div>';
       var log=$('ch-log'); log.scrollTop=log.scrollHeight;
       // ленивая загрузка вложения по кнопке (медиа скачивается с 360dialog и кэшируется на сервере)
@@ -436,17 +437,22 @@
           // подключён WhatsApp → шлём реально через 360dialog; иначе сохраняем как внутреннюю заметку (чат остаётся рабочим)
           if(waConnected){ await API.waSend({deal_id:d.id, text:t, reqId:uid()}); }
           else { await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:t}); }
-          $('ch-text').value=''; await poll();
+          $('ch-text').value=''; chToggle(); await poll();
         }
         catch(e){
           // канал ещё не подключён на сервере — не теряем текст, кладём заметкой
-          if(e&&e.status===503){ try{ await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:t}); $('ch-text').value=''; waConnected=false; await poll(); }catch(e2){ toast(error(e2)); } }
+          if(e&&e.status===503){ try{ await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:t}); $('ch-text').value=''; chToggle(); waConnected=false; await poll(); }catch(e2){ toast(error(e2)); } }
           else toast(error(e));
         }
         $('ch-send').disabled=false; $('ch-text').focus();
       }
       $('ch-send').onclick=send;
       $('ch-text').addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
+      // узкое поле как в WhatsApp: авто-рост + переключение микрофон↔отправка по наличию текста
+      var chText=$('ch-text');
+      function chToggle(){ var has=chText.value.trim().length>0; $('ch-send').hidden=!has; $('ch-mic').hidden=has; chText.style.height='auto'; chText.style.height=Math.min(110,Math.max(38,chText.scrollHeight))+'px'; }
+      chText.addEventListener('input',chToggle); chToggle();
+      $('ch-mic').onclick=function(){ toast('Голосовые заработают после переезда (готовим визуал сейчас)'); };
       async function poll(){
         if(chatDealId!==d.id)return;
         clearTimeout(chatTimer);
