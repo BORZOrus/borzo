@@ -680,37 +680,93 @@
     inp.click();
   }
   function agPill(txt,cls){ return '<span class="ag-pill '+cls+'">'+esc(txt)+'</span>'; }
+  // Провайдеры и их модели. type: subscription (по подписке) | tokens (по токенам/ключу).
+  // status здесь всегда 'off' — реальный health-check подключим в заходе 4 (тогда зелёный = реально живой канал).
+  var AG_PROVIDERS=[
+    {id:'anthropic',name:'Anthropic',type:'subscription',models:[['opus','Opus 4.8'],['sonnet','Sonnet 5'],['haiku','Haiku 4.5'],['fable','Fable 5']]},
+    {id:'openai',name:'OpenAI',type:'subscription',models:[['gpt-top','GPT (старшая)'],['gpt-fast','GPT (быстрая)']]},
+    {id:'google',name:'Google · Gemini',type:'subscription',models:[['gem-pro','Gemini Pro'],['gem-flash','Gemini Flash']]},
+    {id:'openrouter',name:'OpenRouter',type:'tokens',models:[['or-any','Любая модель (по ключу)']]}
+  ];
+  function agProv(id){ return AG_PROVIDERS.find(function(p){return p.id===id;})||AG_PROVIDERS[0]; }
   function drawElektro(){
-    var conn=agentKb.conn||{}, depth=conn.depth||'med';
-    var models=[['none','— не выбрано'],['opus','Opus (подписка)'],['fable','Fable (подписка)'],['light','Лёгкая / дешёвая'],['astra','Astra']];
+    var conn=agentKb.conn||{}, depth=conn.depth||'med', prov=conn.provider||'anthropic';
+    var models=agProv(prov).models;
     var depths=[['low','Низкая'],['med','Средняя'],['high','Высокая']];
+    // строки статуса провайдеров — честный health (пока все off/серые; зелёный загорится при реальном подключении)
+    var provRows=AG_PROVIDERS.map(function(p){
+      return '<div class="ag-conn-row"><div class="ag-conn-l"><span class="ag-dot off"></span><b>'+esc(p.name)+'</b>'+
+        '<div class="muted">'+(p.type==='tokens'?'по токенам/ключу (не подписка)':'по подписке')+' · '+p.models.length+' модел.</div></div>'+
+        '<div class="ag-conn-r">'+agPill('не подключено · заход 4','dev')+'</div></div>';
+    }).join('');
     return '<div class="card"><h2>🔌 Электроящик подключений</h2>'+
-      '<p class="hint">Щиток агента: на чём работает мозг, голос, глубина. Где стоит серая метка — ещё не подключено, включаем по заходам. Что работает — зелёная метка.</p>'+
+      '<p class="hint">Щиток агента: провайдеры, модель, глубина, голос. Зелёная метка = реально работает. Серая = ещё не подключено, включаем по заходам. Пустых обещаний нет.</p>'+
+      '<h3 class="ag-sub">Провайдеры (статус подключения)</h3>'+
+      '<p class="hint">Подписки: Anthropic / OpenAI / Google. OpenRouter — отдельно, на токенах. Точка загорится зелёным ТОЛЬКО когда канал реально живой (заход 4); отвалится подписка — погаснет. Сейчас честно: не подключено.</p>'+
+      '<div class="ag-conn">'+provRows+'</div>'+
+      '<h3 class="ag-sub">Мозг агента</h3>'+
       '<div class="ag-conn">'+
-        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Модель / подписка</b><div class="muted">мозг агента (твои подписки, не OpenRouter)</div></div>'+
-          '<div class="ag-conn-r"><select id="ag-model">'+models.map(function(m){return '<option value="'+m[0]+'"'+((conn.model||'none')===m[0]?' selected':'')+'>'+m[1]+'</option>';}).join('')+'</select>'+agPill('вызов мозга не подключён · заход 4','dev')+'</div></div>'+
-        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Глубина мышления</b><div class="muted">низ / сред / выс, как у Astra</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Провайдер</b><div class="muted">чья подписка/ключ</div></div>'+
+          '<div class="ag-conn-r"><select id="ag-provider">'+AG_PROVIDERS.map(function(p){return '<option value="'+p.id+'"'+(prov===p.id?' selected':'')+'>'+esc(p.name)+'</option>';}).join('')+'</select></div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Модель</b><div class="muted">доступные у выбранного провайдера</div></div>'+
+          '<div class="ag-conn-r"><select id="ag-model">'+models.map(function(m){return '<option value="'+m[0]+'"'+(conn.model===m[0]?' selected':'')+'>'+esc(m[1])+'</option>';}).join('')+'</select>'+agPill('вызов не подключён · заход 4','dev')+'</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Глубина мышления</b><div class="muted">уровень рассуждения ОДНОЙ модели (не разные модели)</div></div>'+
           '<div class="ag-conn-r"><div class="ag-depth" id="ag-depth">'+depths.map(function(d){return '<button class="'+(depth===d[0]?'on':'')+'" data-depth="'+d[0]+'">'+d[1]+'</button>';}).join('')+'</div>'+agPill('сохраняется · применится с мозгом','dev')+'</div></div>'+
-        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Deepgram</b><div class="muted">голос клиента → текст</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Автопереключение</b><div class="muted">подписка кончилась/сбой → резервный провайдер, клиент без ответа не остаётся</div></div>'+
+          '<div class="ag-conn-r"><label class="ag-sw"><input type="checkbox" id="ag-failover"'+(conn.failover!==false?' checked':'')+'> включить</label>'+agPill('логика — заход 4','dev')+'</div></div>'+
+      '</div>'+
+      '<h3 class="ag-sub">Голос и канал</h3>'+
+      '<div class="ag-conn">'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Deepgram</b><div class="muted">агент ПОНИМАЕТ голосовые клиента (расшифровка прямо в чат)</div></div>'+
           '<div class="ag-conn-r"><label class="ag-sw"><input type="checkbox" id="ag-deepgram"'+(conn.deepgram?' checked':'')+'> включить</label>'+agPill('ключ не подключён · докрутить','dev')+'</div></div>'+
-        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Озвучка ответов</b><div class="muted">голос Ульяны клиенту</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Озвучка ответов</b><div class="muted">агент отвечает голосом Ульяны</div></div>'+
           '<div class="ag-conn-r">'+agPill('в разработке','dev')+'</div></div>'+
         '<div class="ag-conn-row"><div class="ag-conn-l"><b>WhatsApp-канал</b><div class="muted">приём и отправка (360dialog)</div></div>'+
           '<div class="ag-conn-r">'+agPill('подключено','live')+'</div></div>'+
+      '</div>'+
+      '<h3 class="ag-sub">Поведение</h3>'+
+      '<div class="ag-conn">'+
         '<div class="ag-conn-row"><div class="ag-conn-l"><b>Эскалация Ульяне</b><div class="muted">не уверен → зовёт человека, сам молчит</div></div>'+
-          '<div class="ag-conn-r"><label class="ag-sw"><input type="checkbox" id="ag-escal"'+(conn.escalate!==false?' checked':'')+'> включить</label>'+agPill('логика — заход 3–4','dev')+'</div></div>'+
+          '<div class="ag-conn-r"><label class="ag-sw"><input type="checkbox" id="ag-escal"'+(conn.escalate!==false?' checked':'')+'> включить</label>'+agPill('логика — заход 4','dev')+'</div></div>'+
         '<div class="ag-conn-row"><div class="ag-conn-l"><b>Режим обучения</b><div class="muted">читает чаты (даже выключенный), не отвечает</div></div>'+
           '<div class="ag-conn-r"><label class="ag-sw"><input type="checkbox" id="ag-learn"'+(conn.learn!==false?' checked':'')+'> включить</label>'+agPill('логика — заход 4','dev')+'</div></div>'+
         '<div class="ag-conn-row"><div class="ag-conn-l"><b>Автономность от ядра</b><div class="muted">работает сам, без ядра Норы</div></div>'+
           '<div class="ag-conn-r">'+agPill('заложено в архитектуру','live')+'</div></div>'+
       '</div>'+
-      '<p class="hint">Вкл/выкл агента по чатам и воронкам — на доске «Сделки» (тумблеры на колонках). Здесь — его подключения. Выбор модели и глубины сохраняется в базу агента и переедет на твоё ядро.</p>'+
+      '<p class="hint">Вкл/выкл агента по чатам и воронкам — на доске «Сделки». Тут — его подключения. Выбор провайдера/модели/глубины сохраняется в базу агента и переедет на твоё ядро.</p>'+
       '</div>';
   }
   function bindElektro(){
+    if($('ag-provider'))$('ag-provider').onchange=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn.provider=this.value; agentKb.conn.model=agProv(this.value).models[0][0]; if(await saveAgent())drawAgent(); };
     if($('ag-model'))$('ag-model').onchange=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn.model=this.value; if(await saveAgent())toast('Модель сохранена'); };
     $('main').querySelectorAll('#ag-depth [data-depth]').forEach(function(b){b.onclick=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn.depth=b.dataset.depth; if(await saveAgent())drawAgent(); };});
-    ['deepgram','escalate','learn'].forEach(function(k){ var id='ag-'+(k==='escalate'?'escal':k); if($(id))$(id).onchange=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn[k]=this.checked; await saveAgent(); }; });
+    ['deepgram','escalate','learn','failover'].forEach(function(k){ var id='ag-'+(k==='escalate'?'escal':k); if($(id))$(id).onchange=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn[k]=this.checked; await saveAgent(); }; });
+  }
+  // ---------- заход 3: живой чат с агентом (Ульяна/Руслан дообучают; сжатие в навыки) ----------
+  function drawChat(){
+    var chat=(agentKb.chat||[]);
+    var msgs=chat.map(function(m,i){
+      var mine=m.role==='me';
+      return '<div class="agc-msg '+(mine?'me':'bot')+'"><div class="agc-bub">'+esc(m.text||'')+'</div>'+
+        '<div class="agc-meta">'+esc(m.author||(mine?'':'агент'))+(m.ts?' · '+day(m.ts):'')+
+        (mine?' <button class="scr-mini" data-toskill="'+i+'" title="сохранить это как урок агенту">📎 в урок</button>':'')+'</div></div>';
+    }).join('')||'<p class="muted">Пусто. Напиши агенту: поправь поведение, задай вопрос, дай указание. Пока мозг не подключён — сообщения копятся и станут уроками; живые ответы включим в заходе 4.</p>';
+    return '<div class="card agc-card"><h2>💬 Чат с агентом</h2>'+
+      '<p class="hint">Тут дообучаешь агента в разговоре (голосом — когда подключим Deepgram). Важное из чата → кнопкой «📎 в урок» складывается в шкаф знаний, чтобы контекст не пух бесконечным логом.</p>'+
+      '<div class="agc-log" id="agc-log">'+msgs+'</div>'+
+      '<form id="agc-form" class="agc-form"><textarea id="agc-text" placeholder="Сообщение агенту…" rows="2"></textarea>'+
+        '<button type="button" class="ghost" id="agc-mic" title="надиктовать (появится с Deepgram)">🎤</button>'+
+        '<button type="submit" class="btn">→</button></form>'+
+      '<p class="hint">'+agPill('живые ответы агента — заход 4','dev')+' '+agPill('🎤 надиктовка — с Deepgram','dev')+' Сейчас чат реально сохраняет переписку и умеет вытаскивать уроки.</p>'+
+      '</div>';
+  }
+  function bindChat(){
+    var f=$('agc-form'); if(!f)return;
+    f.onsubmit=async function(e){ e.preventDefault(); var t=$('agc-text').value.trim(); if(!t)return;
+      agentKb.chat=agentKb.chat||[]; agentKb.chat.push({role:'me',text:t,author:state.user.name,ts:new Date().toISOString()});
+      $('agc-text').value=''; if(await saveAgent())drawAgent(); };
+    if($('agc-mic'))$('agc-mic').onclick=function(){ toast('Надиктовка включится с Deepgram (заход 4)'); };
+    $('main').querySelectorAll('[data-toskill]').forEach(function(b){b.onclick=async function(){ var m=agentKb.chat[Number(b.dataset.toskill)]; if(!m)return; agentKb.lessons=agentKb.lessons||[]; agentKb.lessons.unshift({text:m.text,author:m.author,ts:new Date().toISOString()}); if(await saveAgent()){toast('Сохранено в уроки');drawAgent();} };});
   }
   function drawAgent(){
     var mats=agentKb.materials.map(function(m,i){
@@ -722,6 +778,7 @@
     }).join('')||'<p class="muted">Пока нет уроков. Тут Ульяна оставляет коррекции: «на возражение X отвечай так», «в такой момент — вот это фото».</p>';
     $('main').innerHTML='<div class="content">'+
       drawElektro()+
+      drawChat()+
       '<div class="card"><h2>🧠 Инструкция агента</h2><p class="hint">«Мозг»: кто он, как говорит, факты о товаре, отработка возражений. Правь и сохраняй.</p>'+
         '<textarea id="ag-instr" style="min-height:220px">'+esc(agentKb.instruction||'')+'</textarea>'+
         '<div class="actions"><button class="btn" id="ag-save-instr">Сохранить инструкцию</button>'+(agentKb.instruction?'':(state.user.role==='mgr'?'<button class="ghost" id="ag-seed">Загрузить базовую</button>':''))+'</div></div>'+
@@ -741,9 +798,10 @@
     $('main').querySelectorAll('[data-lesdel]').forEach(function(b){b.onclick=async function(){ agentKb.lessons.splice(Number(b.dataset.lesdel),1); if(await saveAgent())drawAgent(); };});
     $('ag-lesson-form').onsubmit=async function(e){ e.preventDefault(); var t=$('ag-lesson-text').value.trim(); if(!t)return; agentKb.lessons.unshift({text:t,author:state.user.name,ts:new Date().toISOString()}); if(await saveAgent())drawAgent(); };
     bindElektro();
+    bindChat();
   }
   async function renderAgent(){
-    try{ var r=await api('GET','/agent-kb'); if(state.tab!=='agent')return; agentKb=(r.data&&typeof r.data==='object')?r.data:{instruction:'',materials:[],lessons:[]}; if(!agentKb.materials)agentKb.materials=[]; if(!agentKb.lessons)agentKb.lessons=[]; if(!agentKb.conn)agentKb.conn={}; agentRev=r.rev||0; }
+    try{ var r=await api('GET','/agent-kb'); if(state.tab!=='agent')return; agentKb=(r.data&&typeof r.data==='object')?r.data:{instruction:'',materials:[],lessons:[]}; if(!agentKb.materials)agentKb.materials=[]; if(!agentKb.lessons)agentKb.lessons=[]; if(!agentKb.conn)agentKb.conn={}; if(!agentKb.chat)agentKb.chat=[]; agentRev=r.rev||0; }
     catch(e){ if(state.tab==='agent')$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p></div>'; return; }
     drawAgent();
   }
