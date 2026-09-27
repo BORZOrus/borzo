@@ -133,6 +133,20 @@
 .ag-when{font-size:12px;color:#8a6d3b;background:#fdf6e3;border-radius:6px;padding:5px 8px;margin-top:6px}
 .ag-lesson{border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;background:#fafbfc}
 .ag-lesson-t{font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:5px}
+/* десктоп-раскладка: широкий экран использует место, шторки становятся центр-модалками. Мобильную вёрстку не трогает. */
+@media(min-width:900px){
+  .wrap{max-width:1180px}
+  .top{padding:14px 24px}
+  .tabs,.toolbar{padding-left:24px;padding-right:24px}
+  .board{padding:0 24px 24px}
+  .column{flex:0 0 300px;max-height:calc(100dvh - 230px)}
+  .content{max-width:940px;margin:0 auto;padding:0 24px}
+  .stats{grid-template-columns:repeat(4,1fr)}
+  .sheet{left:50%;top:50%;bottom:auto;transform:translate(-50%,-50%);max-width:680px;max-height:88vh;border-radius:16px}
+  .scr-panel{left:50%;top:50%;bottom:auto;transform:translate(-50%,-50%);max-width:680px;height:82vh;border-radius:16px}
+  .wa-log{height:56vh}
+  .ag-strow .seg{width:240px}
+}
 .scr-tabs{display:flex;gap:8px;padding:10px 16px}
 .scr-tabs button{flex:1;background:#f0f2f5;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-weight:600;color:var(--mut);min-height:42px}
 .scr-tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
