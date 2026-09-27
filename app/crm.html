@@ -133,6 +133,21 @@
 .ag-when{font-size:12px;color:#8a6d3b;background:#fdf6e3;border-radius:6px;padding:5px 8px;margin-top:6px}
 .ag-lesson{border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;background:#fafbfc}
 .ag-lesson-t{font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:5px}
+.ag-conn{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.ag-conn-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ag-conn-row:last-child{border-bottom:0}
+.ag-conn-l b{font-size:14px}
+.ag-conn-l .muted{font-size:12px}
+.ag-conn-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.ag-conn-r select{padding:7px 9px;border:1px solid var(--line);border-radius:9px;font-size:13px;background:#fff}
+.ag-pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.ag-pill.live{background:#e6f6ec;color:#1a7f43;border:1px solid #b8e6c8}
+.ag-pill.dev{background:#f1f2f4;color:#8a8f98;border:1px solid #e0e2e6}
+.ag-depth{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.ag-depth button{border:0;background:#fff;padding:7px 12px;font-size:13px;cursor:pointer;border-right:1px solid var(--line)}
+.ag-depth button:last-child{border-right:0}
+.ag-depth button.on{background:var(--ink);color:#fff}
+.ag-sw{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
 /* десктоп-раскладка: широкий экран использует место, шторки становятся центр-модалками. Мобильную вёрстку не трогает. */
 @media(min-width:900px){
   .wrap{max-width:1180px}
@@ -184,6 +199,6 @@
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden><header><h2 id="sheet-title"></h2><button class="iconbtn" id="sheet-close" aria-label="Закрыть">✕</button></header><div id="sheet-body"></div></section>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm3"></script>
-<script src="crm.js?v=crm22"></script>
+<script src="crm.js?v=crm23"></script>
 </body>
 </html>

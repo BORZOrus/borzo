@@ -679,6 +679,39 @@
       try{ var d=await fileData(f); var r=await api('POST','/upload',{reqId:uid(),data:d}); agentKb.materials.push({type:'image',title:title,when:when,value:r.url}); if(await saveAgent())drawAgent(); }catch(e){toast(error(e));} };
     inp.click();
   }
+  function agPill(txt,cls){ return '<span class="ag-pill '+cls+'">'+esc(txt)+'</span>'; }
+  function drawElektro(){
+    var conn=agentKb.conn||{}, depth=conn.depth||'med';
+    var models=[['none','— не выбрано'],['opus','Opus (подписка)'],['fable','Fable (подписка)'],['light','Лёгкая / дешёвая'],['astra','Astra']];
+    var depths=[['low','Низкая'],['med','Средняя'],['high','Высокая']];
+    return '<div class="card"><h2>🔌 Электроящик подключений</h2>'+
+      '<p class="hint">Щиток агента: на чём работает мозг, голос, глубина. Где стоит серая метка — ещё не подключено, включаем по заходам. Что работает — зелёная метка.</p>'+
+      '<div class="ag-conn">'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Модель / подписка</b><div class="muted">мозг агента (твои подписки, не OpenRouter)</div></div>'+
+          '<div class="ag-conn-r"><select id="ag-model">'+models.map(function(m){return '<option value="'+m[0]+'"'+((conn.model||'none')===m[0]?' selected':'')+'>'+m[1]+'</option>';}).join('')+'</select>'+agPill('вызов мозга не подключён · заход 4','dev')+'</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Глубина мышления</b><div class="muted">низ / сред / выс, как у Astra</div></div>'+
+          '<div class="ag-conn-r"><div class="ag-depth" id="ag-depth">'+depths.map(function(d){return '<button class="'+(depth===d[0]?'on':'')+'" data-depth="'+d[0]+'">'+d[1]+'</button>';}).join('')+'</div>'+agPill('сохраняется · применится с мозгом','dev')+'</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Deepgram</b><div class="muted">голос клиента → текст</div></div>'+
+          '<div class="ag-conn-r"><label class="ag-sw"><input type="checkbox" id="ag-deepgram"'+(conn.deepgram?' checked':'')+'> включить</label>'+agPill('ключ не подключён · докрутить','dev')+'</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Озвучка ответов</b><div class="muted">голос Ульяны клиенту</div></div>'+
+          '<div class="ag-conn-r">'+agPill('в разработке','dev')+'</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>WhatsApp-канал</b><div class="muted">приём и отправка (360dialog)</div></div>'+
+          '<div class="ag-conn-r">'+agPill('подключено','live')+'</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Эскалация Ульяне</b><div class="muted">не уверен → зовёт человека, сам молчит</div></div>'+
+          '<div class="ag-conn-r"><label class="ag-sw"><input type="checkbox" id="ag-escal"'+(conn.escalate!==false?' checked':'')+'> включить</label>'+agPill('логика — заход 3–4','dev')+'</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Режим обучения</b><div class="muted">читает чаты (даже выключенный), не отвечает</div></div>'+
+          '<div class="ag-conn-r"><label class="ag-sw"><input type="checkbox" id="ag-learn"'+(conn.learn!==false?' checked':'')+'> включить</label>'+agPill('логика — заход 4','dev')+'</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Автономность от ядра</b><div class="muted">работает сам, без ядра Норы</div></div>'+
+          '<div class="ag-conn-r">'+agPill('заложено в архитектуру','live')+'</div></div>'+
+      '</div>'+
+      '<p class="hint">Вкл/выкл агента по чатам и воронкам — на доске «Сделки» (тумблеры на колонках). Здесь — его подключения. Выбор модели и глубины сохраняется в базу агента и переедет на твоё ядро.</p>'+
+      '</div>';
+  }
+  function bindElektro(){
+    if($('ag-model'))$('ag-model').onchange=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn.model=this.value; if(await saveAgent())toast('Модель сохранена'); };
+    $('main').querySelectorAll('#ag-depth [data-depth]').forEach(function(b){b.onclick=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn.depth=b.dataset.depth; if(await saveAgent())drawAgent(); };});
+    ['deepgram','escalate','learn'].forEach(function(k){ var id='ag-'+(k==='escalate'?'escal':k); if($(id))$(id).onchange=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn[k]=this.checked; await saveAgent(); }; });
+  }
   function drawAgent(){
     var mats=agentKb.materials.map(function(m,i){
       var body=m.type==='image'?'<img class="scr-att-img" src="'+esc(m.value||'')+'">':'<div class="scr-att-link">🔗 '+esc(m.value||'')+'</div>';
@@ -688,6 +721,7 @@
       return '<div class="ag-lesson"><div class="ag-lesson-t">'+esc(l.text||'')+'</div><div class="muted" style="font-size:11px">'+esc(l.author||'')+(l.ts?' · '+day(l.ts):'')+' <button class="scr-mini danger" data-lesdel="'+i+'" style="margin-left:6px">🗑</button></div></div>';
     }).join('')||'<p class="muted">Пока нет уроков. Тут Ульяна оставляет коррекции: «на возражение X отвечай так», «в такой момент — вот это фото».</p>';
     $('main').innerHTML='<div class="content">'+
+      drawElektro()+
       '<div class="card"><h2>🧠 Инструкция агента</h2><p class="hint">«Мозг»: кто он, как говорит, факты о товаре, отработка возражений. Правь и сохраняй.</p>'+
         '<textarea id="ag-instr" style="min-height:220px">'+esc(agentKb.instruction||'')+'</textarea>'+
         '<div class="actions"><button class="btn" id="ag-save-instr">Сохранить инструкцию</button>'+(agentKb.instruction?'':(state.user.role==='mgr'?'<button class="ghost" id="ag-seed">Загрузить базовую</button>':''))+'</div></div>'+
@@ -706,9 +740,10 @@
     $('main').querySelectorAll('[data-matdel]').forEach(function(b){b.onclick=async function(){ if(!confirm('Убрать материал?'))return; agentKb.materials.splice(Number(b.dataset.matdel),1); if(await saveAgent())drawAgent(); };});
     $('main').querySelectorAll('[data-lesdel]').forEach(function(b){b.onclick=async function(){ agentKb.lessons.splice(Number(b.dataset.lesdel),1); if(await saveAgent())drawAgent(); };});
     $('ag-lesson-form').onsubmit=async function(e){ e.preventDefault(); var t=$('ag-lesson-text').value.trim(); if(!t)return; agentKb.lessons.unshift({text:t,author:state.user.name,ts:new Date().toISOString()}); if(await saveAgent())drawAgent(); };
+    bindElektro();
   }
   async function renderAgent(){
-    try{ var r=await api('GET','/agent-kb'); if(state.tab!=='agent')return; agentKb=(r.data&&typeof r.data==='object')?r.data:{instruction:'',materials:[],lessons:[]}; if(!agentKb.materials)agentKb.materials=[]; if(!agentKb.lessons)agentKb.lessons=[]; agentRev=r.rev||0; }
+    try{ var r=await api('GET','/agent-kb'); if(state.tab!=='agent')return; agentKb=(r.data&&typeof r.data==='object')?r.data:{instruction:'',materials:[],lessons:[]}; if(!agentKb.materials)agentKb.materials=[]; if(!agentKb.lessons)agentKb.lessons=[]; if(!agentKb.conn)agentKb.conn={}; agentRev=r.rev||0; }
     catch(e){ if(state.tab==='agent')$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p></div>'; return; }
     drawAgent();
   }
