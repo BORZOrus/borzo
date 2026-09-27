@@ -667,6 +667,51 @@
   }
   async function copy(t){try{await navigator.clipboard.writeText(t.text);toast('Шаблон скопирован');}catch(e){openSheet('Скопируйте текст',area(t.title,'copy',t.text));var el=body.querySelector('textarea');el.readOnly=true;el.focus();el.select();}}
   function bindCopy(root){root.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){var t=state.templates.find(function(x){return x.id===Number(b.dataset.copy);});if(t)copy(t);};});}
+  // ---------- вкладка «Агент»: видимый шкаф знаний (инструкция + материалы + уроки) ----------
+  var agentKb=null, agentRev=0;
+  async function saveAgent(){ try{ var r=await api('PUT','/agent-kb',{reqId:uid(),data:agentKb,baseRev:agentRev}); agentRev=r.rev; return true; }catch(e){ if(e&&e.status===409){ toast('База агента изменилась — обновляю'); await renderAgent(); } else toast(error(e)); return false; } }
+  function agAddMaterial(type){
+    var title=(prompt('Подпись (что это):','')||'').trim(); if(!title)return;
+    var when=(prompt('Когда использовать (в какой момент отправлять клиенту):','')||'').trim();
+    if(type==='link'){ var url=(prompt('Ссылка (URL):','')||'').trim(); if(!url)return; agentKb.materials.push({type:'link',title:title,when:when,value:url}); saveAgent().then(function(ok){if(ok)drawAgent();}); return; }
+    var inp=document.createElement('input'); inp.type='file'; inp.accept='image/jpeg,image/png,image/webp';
+    inp.onchange=async function(){ var f=inp.files[0]; if(!f)return; if(f.size>5*1024*1024){toast('Фото до 5 МБ');return;} toast('Загрузка фото…');
+      try{ var d=await fileData(f); var r=await api('POST','/upload',{reqId:uid(),data:d}); agentKb.materials.push({type:'image',title:title,when:when,value:r.url}); if(await saveAgent())drawAgent(); }catch(e){toast(error(e));} };
+    inp.click();
+  }
+  function drawAgent(){
+    var mats=agentKb.materials.map(function(m,i){
+      var body=m.type==='image'?'<img class="scr-att-img" src="'+esc(m.value||'')+'">':'<div class="scr-att-link">🔗 '+esc(m.value||'')+'</div>';
+      return '<div class="scr-att"><div class="scr-att-cap">'+esc(m.title||'')+'</div>'+body+(m.when?'<div class="ag-when">📌 когда: '+esc(m.when)+'</div>':'')+'<div class="scr-msg-act"><button class="scr-edit danger" data-matdel="'+i+'">🗑 убрать</button></div></div>';
+    }).join('')||'<p class="muted">Пусто. Добавь фото/ссылку, которые агент шлёт клиентам, и укажи «когда использовать».</p>';
+    var lessons=agentKb.lessons.map(function(l,i){
+      return '<div class="ag-lesson"><div class="ag-lesson-t">'+esc(l.text||'')+'</div><div class="muted" style="font-size:11px">'+esc(l.author||'')+(l.ts?' · '+day(l.ts):'')+' <button class="scr-mini danger" data-lesdel="'+i+'" style="margin-left:6px">🗑</button></div></div>';
+    }).join('')||'<p class="muted">Пока нет уроков. Тут Ульяна оставляет коррекции: «на возражение X отвечай так», «в такой момент — вот это фото».</p>';
+    $('main').innerHTML='<div class="content">'+
+      '<div class="card"><h2>🧠 Инструкция агента</h2><p class="hint">«Мозг»: кто он, как говорит, факты о товаре, отработка возражений. Правь и сохраняй.</p>'+
+        '<textarea id="ag-instr" style="min-height:220px">'+esc(agentKb.instruction||'')+'</textarea>'+
+        '<div class="actions"><button class="btn" id="ag-save-instr">Сохранить инструкцию</button>'+(agentKb.instruction?'':(state.user.role==='mgr'?'<button class="ghost" id="ag-seed">Загрузить базовую</button>':''))+'</div></div>'+
+      '<div class="card"><h2>🧰 Шкаф материалов</h2><p class="hint">Фото и ссылки, что агент шлёт клиентам. У каждого — подпись и «когда использовать».</p>'+
+        '<div id="ag-mats">'+mats+'</div>'+
+        '<div class="actions"><button class="ghost" id="ag-add-img">+ Фото</button><button class="ghost" id="ag-add-link">+ Ссылка</button></div></div>'+
+      '<div class="card"><h2>🎓 Уроки и коррекции</h2><p class="hint">Ульяна пишет, что поправить. Всё видно и хранится структурно — контекст агента не переполняется, знания лежат здесь, а не в бесконечной переписке.</p>'+
+        '<div id="ag-lessons">'+lessons+'</div>'+
+        '<form id="ag-lesson-form" class="sub-form"><textarea id="ag-lesson-text" placeholder="Новый урок агенту…" style="min-height:70px"></textarea><button class="ghost" type="submit">+ Добавить урок</button></form></div>'+
+      '<p class="hint">Живой чат с агентом (надиктовать голосом, дообучить в разговоре) добавим, когда подключим его мозг к нейросети. Пока собираем шкаф здесь: всё видно, ничего не теряется.</p>'+
+      '</div>';
+    $('ag-save-instr').onclick=async function(){ agentKb.instruction=$('ag-instr').value; this.disabled=true; if(await saveAgent())toast('Инструкция сохранена'); this.disabled=false; };
+    if($('ag-seed'))$('ag-seed').onclick=async function(){ try{ await api('POST','/agent-kb/seed',{reqId:uid()}); toast('Базовая инструкция загружена'); await renderAgent(); }catch(e){toast(error(e));} };
+    $('ag-add-img').onclick=function(){ agAddMaterial('image'); };
+    $('ag-add-link').onclick=function(){ agAddMaterial('link'); };
+    $('main').querySelectorAll('[data-matdel]').forEach(function(b){b.onclick=async function(){ if(!confirm('Убрать материал?'))return; agentKb.materials.splice(Number(b.dataset.matdel),1); if(await saveAgent())drawAgent(); };});
+    $('main').querySelectorAll('[data-lesdel]').forEach(function(b){b.onclick=async function(){ agentKb.lessons.splice(Number(b.dataset.lesdel),1); if(await saveAgent())drawAgent(); };});
+    $('ag-lesson-form').onsubmit=async function(e){ e.preventDefault(); var t=$('ag-lesson-text').value.trim(); if(!t)return; agentKb.lessons.unshift({text:t,author:state.user.name,ts:new Date().toISOString()}); if(await saveAgent())drawAgent(); };
+  }
+  async function renderAgent(){
+    try{ var r=await api('GET','/agent-kb'); if(state.tab!=='agent')return; agentKb=(r.data&&typeof r.data==='object')?r.data:{instruction:'',materials:[],lessons:[]}; if(!agentKb.materials)agentKb.materials=[]; if(!agentKb.lessons)agentKb.lessons=[]; agentRev=r.rev||0; }
+    catch(e){ if(state.tab==='agent')$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p></div>'; return; }
+    drawAgent();
+  }
   async function renderTemplates(){
     try{var r=await api('GET','/templates');if(state.tab!=='templates')return;state.templates=r.templates;
       $('main').innerHTML='<div class="content">'+(state.user.role==='mgr'?'<button class="btn" id="template-new">+ Шаблон</button>':'')+'<p class="hint">Нажмите «Копировать» и вставьте ответ в переписку.</p>'+r.templates.map(function(t){return '<article class="card"><h2>'+esc(t.title)+'</h2><p class="pre">'+esc(t.text)+'</p><div class="actions"><button class="ghost" data-copy="'+esc(t.id)+'">Копировать</button>'+(state.user.role==='mgr'?'<button class="ghost danger" data-delete-template="'+esc(t.id)+'">Удалить</button>':'')+'</div></article>';}).join('')+(r.templates.length?'':'<div class="empty">Пока нет шаблонов</div>')+'</div>';bindCopy($('main'));
@@ -903,7 +948,7 @@
   async function tab(name){
     state.tab=name;$('toolbar').hidden=!['deals','clients'].includes(name);
     document.querySelectorAll('[data-tab]').forEach(function(b){b.classList.toggle('on',b.dataset.tab===name);if(b.dataset.tab===name)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-    if(name==='deals')renderDeals();else if(name==='clients')await loadClients();else if(name==='analytics')await renderAnalytics();else if(name==='templates')await renderTemplates();else if(name==='catalog')await renderCatalog();else if(name==='import'&&state.user.role==='mgr')renderImport();
+    if(name==='deals')renderDeals();else if(name==='clients')await loadClients();else if(name==='analytics')await renderAnalytics();else if(name==='templates')await renderTemplates();else if(name==='agent')await renderAgent();else if(name==='catalog')await renderCatalog();else if(name==='import'&&state.user.role==='mgr')renderImport();
   }
   var searchTimer;
   $('search').oninput=function(){state.q=this.value.trim().toLowerCase();clearTimeout(searchTimer);if(state.tab==='deals')renderDeals();else searchTimer=setTimeout(loadClients,200);};

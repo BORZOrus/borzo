@@ -113,6 +113,13 @@ async function initSchema(db) {
       id INTEGER PRIMARY KEY DEFAULT 1, data JSONB NOT NULL DEFAULT '{}',
       rev INTEGER NOT NULL DEFAULT 0, updated_by INTEGER, updated_at BIGINT
     );
+    -- база знаний агента (видимый «шкаф»): инструкция + материалы (фото/ссылки с «когда использовать») + уроки/коррекции.
+    -- Это НЕ чат-лог: знания хранятся структурно, поэтому контекст не переполняется — при ответе агент берёт промпт+эту базу, а не историю обучения.
+    CREATE TABLE IF NOT EXISTS crm_agent (
+      id INTEGER PRIMARY KEY DEFAULT 1, data JSONB NOT NULL DEFAULT '{}',
+      rev INTEGER NOT NULL DEFAULT 0, updated_by INTEGER, updated_at BIGINT
+    );
+    INSERT INTO crm_agent(id,data) VALUES(1,'{"instruction":"","materials":[],"lessons":[]}') ON CONFLICT(id) DO NOTHING;
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) VALUES
       ('new','Новая заявка',1,false,false), ('working','В работе',2,false,false),
       ('selection','Подбор решения',3,false,false), ('agreed','Договорились/Предоплата',4,false,false),
@@ -609,6 +616,39 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     await db.query(`INSERT INTO crm_scripts(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3)
       ON CONFLICT(id) DO UPDATE SET data=$1,rev=crm_scripts.rev+1,updated_by=$2,updated_at=$3`,[JSON.stringify(src),req.user.id,Date.now()]);
     return {ok:true,seeded:true,blocks:Object.keys(src.blocks||{}).length};
+  }));
+  // ---------- база знаний агента (видимый шкаф: инструкция + материалы + уроки) ----------
+  router.get('/agent-kb',route(async(req,res)=>{
+    const r=await pool.query('SELECT data,rev,updated_at FROM crm_agent WHERE id=1');
+    res.json(r.rowCount?{data:r.rows[0].data,rev:r.rows[0].rev,updated_at:Number(r.rows[0].updated_at)||0}:{data:{instruction:'',materials:[],lessons:[]},rev:0});
+  }));
+  router.put('/agent-kb',mutate(async(req,db)=>{
+    const data=req.body.data;
+    if(!data||typeof data!=='object'||Array.isArray(data)) throw err(400,'нужен объект базы знаний');
+    if(!Array.isArray(data.materials)) data.materials=[];
+    if(!Array.isArray(data.lessons)) data.lessons=[];
+    data.instruction=str(data.instruction,'Инструкция',20000);
+    if(JSON.stringify(data).length>4000000) throw err(400,'слишком большой объём базы знаний');
+    const cur=await db.query('SELECT rev FROM crm_agent WHERE id=1 FOR UPDATE');
+    if(cur.rowCount){
+      if(req.body.baseRev!=null && Number(req.body.baseRev)!==cur.rows[0].rev) throw err(409,'базу агента уже изменили — обновите и повторите');
+      const r=await db.query('UPDATE crm_agent SET data=$1,rev=rev+1,updated_by=$2,updated_at=$3 WHERE id=1 RETURNING rev',[JSON.stringify(data),req.user.id,Date.now()]);
+      return {ok:true,rev:r.rows[0].rev};
+    }
+    const r=await db.query('INSERT INTO crm_agent(id,data,rev,updated_by,updated_at) VALUES(1,$1,1,$2,$3) RETURNING rev',[JSON.stringify(data),req.user.id,Date.now()]);
+    return {ok:true,rev:r.rows[0].rev};
+  }));
+  // разовая загрузка базовой инструкции из agent_prompt_seed.md (если пусто)
+  router.post('/agent-kb/seed',requireRole('mgr'),mutate(async(req,db)=>{
+    const ex=await db.query('SELECT data FROM crm_agent WHERE id=1 FOR UPDATE');
+    const cur=(ex.rowCount&&ex.rows[0].data)||{instruction:'',materials:[],lessons:[]};
+    if(cur.instruction && cur.instruction.trim() && !req.body.force) return {ok:true,skipped:true};
+    let txt=''; try{ txt=fs.readFileSync(path.join(__dirname,'agent_prompt_seed.md'),'utf8'); }catch(e){ throw err(500,'agent_prompt_seed.md не найден на сервере'); }
+    cur.instruction=txt.slice(0,20000);
+    if(!Array.isArray(cur.materials)) cur.materials=[];
+    if(!Array.isArray(cur.lessons)) cur.lessons=[];
+    await db.query('UPDATE crm_agent SET data=$1,rev=rev+1,updated_by=$2,updated_at=$3 WHERE id=1',[JSON.stringify(cur),req.user.id,Date.now()]);
+    return {ok:true,seeded:true,len:cur.instruction.length};
   }));
   app.use('/api/crm',router);
 }

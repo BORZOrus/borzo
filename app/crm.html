@@ -130,6 +130,9 @@
 .ch-reply-in{display:flex;align-items:center;gap:8px;background:#fff;border-left:3px solid #00a884;border-radius:8px;padding:8px 10px;font-size:13px;color:#54656f;box-shadow:0 1px 2px rgba(17,27,33,.06)}
 .ch-reply-in span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ch-reply-in button{background:none;border:none;color:#54656f;font-size:15px;padding:2px 6px;cursor:pointer}
+.ag-when{font-size:12px;color:#8a6d3b;background:#fdf6e3;border-radius:6px;padding:5px 8px;margin-top:6px}
+.ag-lesson{border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;background:#fafbfc}
+.ag-lesson-t{font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:5px}
 .scr-tabs{display:flex;gap:8px;padding:10px 16px}
 .scr-tabs button{flex:1;background:#f0f2f5;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-weight:600;color:var(--mut);min-height:42px}
 .scr-tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
@@ -158,7 +161,7 @@
 <body>
 <main class="wrap" id="app">
   <header class="top"><div class="row"><a class="iconbtn" href="home.html" aria-label="В прихожую">‹</a><span class="logo">B</span><div class="grow"><h1>CRM</h1><div class="muted" id="who">Загрузка…</div></div><button class="iconbtn" id="refresh" aria-label="Обновить">↻</button></div></header>
-  <nav class="tabs" aria-label="Разделы CRM"><button data-tab="deals" class="on" aria-current="page">Сделки</button><button data-tab="clients">Клиенты</button><button data-tab="analytics">Аналитика</button><button data-tab="templates">Шаблоны</button><button data-tab="catalog">Каталог</button><button data-tab="import" id="import-tab" hidden>Импорт</button></nav>
+  <nav class="tabs" aria-label="Разделы CRM"><button data-tab="deals" class="on" aria-current="page">Сделки</button><button data-tab="clients">Клиенты</button><button data-tab="analytics">Аналитика</button><button data-tab="templates">Шаблоны</button><button data-tab="agent">🤖 Агент</button><button data-tab="catalog">Каталог</button><button data-tab="import" id="import-tab" hidden>Импорт</button></nav>
   <div class="toolbar" id="toolbar"><label class="sr-only" for="search">Поиск по имени, телефону или сделке</label><input type="search" id="search" placeholder="Имя или телефон" autocomplete="off"></div>
   <div id="status" class="status" role="status" aria-live="polite"></div>
   <div id="main"><div class="empty">Загружаю CRM…</div></div>
@@ -167,6 +170,6 @@
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden><header><h2 id="sheet-title"></h2><button class="iconbtn" id="sheet-close" aria-label="Закрыть">✕</button></header><div id="sheet-body"></div></section>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm3"></script>
-<script src="crm.js?v=crm21"></script>
+<script src="crm.js?v=crm22"></script>
 </body>
 </html>
