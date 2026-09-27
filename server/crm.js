@@ -104,6 +104,10 @@ async function initSchema(db) {
     INSERT INTO crm_settings(id,data) VALUES(1,'{"agentGlobal":false,"agentStages":{}}') ON CONFLICT(id) DO NOTHING;
     -- точечный перекрыватель агента на сделке: NULL=наследовать (воронка/глобал), true/false=жёстко тут
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS agent_override BOOLEAN;
+    -- рекламный источник лида (click-to-WhatsApp): из какого объявления пришёл + ctwa_clid для Meta-атрибуции
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS ad_headline TEXT NOT NULL DEFAULT '';
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS ad_source_url TEXT NOT NULL DEFAULT '';
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS ctwa_clid TEXT NOT NULL DEFAULT '';
     -- скрипты продаж (магистраль + инструменты): один blob той же формы, что сайт скриптов Руслана (blocks/mainOrder/sectionOrder/sections)
     CREATE TABLE IF NOT EXISTS crm_scripts (
       id INTEGER PRIMARY KEY DEFAULT 1, data JSONB NOT NULL DEFAULT '{}',
@@ -454,7 +458,17 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
         count(*) FILTER(WHERE (s.is_won OR s.is_lost) AND closed_at IS NULL)::int AS undated_closed,
         count(*) FILTER(WHERE imported_incomplete)::int AS incomplete_won
         FROM crm_deals d JOIN crm_stages s ON s.id=d.stage_id`);
-      const c=summary.rows[0]; return {from,to,timezone:'Asia/Almaty',missing:missing.rows[0],stages:stages.rows,...c,...sales.rows[0],conversion:c.leads?Math.round(c.won/c.leads*10000)/100:0,sources:sources.rows};
+      // метрики базы (за всё время): покупатели, разовые/повторные, средний чек по продажам
+      const base=await db.query(`
+        WITH wbc AS (
+          SELECT d.client_id, count(*)::int AS won_cnt
+          FROM crm_deals d JOIN crm_stages s ON s.id=d.stage_id WHERE s.is_won GROUP BY d.client_id
+        )
+        SELECT (SELECT count(*)::int FROM wbc) AS buyers,
+               (SELECT count(*)::int FROM wbc WHERE won_cnt=1) AS one_time,
+               (SELECT count(*)::int FROM wbc WHERE won_cnt>1) AS repeat_buyers,
+               (SELECT coalesce(round(avg(d.amount)),0) FROM crm_deals d JOIN crm_stages s ON s.id=d.stage_id WHERE s.is_won AND d.amount>0)::int AS avg_check`);
+      const c=summary.rows[0]; return {from,to,timezone:'Asia/Almaty',missing:missing.rows[0],stages:stages.rows,...c,...sales.rows[0],base:base.rows[0],conversion:c.leads?Math.round(c.won/c.leads*10000)/100:0,sources:sources.rows};
     }); res.json(result);
   }));
   // ---------- каталог товаров (конструктор: модели × опции × варианты) ----------

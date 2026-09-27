@@ -160,9 +160,15 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
         [client.id])).rows[0];
       if(!deal){
         const st = (await db.query("SELECT id FROM crm_stages WHERE code='new'")).rows[0];
+        // рекламный источник (Meta присылает referral в первом сообщении click-to-WhatsApp)
+        const ref = m.referral || null;
+        const adH = ref && (ref.headline||ref.body) ? String(ref.headline||ref.body).slice(0,200) : '';
+        const adU = ref && ref.source_url ? String(ref.source_url).slice(0,500) : '';
+        const clid = ref && ref.ctwa_clid ? String(ref.ctwa_clid).slice(0,200) : '';
+        const src = adH ? ('Реклама: '+adH).slice(0,100) : 'whatsapp';
         deal = (await db.query(
-          `INSERT INTO crm_deals(client_id, title, stage_id, source) VALUES($1,$2,$3,'whatsapp') RETURNING *`,
-          [client.id, profileName || client.name || phone, st.id])).rows[0];
+          `INSERT INTO crm_deals(client_id, title, stage_id, source, ad_headline, ad_source_url, ctwa_clid) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          [client.id, profileName || client.name || phone, st.id, src, adH, adU, clid])).rows[0];
         // необработанный лид: строка в ленту сделки (менеджер позже жмёт «взять в работу» — Заход 2)
         await db.query(
           `INSERT INTO crm_events(deal_id, kind, text, author_name, to_stage_id) VALUES($1,'status',$2,'WhatsApp',$3)`,
