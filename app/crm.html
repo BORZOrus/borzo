@@ -164,6 +164,22 @@
 .agc-form{display:flex;gap:6px;align-items:flex-end}
 .agc-form textarea{flex:1;min-height:40px;resize:vertical}
 .agc-form .btn{padding:9px 15px}
+.ag-master{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px;margin:0 0 8px;background:#fff;border:1px solid var(--line);border-radius:12px}
+.ag-master.on{background:#e6f6ec;border-color:#b8e6c8}
+.ag-master-sw{border:0;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:700;cursor:pointer;background:#eceef1;color:#5a6069}
+.ag-master.on .ag-master-sw{background:#22a45d;color:#fff}
+.ag-master .muted{font-size:12px}
+.deal-ag{border:1px solid var(--line);background:#fff;border-radius:8px;padding:4px 8px;font-size:13px;cursor:pointer;filter:grayscale(1);opacity:.5}
+.deal-ag.on{filter:none;opacity:1;border-color:#b8e6c8;background:#e6f6ec}
+.deal-ag.off{filter:grayscale(1);opacity:.9;border-color:#f0c4c4;background:#fbecec}
+.deal-ag.inh{filter:grayscale(.6);opacity:.65}
+.rz-list{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.rz-row{padding:10px 2px;border-bottom:1px solid var(--line)}
+.rz-row:last-child{border-bottom:0}
+.rz-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rz-head b{font-size:14px}
+.rz-what{font-size:13px;color:var(--ink);margin:3px 0 2px}
+.rz-where{font-size:12px;color:var(--muted);background:#f7f8fa;border-radius:7px;padding:6px 9px;margin-top:4px}
 /* десктоп-раскладка: широкий экран использует место, шторки становятся центр-модалками. Мобильную вёрстку не трогает. */
 @media(min-width:900px){
   .wrap{max-width:1180px}
@@ -215,6 +231,6 @@
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden><header><h2 id="sheet-title"></h2><button class="iconbtn" id="sheet-close" aria-label="Закрыть">✕</button></header><div id="sheet-body"></div></section>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm3"></script>
-<script src="crm.js?v=crm24"></script>
+<script src="crm.js?v=crm25"></script>
 </body>
 </html>

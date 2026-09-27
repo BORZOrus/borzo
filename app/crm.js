@@ -4,7 +4,9 @@
   var $=function(id){return document.getElementById(id);};
   var state={user:null,stages:[],managers:[],deals:[],clients:[],templates:[],tab:'deals',q:'',userId:null,agentGlobal:false,agentStages:{}};
   // эффективный статус агента для сделки: точечный override сделки → флаг стадии → глобальный
-  function effAgent(d){ if(d.agent_override===true)return true; if(d.agent_override===false)return false; var st=state.agentStages[d.stage_code]; if(st===true)return true; if(st===false)return false; return state.agentGlobal===true; }
+  // Главный тумблер = рубильник НАД всеми: выключен → агент молчит везде (состояния колонок/чатов сохраняются). Включён → работают колонки и точечные override.
+  function effAgent(d){ if(state.agentGlobal!==true)return false; if(d.agent_override===true)return true; if(d.agent_override===false)return false; return state.agentStages[d.stage_code]===true; }
+  function agMasterBar(){ var on=state.agentGlobal===true; return '<div class="ag-master'+(on?' on':'')+'"><button class="ag-master-sw" data-agmaster title="Главный рубильник агента">'+(on?'🤖 Агент ВКЛючён':'🤖 Агент выключен')+'</button><span class="muted">рубильник над всеми: гасит/включает разом, состояния колонок и чатов сохраняются</span></div>'; }
   var sheet=$('sheet'), body=$('sheet-body'), focusBefore=null, toastTimer=null, sheetGeneration=0, loading=false;
   var pendingMutation=false, uncertainMutation=false, refreshSequence=0;
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -104,7 +106,7 @@
   function renderDeals(){
     var oldBoard=$('main').querySelector('.board'),oldScroll=oldBoard?oldBoard.scrollLeft:0;
     var deals=state.deals.filter(matches);
-    $('main').innerHTML='<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
+    $('main').innerHTML=agMasterBar()+'<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
       var rows=deals.filter(function(d){return d.stage_id===s.id;});
       var agOn=state.agentStages[s.code]===true;
       return '<section class="column '+(s.is_won?'won':s.is_lost?'lost':'')+'"><header class="col-head"><div class="col-top"><h2><span class="dot"></span>'+esc(s.name)+'</h2><button class="col-ag'+(agOn?' on':'')+'" data-agstage="'+esc(s.code)+'" title="Агент на этой стадии: '+(agOn?'вкл':'выкл')+'">🤖</button></div><div class="muted">'+esc(rows.length)+' · '+esc(money(rows.reduce(function(n,d){return n+Number(d.amount);},0)))+'</div></header>'+rows.map(function(d){
@@ -112,7 +114,9 @@
         var badge=Number(d.wa_unread)>0?' <span class="wa-badge">'+esc(d.wa_unread)+'</span>':'';
         var ag=effAgent(d)?' <span class="ag-on" title="Агент отвечает">🤖</span>':'';
         var take=s.code==='new'?'<button class="take-btn" data-take="'+esc(d.id)+'">▶ Взять в работу</button>':'';
-        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+ag+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move"><button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
+        var ov=d.agent_override, ovs=ov===true?'on':ov===false?'off':'inh';
+        var agBtn='<button class="deal-ag '+ovs+'" data-agdeal="'+esc(d.id)+'" title="Агент в этом чате: '+(ov===true?'включён (клик → выключить)':ov===false?'выключен (клик → по воронке)':'по воронке (клик → включить)')+'">🤖</button>';
+        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+ag+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move">'+agBtn+'<button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
       }).join('')+(rows.length?'':'<div class="empty">'+(state.q?'Нет совпадений':'Пока нет сделок')+'</div>')+'</section>';
     }).join('')+'</div>';
     var board=$('main').querySelector('.board');
@@ -172,6 +176,19 @@
       e.stopPropagation();
       var code=b.dataset.agstage, val=!(state.agentStages[code]===true);
       try{ var r=await api('POST','/agent-settings',{reqId:uid(),stageCode:code,value:val}); state.agentGlobal=r.agentGlobal; state.agentStages=r.agentStages||{}; if(state.tab==='deals')renderDeals(); }
+      catch(err){ toast(error(err)); }
+    };});
+    // главный рубильник агента (над доской)
+    root.querySelectorAll('[data-agmaster]').forEach(function(b){b.onclick=async function(){
+      try{ var r=await api('POST','/agent-settings',{reqId:uid(),global:!(state.agentGlobal===true)}); state.agentGlobal=r.agentGlobal===true; state.agentStages=r.agentStages||{}; if(state.tab==='deals')renderDeals(); }
+      catch(err){ toast(error(err)); }
+    };});
+    // точечный тумблер агента на карточке: по воронке → вкл → выкл → по воронке
+    root.querySelectorAll('[data-agdeal]').forEach(function(b){b.onclick=async function(e){
+      e.stopPropagation();
+      var d=state.deals.find(function(x){return String(x.id)===String(b.dataset.agdeal);}); if(!d)return;
+      var next=d.agent_override==null?'on':(d.agent_override===true?'off':'inherit');
+      try{ var r=await api('POST','/deals/'+d.id+'/agent',{reqId:uid(),mode:next}); d.agent_override=(r&&'agent_override' in r)?r.agent_override:(next==='on'?true:next==='off'?false:null); if(state.tab==='deals')renderDeals(); }
       catch(err){ toast(error(err)); }
     };});
   }
@@ -719,8 +736,8 @@
       '<div class="ag-conn">'+
         '<div class="ag-conn-row"><div class="ag-conn-l"><b>Deepgram</b><div class="muted">агент ПОНИМАЕТ голосовые клиента (расшифровка прямо в чат)</div></div>'+
           '<div class="ag-conn-r"><label class="ag-sw"><input type="checkbox" id="ag-deepgram"'+(conn.deepgram?' checked':'')+'> включить</label>'+agPill('ключ не подключён · докрутить','dev')+'</div></div>'+
-        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Озвучка ответов</b><div class="muted">агент отвечает голосом Ульяны</div></div>'+
-          '<div class="ag-conn-r">'+agPill('в разработке','dev')+'</div></div>'+
+        '<div class="ag-conn-row"><div class="ag-conn-l"><b>Озвучка ответов</b><div class="muted">агент отвечает голосом (клон голоса Ульяны)</div></div>'+
+          '<div class="ag-conn-r"><select id="ag-voice">'+[['eleven','ElevenLabs (топ качество + клон)'],['cartesia','Cartesia (для живого разговора)'],['minimax','MiniMax (дёшево, многоязычный)']].map(function(v){return '<option value="'+v[0]+'"'+((conn.voice||'eleven')===v[0]?' selected':'')+'>'+esc(v[1])+'</option>';}).join('')+'</select>'+agPill('движок не подключён · заход 4','dev')+'</div></div>'+
         '<div class="ag-conn-row"><div class="ag-conn-l"><b>WhatsApp-канал</b><div class="muted">приём и отправка (360dialog)</div></div>'+
           '<div class="ag-conn-r">'+agPill('подключено','live')+'</div></div>'+
       '</div>'+
@@ -741,6 +758,29 @@
     if($('ag-model'))$('ag-model').onchange=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn.model=this.value; if(await saveAgent())toast('Модель сохранена'); };
     $('main').querySelectorAll('#ag-depth [data-depth]').forEach(function(b){b.onclick=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn.depth=b.dataset.depth; if(await saveAgent())drawAgent(); };});
     ['deepgram','escalate','learn','failover'].forEach(function(k){ var id='ag-'+(k==='escalate'?'escal':k); if($(id))$(id).onchange=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn[k]=this.checked; await saveAgent(); }; });
+    if($('ag-voice'))$('ag-voice').onchange=async function(){ agentKb.conn=agentKb.conn||{}; agentKb.conn.voice=this.value; if(await saveAgent())toast('Голосовой движок сохранён'); };
+  }
+  // Розетки: все подключения, что подведём к агенту. Ключи вставляются на СЕРВЕРЕ (.env) — не в браузере (безопасно). Тут — карта: что, зачем, где взять ключ.
+  var AG_ROZETKI=[
+    {n:'Anthropic',ru:'мозг агента (Claude: Opus / Sonnet / Haiku / Fable)',where:'console.anthropic.com → API Keys (ключи API) → Create Key (создать ключ)',st:'dev',stt:'не подключено'},
+    {n:'OpenAI',ru:'резервный мозг (GPT) для автопереключения',where:'platform.openai.com → API keys (ключи) → Create new secret key (создать секретный ключ)',st:'dev',stt:'не подключено'},
+    {n:'Google · Gemini',ru:'резервный мозг (Gemini)',where:'aistudio.google.com → Get API key (получить ключ API)',st:'dev',stt:'не подключено'},
+    {n:'OpenRouter',ru:'единый доступ к моделям по токенам (не подписка) — для тестов',where:'openrouter.ai → Keys (ключи) → Create Key',st:'live',stt:'ключ уже в системе'},
+    {n:'Deepgram',ru:'агент ПОНИМАЕТ голосовые клиента (речь → текст)',where:'console.deepgram.com → API Keys (ключи) → Create a Key (создать ключ)',st:'dev',stt:'не подключено'},
+    {n:'ElevenLabs',ru:'голос агента: озвучка ответов + клон голоса Ульяны',where:'elevenlabs.io → Profile (профиль) → API Key (ключ API). Клон: Voice Lab → Add Voice → нужно ~30 мин записи голоса',st:'dev',stt:'не подключено'},
+    {n:'WhatsApp · 360dialog',ru:'канал переписки (приём и отправка)',where:'hub.360dialog.com → API Key (ключ) — уже настроено',st:'live',stt:'подключено'}
+  ];
+  function drawRozetki(){
+    var rows=AG_ROZETKI.map(function(r){
+      return '<div class="rz-row"><div class="rz-head"><span class="ag-dot '+(r.st==='live'?'on':'off')+'"></span><b>'+esc(r.n)+'</b>'+agPill(r.stt,r.st)+'</div>'+
+        '<div class="rz-what">'+esc(r.ru)+'</div>'+
+        '<div class="rz-where"><b>Где взять ключ:</b> '+esc(r.where)+'</div></div>';
+    }).join('');
+    return '<div class="card"><h2>🔌 Розетки — что подключаем</h2>'+
+      '<p class="hint">Все подключения агента в одном месте: что это, зачем, где взять ключ. Готовим впрок — когда скажешь, за один заход подключим все ключи разом. Зелёная точка = реально работает.</p>'+
+      '<div class="rz-list">'+rows+'</div>'+
+      '<p class="hint">⚠️ Ключи вставляются в защищённую настройку СЕРВЕРА (.env), не в браузер — так их не видно в коде страницы. В момент подключения дай мне ключи (или впишем вместе), я пропишу их на сервере и точки станут зелёными по факту.</p>'+
+      '</div>';
   }
   // ---------- заход 3: живой чат с агентом (Ульяна/Руслан дообучают; сжатие в навыки) ----------
   function drawChat(){
@@ -778,6 +818,7 @@
     }).join('')||'<p class="muted">Пока нет уроков. Тут Ульяна оставляет коррекции: «на возражение X отвечай так», «в такой момент — вот это фото».</p>';
     $('main').innerHTML='<div class="content">'+
       drawElektro()+
+      drawRozetki()+
       drawChat()+
       '<div class="card"><h2>🧠 Инструкция агента</h2><p class="hint">«Мозг»: кто он, как говорит, факты о товаре, отработка возражений. Правь и сохраняй.</p>'+
         '<textarea id="ag-instr" style="min-height:220px">'+esc(agentKb.instruction||'')+'</textarea>'+
