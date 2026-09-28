@@ -122,9 +122,15 @@ async function initSchema(db) {
     INSERT INTO crm_agent(id,data) VALUES(1,'{"instruction":"","materials":[],"lessons":[]}') ON CONFLICT(id) DO NOTHING;
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) VALUES
       ('new','Новая заявка',1,false,false), ('working','В работе',2,false,false),
-      ('selection','Подбор решения',3,false,false), ('agreed','Договорились/Предоплата',4,false,false),
-      ('won','Выполнено',5,true,false), ('lost','Отказ',6,false,true)
+      ('selection','Подбор решения',3,false,false), ('paused','Пауза',4,false,false),
+      ('won','Продажа',5,true,false), ('lost','Отказ',6,false,true)
     ON CONFLICT(code) DO NOTHING;
+    -- миграция набора стадий к актуальному (идемпотентно): +Пауза, Выполнено→Продажа, убрать пустой agreed, порядок, поле напоминания
+    INSERT INTO crm_stages(code,name,ord,is_won,is_lost) SELECT 'paused','Пауза',4,false,false WHERE NOT EXISTS(SELECT 1 FROM crm_stages WHERE code='paused');
+    UPDATE crm_stages SET name='Продажа' WHERE code='won' AND name='Выполнено';
+    DELETE FROM crm_stages WHERE code='agreed' AND NOT EXISTS(SELECT 1 FROM crm_deals WHERE stage_id=(SELECT id FROM crm_stages WHERE code='agreed'));
+    UPDATE crm_stages SET ord=CASE code WHEN 'new' THEN 1 WHEN 'working' THEN 2 WHEN 'selection' THEN 3 WHEN 'paused' THEN 4 WHEN 'won' THEN 5 WHEN 'lost' THEN 6 ELSE ord END;
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS remind_at TIMESTAMPTZ;
   `);
 }
 function err(code, message) { const e = new Error(message); e.httpCode = code; return e; }
@@ -175,7 +181,7 @@ function items(v) {
   });
 }
 function wonCheck(stage, deal) {
-  if(stage.is_won && (!deal.items.length || !deal.ship_date)) throw err(400,'Для этапа «Выполнено» заполните состав и дату отгрузки');
+  if(stage.is_won && (!deal.items.length || !deal.ship_date)) throw err(400,'Для этапа «Продажа» заполните состав и дату отгрузки');
 }
 function canonical(x) {
   if(Array.isArray(x)) return x.map(canonical);
