@@ -418,6 +418,15 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     await event(db,req.user,d.id,'note',mode==='on'?'🤖 Агент включён в этом чате':mode==='off'?'🤖 Агент выключен в этом чате':'🤖 Агент — по воронке (наследует)');
     return {ok:true,agent_override:ov};
   }));
+  // напоминание по сделке (для «Паузы»): remind_at ISO или null (снять)
+  router.post('/deals/:id/remind',mutate(async(req,db)=>{
+    const d=await dealBy(db,req.params.id,true);
+    let ra=null;
+    if(req.body.remind_at){ ra=new Date(req.body.remind_at); if(isNaN(ra.getTime())) throw err(400,'Неверная дата напоминания'); }
+    await db.query('UPDATE crm_deals SET remind_at=$1,updated_at=now(),rev=rev+1 WHERE id=$2',[ra,d.id]);
+    await event(db,req.user,d.id,'note',ra?('⏰ Напоминание на '+new Date(ra).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'})):'⏰ Напоминание снято');
+    return {deal:await dealBy(db,d.id)};
+  }));
   router.get('/deals/:id/events',route(async(req,res)=>{
     const d=await dealBy(pool,req.params.id);
     res.json({events:(await pool.query('SELECT * FROM crm_events WHERE deal_id=$1 ORDER BY ts DESC,id DESC',[d.id])).rows});

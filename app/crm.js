@@ -98,7 +98,13 @@
   // «сколько прошло» человекочитаемо: мин/ч/дн
   function ago(ts){ if(!ts)return ''; var m=Math.floor((Date.now()-new Date(ts).getTime())/60000); if(m<1)return 'только что'; if(m<60)return m+' мин'; var h=Math.floor(m/60); if(h<24)return h+' ч'; return Math.floor(h/24)+' дн'; }
   // строка состояния лида на карточке: необработанный (в первом этапе) или ждёт нашего ответа
+  function remDate(ts){ try{ return new Date(ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
   function waLine(d,s){
+    // на паузе: показываем напоминание, краснеет когда пора
+    if(s.code==='paused'){
+      if(d.remind_at){ var over=new Date(d.remind_at).getTime()<=Date.now(); return '<div class="deal-wa'+(over?' hot':' wait')+'">⏰ Напомнить · '+esc(remDate(d.remind_at))+(over?' — пора!':'')+'</div>'; }
+      return '<div class="deal-wa">⏸ На паузе · напоминание не задано</div>';
+    }
     // необработанный лид в первом этапе: краснеет, если висит дольше 15 мин
     if(s.code==='new'){ var mn=Math.floor((Date.now()-new Date(d.created_at).getTime())/60000); return '<div class="deal-wa unh'+(mn>15?' hot':'')+'">🔴 Необработан · '+esc(ago(d.created_at))+'</div>'; }
     // клиент написал, ждёт нашего ответа: краснеет, если ждёт дольше часа
@@ -181,6 +187,7 @@
       var target=state.stages[idx+dir]; if(!target)return;
       if(target.is_won){ showSale(d.id); return; }
       if(target.is_lost){ showStage(d.id,d); return; }
+      if(target.code==='paused'){ showStage(d.id,d); return; }
       b.disabled=true;
       try{ await api('POST','/deals/'+d.id+'/stage',{reqId:uid(),baseRev:d.rev,stage_id:target.id}); toast('Этап: '+target.name); await reload(); }
       catch(err){ toast(error(err)); b.disabled=false; }
@@ -718,16 +725,17 @@
   async function showStage(id,known){
     if(!known){openSheet('Сменить этап','<div class="empty">Загрузка…</div>');var gen=sheetGeneration;try{known=(await api('GET','/deals/'+id)).deal;if(gen!==sheetGeneration)return;}catch(e){body.innerHTML='<p class="error">'+esc(error(e))+'</p>';return;}}
     var d=known;
-    openSheet('Сменить этап','<form id="stage-form">'+select('Этап','stage_id',state.stages,d.stage_id)+'<div id="won-fields" hidden><p class="hint">Для завершения сделки нужны состав и плановая дата отгрузки.</p>'+field('Сумма сделки, ₸','amount',d.amount,'number','required min="0" max="1000000000000" step="0.01"')+itemsForm(d)+'</div><div id="lost-fields" hidden>'+area('Причина отказа','lost_reason',d.lost_reason)+'</div>'+submit('Сохранить этап')+'</form>');
+    var remVal=d.remind_at?new Date(new Date(d.remind_at).getTime()+5*3600000).toISOString().slice(0,16):'';
+    openSheet('Сменить этап','<form id="stage-form">'+select('Этап','stage_id',state.stages,d.stage_id)+'<div id="won-fields" hidden><p class="hint">Для завершения сделки нужны состав и плановая дата отгрузки.</p>'+field('Сумма сделки, ₸','amount',d.amount,'number','required min="0" max="1000000000000" step="0.01"')+itemsForm(d)+'</div><div id="lost-fields" hidden>'+area('Причина отказа','lost_reason',d.lost_reason)+'</div><div id="pause-fields" hidden><p class="hint">Клиент просит вернуться позже — поставь напоминание, когда написать.</p>'+field('Напомнить (дата и время)','remind_at',remVal,'datetime-local')+'</div>'+submit('Сохранить этап')+'</form>');
     wireItems();var f=$('stage-form'), manualAmount=Number(d.amount)>0;
     f.elements.namedItem('amount').oninput=function(){manualAmount=true;};
     function total(){if(!manualAmount)f.elements.namedItem('amount').value=String(Math.round(readItems().reduce(function(n,x){return n+Number(x.qty||0)*Number(x.price||0);},0)*100)/100);}
     $('items').addEventListener('input',total);$('items').addEventListener('click',total);total();
-    function change(){var s=state.stages.find(function(x){return x.id===Number(val(f,'stage_id'));});$('won-fields').hidden=!s.is_won;$('lost-fields').hidden=!s.is_lost;
+    function change(){var s=state.stages.find(function(x){return x.id===Number(val(f,'stage_id'));});$('won-fields').hidden=!s.is_won;$('lost-fields').hidden=!s.is_lost;$('pause-fields').hidden=s.code!=='paused';
       $('won-fields').querySelectorAll('input,button').forEach(function(x){x.disabled=!s.is_won;});f.elements.namedItem('ship_date').required=s.is_won;
       if(s.is_won&&!$('items').children.length)$('add-item').click();}
     f.elements.namedItem('stage_id').onchange=change;change();
-    mutation(f,'POST','/deals/'+d.id+'/stage',function(){var stage=state.stages.find(function(x){return x.id===Number(val(f,'stage_id'));});var b={baseRev:d.rev,stage_id:stage.id,lost_reason:val(f,'lost_reason')};if(stage.is_won){b.amount=val(f,'amount');b.items=readItems();b.ship_date=val(f,'ship_date');if(!b.items.length)throw new Error('Добавьте хотя бы одну позицию');}return b;},async function(){toast('Этап сохранён');await showDeal(d.id);await reload();});
+    mutation(f,'POST','/deals/'+d.id+'/stage',function(){var stage=state.stages.find(function(x){return x.id===Number(val(f,'stage_id'));});var b={baseRev:d.rev,stage_id:stage.id,lost_reason:val(f,'lost_reason')};if(stage.is_won){b.amount=val(f,'amount');b.items=readItems();b.ship_date=val(f,'ship_date');if(!b.items.length)throw new Error('Добавьте хотя бы одну позицию');}return b;},async function(){var stage=state.stages.find(function(x){return x.id===Number(val(f,'stage_id'));});if(stage&&stage.code==='paused'){var rv=val(f,'remind_at');try{await api('POST','/deals/'+d.id+'/remind',{reqId:uid(),remind_at:rv?rv+':00+05:00':null});}catch(e){}}toast('Этап сохранён');await showDeal(d.id);await reload();});
   }
   function editDeal(d){
     openSheet('Изменить сделку','<form id="deal-form">'+field('Название','title',d.title,'text','required maxlength="200"')+field('Сумма сделки, ₸','amount',d.amount,'number','required min="0" max="1000000000000" step="0.01"')+select('Менеджер','manager_id',state.managers,d.manager_id)+source(d.source)+area('Заметка о сделке','note',d.note)+itemsForm(d)+((d.is_won||d.is_lost)?field('Дата закрытия','closed_date',d.closed_at?new Date(new Date(d.closed_at).getTime()+5*3600000).toISOString().slice(0,10):'','date'):'')+submit()+'</form>');wireItems();
