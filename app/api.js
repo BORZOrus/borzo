@@ -53,6 +53,7 @@ window.API = (function(){
     waStatus:   function(){ return req('GET','/wa/status'); },
     waMessages: function(dealId){ return req('GET','/wa/messages/'+dealId); },
     waSend:     function(b){ return req('POST','/wa/send', b); },
+    waSendVoice:function(b){ return req('POST','/wa/send-voice', b); },
     waRead:     function(dealId){ return req('POST','/wa/read/'+dealId); },
     waMedia:    function(msgId){ return req('GET','/wa/media/'+msgId); },
     logout: logout

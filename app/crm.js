@@ -525,7 +525,29 @@
       var chText=$('ch-text');
       function chToggle(){ var has=chText.value.trim().length>0; $('ch-send').hidden=!has; $('ch-mic').hidden=has; chText.style.height='auto'; chText.style.height=Math.min(110,Math.max(38,chText.scrollHeight))+'px'; }
       chText.addEventListener('input',chToggle); chToggle();
-      $('ch-mic').onclick=function(){ toast('Голосовые заработают после переезда (готовим визуал сейчас)'); };
+      // запись и отправка голосового: тап — старт, тап ещё раз — стоп и отправка
+      var mediaRec=null, chunks=[], recording=false, recStream=null;
+      $('ch-mic').onclick=async function(){
+        if(recording){ try{ mediaRec.stop(); }catch(e){} return; }
+        if(!navigator.mediaDevices||!window.MediaRecorder){ toast('Запись не поддерживается этим браузером'); return; }
+        if(!waConnected){ toast('WhatsApp подключится в день переезда — голосовое пока не уходит'); return; }
+        try{
+          recStream=await navigator.mediaDevices.getUserMedia({audio:true});
+          mediaRec=new MediaRecorder(recStream); chunks=[];
+          mediaRec.ondataavailable=function(ev){ if(ev.data&&ev.data.size)chunks.push(ev.data); };
+          mediaRec.onstop=async function(){
+            try{ recStream.getTracks().forEach(function(t){t.stop();}); }catch(e){}
+            recording=false; $('ch-mic').classList.remove('rec'); $('ch-mic').textContent='🎤';
+            var blob=new Blob(chunks,{type:(mediaRec&&mediaRec.mimeType)||'audio/webm'});
+            if(!blob.size){ toast('Пустая запись'); return; }
+            toast('Отправка голосового…');
+            try{ var data=await fileData(blob); await API.waSendVoice({deal_id:d.id, audio:data, reqId:uid()}); toast('Голосовое отправлено'); await poll(); }
+            catch(e){ if(e&&e.status===503) toast('WhatsApp ещё не подключён'); else toast(error(e)); }
+          };
+          mediaRec.start(); recording=true; $('ch-mic').classList.add('rec'); $('ch-mic').textContent='⏹';
+          toast('Запись… нажми ещё раз, чтобы отправить');
+        }catch(e){ toast('Нет доступа к микрофону'); }
+      };
       // отправка фото/документа клиенту: текст в поле = подпись
       var chFile=$('ch-file');
       if(chFile) chFile.onchange=async function(){

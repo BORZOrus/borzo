@@ -6,6 +6,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 
 const PHONE_LOCK = 7383;          // тот же смысл, что PHONE в crm.js — сериализуем find-or-create клиента по телефону
 const API_URL = (process.env.WA_API_URL || 'https://waba-v2.360dialog.io').replace(/\/+$/,'');
@@ -306,6 +307,68 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
         `INSERT INTO wa_messages(wamid, deal_id, client_id, direction, wa_from, wa_to, type, text, media_url, mime, caption, status, author_id, author_name, req_id, ts, reply_to, reply_text)
          VALUES($1,$2,$3,'out',$4,$5,$6,$7,$8,$9,$10,'sent',$11,$12,$13,$14,$15,$16) RETURNING *`,
         [wamid, dealId, client_id, OUR_PHONE_ID||'', to, outType, dbText, dbMediaUrl, '', caption, req.user.id, req.user.name, reqId, now, replyTo, replyText])).rows[0];
+    } catch(e){
+      if(e.code==='23505' && reqId){ const ex=await pool.query('SELECT * FROM wa_messages WHERE req_id=$1',[reqId]); if(ex.rowCount) return res.json({ ok:true, message:ex.rows[0], idem:true }); }
+      throw e;
+    }
+    await pool.query('UPDATE crm_deals SET last_msg_at=now(), updated_at=now() WHERE id=$1', [dealId]);
+    res.json({ ok:true, message: saved });
+  }));
+
+  // запись из браузера (webm/mp4/ogg) → ogg/opus (формат голосовых WhatsApp) через ffmpeg
+  function saveVoice(dataUrl){
+    return new Promise((resolve,reject)=>{
+      const m = String(dataUrl||'').match(/^data:(audio\/[\w.+-]+);base64,(.+)$/);
+      if(!m) return reject(err(400,'формат аудио не распознан'));
+      const ext=(m[1].split('/')[1]||'webm').replace(/[^\w]/g,'').slice(0,8) || 'webm';
+      const id=crypto.randomUUID();
+      const raw=path.join(UPLOAD_DIR, id+'.'+ext);
+      const ogg=path.join(UPLOAD_DIR, id+'.ogg');
+      try { fs.writeFileSync(raw, Buffer.from(m[2],'base64')); }
+      catch(e){ return reject(err(500,'не удалось сохранить запись')); }
+      execFile('ffmpeg',['-y','-i',raw,'-ac','1','-c:a','libopus','-b:a','32k',ogg],{timeout:25000},(e)=>{
+        try{ fs.unlinkSync(raw); }catch(_){}
+        if(e) return reject(err(502,'не удалось обработать аудио (ffmpeg)'));
+        resolve('/uploads/'+id+'.ogg');
+      });
+    });
+  }
+  // отправить голосовое клиенту по сделке
+  api.post('/send-voice', route(async (req,res)=>{
+    const dealId = Number(req.body.deal_id);
+    if(!Number.isSafeInteger(dealId) || dealId<1) throw err(400,'некорректная сделка');
+    const audio = String(req.body.audio||'');
+    if(!/^data:audio\//.test(audio)) throw err(400,'нужна аудиозапись');
+    if(audio.length > 20*1024*1024) throw err(400,'запись слишком длинная');
+    const reqId = (String(req.body.reqId||'').trim().slice(0,64)) || null;
+    if(reqId){ const ex = await pool.query('SELECT * FROM wa_messages WHERE req_id=$1',[reqId]); if(ex.rowCount) return res.json({ ok:true, message:ex.rows[0], idem:true }); }
+
+    const d = await pool.query(
+      `SELECT d.id, c.id AS client_id, c.phone FROM crm_deals d JOIN crm_clients c ON c.id=d.client_id WHERE d.id=$1`, [dealId]);
+    if(!d.rowCount) throw err(404,'сделка не найдена');
+    const { client_id, phone } = d.rows[0];
+    if(!phone) throw err(400,'у клиента нет телефона');
+    if(!API_KEY) throw err(503,'WhatsApp ещё не подключён — ключ появится в день переезда');
+
+    const oggPath = await saveVoice(audio);                 // '/uploads/<id>.ogg'
+    const link = PUBLIC_BASE + oggPath;
+    const to = phone.replace(/\D/g,'');
+    let wamid=null, sendErr='';
+    try {
+      const payload = { messaging_product:'whatsapp', recipient_type:'individual', to, type:'audio', audio:{ link } };
+      const resp = await fetch(API_URL+'/messages', { method:'POST', headers:{ 'D360-API-KEY':API_KEY, 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
+      const j = await resp.json().catch(()=>({}));
+      if(!resp.ok){ sendErr = (j.error && (j.error.message||j.error.title)) || ('HTTP '+resp.status); throw err(502,'WhatsApp не принял голосовое: '+sendErr); }
+      wamid = (j.messages && j.messages[0] && j.messages[0].id) || null;
+    } catch(e){ if(e.httpCode) throw e; throw err(502,'сеть/шлюз WhatsApp недоступен'); }
+
+    const now = Date.now();
+    let saved;
+    try {
+      saved = (await pool.query(
+        `INSERT INTO wa_messages(wamid, deal_id, client_id, direction, wa_from, wa_to, type, text, media_url, mime, caption, status, author_id, author_name, req_id, ts)
+         VALUES($1,$2,$3,'out',$4,$5,'audio','',$6,'audio/ogg','','sent',$7,$8,$9,$10) RETURNING *`,
+        [wamid, dealId, client_id, OUR_PHONE_ID||'', to, link, req.user.id, req.user.name, reqId, now])).rows[0];
     } catch(e){
       if(e.code==='23505' && reqId){ const ex=await pool.query('SELECT * FROM wa_messages WHERE req_id=$1',[reqId]); if(ex.rowCount) return res.json({ ok:true, message:ex.rows[0], idem:true }); }
       throw e;
