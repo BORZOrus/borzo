@@ -974,6 +974,44 @@
     if(state.tab!=='agent')return;
     drawAgent();
   }
+  // ---------- вкладка «Отгрузки»: проданные заказы по датам отгрузки (как доска Trello) ----------
+  function shipItems(s){ try{ return (s.items||[]).map(function(i){return (i.name||'')+(Number(i.qty)>1?' ×'+i.qty:'');}).join(', ')||'—'; }catch(e){ return '—'; } }
+  function shipCard(s){
+    var addr=[s.city,s.address].filter(Boolean).join(', ');
+    var done=s.ship_status==='shipped';
+    return '<article class="deal ship-card'+(done?' done':'')+'">'+
+      '<strong>'+esc(s.client_name||'Клиент')+'</strong>'+
+      '<div class="ship-prod">'+esc(shipItems(s))+'</div>'+
+      (addr?'<div class="ship-addr">📍 '+esc(addr)+'</div>':'<div class="ship-addr muted">📍 адрес не указан</div>')+
+      (s.pay_method?'<div class="ship-meta">💳 '+esc(s.pay_method)+'</div>':'')+
+      (s.ship_time?'<div class="ship-meta">🕑 '+esc(s.ship_time)+'</div>':'')+
+      (s.sale_comment?'<div class="ship-meta">📝 '+esc(s.sale_comment)+'</div>':'')+
+      '<div class="ship-acts">'+
+        '<label class="ship-chk"><input type="checkbox" data-ship-wo="'+esc(s.id)+'"'+(s.writeoff?' checked':'')+'> Списание</label>'+
+        (done?'<button class="ghost" data-ship-undo="'+esc(s.id)+'">↩ вернуть</button>':'<button class="ghost" data-ship-done="'+esc(s.id)+'">✅ Отгружено</button>')+
+        '<button class="ghost" data-ship-open="'+esc(s.id)+'">открыть</button>'+
+      '</div></article>';
+  }
+  async function renderShipments(){
+    try{ var r=await api('GET','/shipments'); if(state.tab!=='ship')return;
+      var active=r.shipments.filter(function(s){return s.ship_status!=='shipped';});
+      var shipped=r.shipments.filter(function(s){return s.ship_status==='shipped';});
+      var groups={},order=[];
+      active.forEach(function(s){ var k=s.ship_date||'📦 Готовится (без даты)'; if(!groups[k]){groups[k]=[];order.push(k);} groups[k].push(s); });
+      var cols=order.map(function(k){
+        return '<section class="column"><header class="col-head"><h2><span class="dot"></span>'+esc(k)+'</h2><div class="muted">'+groups[k].length+' заказ(ов)</div></header>'+groups[k].map(shipCard).join('')+'</section>';
+      }).join('');
+      var shippedCol=shipped.length?'<section class="column won"><header class="col-head"><h2><span class="dot"></span>✅ Отгружено</h2><div class="muted">'+shipped.length+'</div></header>'+shipped.map(shipCard).join('')+'</section>':'';
+      $('main').innerHTML='<div class="board" aria-label="Отгрузки">'+(cols||'<div class="empty">Пока нет заказов на отгрузку. Оформи продажу — заказ появится здесь.</div>')+shippedCol+'</div>';
+      bindShip($('main'));
+    }catch(e){ if(state.tab==='ship')$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p></div>'; }
+  }
+  function bindShip(root){
+    root.querySelectorAll('[data-ship-wo]').forEach(function(b){b.onchange=async function(){ try{ await api('POST','/deals/'+b.dataset.shipWo+'/ship',{reqId:uid(),writeoff:b.checked}); }catch(e){ toast(error(e)); b.checked=!b.checked; } };});
+    root.querySelectorAll('[data-ship-done]').forEach(function(b){b.onclick=async function(){ try{ await api('POST','/deals/'+b.dataset.shipDone+'/ship',{reqId:uid(),shipped:true}); toast('Отгружено ✅'); renderShipments(); }catch(e){ toast(error(e)); } };});
+    root.querySelectorAll('[data-ship-undo]').forEach(function(b){b.onclick=async function(){ try{ await api('POST','/deals/'+b.dataset.shipUndo+'/ship',{reqId:uid(),shipped:false}); renderShipments(); }catch(e){ toast(error(e)); } };});
+    root.querySelectorAll('[data-ship-open]').forEach(function(b){b.onclick=function(){ showDeal(b.dataset.shipOpen); };});
+  }
   async function renderTemplates(){
     try{var r=await api('GET','/templates');if(state.tab!=='templates')return;state.templates=r.templates;
       $('main').innerHTML='<div class="content">'+(state.user.role==='mgr'?'<button class="btn" id="template-new">+ Шаблон</button>':'')+'<p class="hint">Нажмите «Копировать» и вставьте ответ в переписку.</p>'+r.templates.map(function(t){return '<article class="card"><h2>'+esc(t.title)+'</h2><p class="pre">'+esc(t.text)+'</p><div class="actions"><button class="ghost" data-copy="'+esc(t.id)+'">Копировать</button>'+(state.user.role==='mgr'?'<button class="ghost danger" data-delete-template="'+esc(t.id)+'">Удалить</button>':'')+'</div></article>';}).join('')+(r.templates.length?'':'<div class="empty">Пока нет шаблонов</div>')+'</div>';bindCopy($('main'));
@@ -1213,7 +1251,7 @@
   async function tab(name){
     state.tab=name;$('toolbar').hidden=!['deals','clients'].includes(name);updateMasterTop();
     document.querySelectorAll('[data-tab]').forEach(function(b){b.classList.toggle('on',b.dataset.tab===name);if(b.dataset.tab===name)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-    if(name==='deals')renderDeals();else if(name==='clients')await loadClients();else if(name==='analytics')await renderAnalytics();else if(name==='templates')await renderTemplates();else if(name==='agent')await renderAgent();else if(name==='catalog')await renderCatalog();else if(name==='import'&&state.user.role==='mgr')renderImport();
+    if(name==='deals')renderDeals();else if(name==='clients')await loadClients();else if(name==='analytics')await renderAnalytics();else if(name==='templates')await renderTemplates();else if(name==='agent')await renderAgent();else if(name==='ship')await renderShipments();else if(name==='catalog')await renderCatalog();else if(name==='import'&&state.user.role==='mgr')renderImport();
   }
   var searchTimer;
   $('search').oninput=function(){state.q=this.value.trim().toLowerCase();clearTimeout(searchTimer);if(state.tab==='deals')renderDeals();else searchTimer=setTimeout(loadClients,200);};

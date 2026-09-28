@@ -191,6 +191,13 @@
 .deal-lead{font-size:12px;font-weight:600;margin-top:8px;color:var(--mut)}
 .deal-lead.by-agent{color:#008069}
 .deal-lead.by-human{color:var(--ink)}
+.ship-card.done{opacity:.55}
+.ship-prod{font-size:13px;margin:5px 0;font-weight:600}
+.ship-addr{font-size:12px;color:var(--mut);margin:3px 0}
+.ship-meta{font-size:12px;color:var(--mut);margin:2px 0}
+.ship-acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:9px}
+.ship-acts .ghost{padding:6px 9px;min-height:34px;font-size:12px}
+.ship-chk{display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;color:var(--ink)}
 #ag-master-top{white-space:nowrap;flex:0 0 auto}
 .ag-master-sw.on{background:#008069;color:#fff;box-shadow:0 2px 8px rgba(0,128,105,.3)}
 .toolbar input{max-width:220px;margin-left:auto}
@@ -256,7 +263,7 @@
 <body>
 <main class="wrap" id="app">
   <header class="top"><div class="row"><a class="iconbtn" href="home.html" aria-label="В прихожую">‹</a><span class="logo">B</span><div class="grow"><h1>CRM</h1><div class="muted" id="who">Загрузка…</div></div><button class="iconbtn" id="push-btn" aria-label="Включить уведомления" title="Включить push-уведомления">🔔</button><button class="iconbtn" id="refresh" aria-label="Обновить">↻</button></div></header>
-  <nav class="tabs" aria-label="Разделы CRM"><button data-tab="deals" class="on" aria-current="page">Сделки</button><button data-tab="clients">Клиенты</button><button data-tab="analytics">Аналитика</button><button data-tab="templates">Шаблоны</button><button data-tab="agent">🤖 Агент</button><button data-tab="catalog">Каталог</button><button data-tab="import" id="import-tab" hidden>Импорт</button></nav>
+  <nav class="tabs" aria-label="Разделы CRM"><button data-tab="deals" class="on" aria-current="page">Сделки</button><button data-tab="clients">Клиенты</button><button data-tab="analytics">Аналитика</button><button data-tab="templates">Шаблоны</button><button data-tab="ship">🚚 Отгрузки</button><button data-tab="agent">🤖 Агент</button><button data-tab="catalog">Каталог</button><button data-tab="import" id="import-tab" hidden>Импорт</button></nav>
   <div class="toolbar" id="toolbar"><button id="ag-master-top" class="ag-master-sw" hidden>🤖 Агент</button><label class="sr-only" for="search">Поиск по имени, телефону или сделке</label><input type="search" id="search" placeholder="Имя или телефон" autocomplete="off"></div>
   <div id="status" class="status" role="status" aria-live="polite"></div>
   <div id="main"><div class="empty">Загружаю CRM…</div></div>
@@ -266,6 +273,6 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm4"></script>
 <script src="push.js?v=1"></script>
-<script src="crm.js?v=crm36"></script>
+<script src="crm.js?v=crm37"></script>
 </body>
 </html>

@@ -167,6 +167,8 @@ async function initSchema(db) {
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS remind_fired_at TIMESTAMPTZ;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS pay_method TEXT;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS sale_comment TEXT;
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS ship_status TEXT NOT NULL DEFAULT '';
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS writeoff BOOLEAN NOT NULL DEFAULT false;
     -- сейф ключей агента (электроящик): значения ШИФРУЮТСЯ, наружу (в браузер) не отдаются никогда, только статус «есть/нет»
     CREATE TABLE IF NOT EXISTS crm_secrets (
       name TEXT PRIMARY KEY, val TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_by TEXT NOT NULL DEFAULT ''
@@ -265,7 +267,7 @@ async function clientCreate(db,b,requirePhone=true) {
     [name,p,str(b.instagram,'Instagram',200),str(b.source,'Источник',100),str(b.note,'Заметка',10000),str(b.city,'Город',100),str(b.address,'Адрес доставки',300)]);
   return r.rows[0];
 }
-function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,uploadDir}) {
+function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,uploadDir,sendPushToRole}) {
   const router=express.Router();
   router.use(auth,requireAny(['mgr','fin']));
   const route=fn=>async(req,res,next)=>{
@@ -453,6 +455,13 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
       closed_at=CASE WHEN $5 THEN now() ELSE NULL END,imported_incomplete=false,stage_entered_at=now(),updated_at=now(),rev=rev+1,amount=$6,pay_method=$8,sale_comment=$9 WHERE id=$7`,
       [s.id,JSON.stringify(d.items),d.ship_date,reason,s.is_won||s.is_lost,d.amount,d.id,d.pay_method==null?'':d.pay_method,d.sale_comment==null?'':d.sale_comment]);
     await event(db,req.user,d.id,'status',prev.name+' → '+s.name+(reason?' · '+reason:''),prev.id,s.id);
+    // новый заказ на отгрузку → пуш производству (пока роли mgr/fin, позже отдельная роль производства)
+    if(s.is_won && sendPushToRole){
+      const prod = (d.items && d.items.length) ? (d.items[0].name||'заказ') : 'заказ';
+      const body = 'Новый заказ на отгрузку: '+prod+(d.ship_date?' · отгрузка '+d.ship_date:'');
+      sendPushToRole('mgr',{title:'BORZO · Отгрузки',body:body,url:'/crm.html'}).catch(()=>{});
+      sendPushToRole('fin',{title:'BORZO · Отгрузки',body:body,url:'/crm.html'}).catch(()=>{});
+    }
     return {deal:await dealBy(db,d.id)};
   }));
   // точечный тумблер агента на сделке: mode on/off/inherit → agent_override true/false/NULL
@@ -496,6 +505,21 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     if(value.length>2000) throw err(400,'Слишком длинный ключ');
     await db.query('INSERT INTO crm_secrets(name,val,updated_by) VALUES($1,$2,$3) ON CONFLICT(name) DO UPDATE SET val=$2,updated_at=now(),updated_by=$3',[name,encSecret(value),req.user.login]);
     return {ok:true,name:name,set:true};
+  }));
+  // Отгрузки: все проданные сделки (won) с данными для производства/доставки
+  router.get('/shipments',route(async(req,res)=>{
+    const r=await pool.query(`SELECT d.id, d.items, d.ship_date::text AS ship_date, d.ship_time, d.pay_method, d.sale_comment, d.writeoff, d.ship_status, d.amount, d.closed_at,
+        c.name AS client_name, c.phone, c.city, c.address
+      FROM crm_deals d JOIN crm_clients c ON c.id=d.client_id JOIN crm_stages s ON s.id=d.stage_id
+      WHERE s.is_won ORDER BY (d.ship_date IS NULL), d.ship_date, d.id`);
+    res.json({shipments:r.rows});
+  }));
+  router.post('/deals/:id/ship',mutate(async(req,db)=>{
+    const d=await dealBy(db,req.params.id,true);
+    if('writeoff' in req.body) await db.query('UPDATE crm_deals SET writeoff=$1,updated_at=now() WHERE id=$2',[req.body.writeoff===true,d.id]);
+    if('shipped' in req.body) await db.query('UPDATE crm_deals SET ship_status=$1,updated_at=now() WHERE id=$2',[req.body.shipped===true?'shipped':'',d.id]);
+    if('ship_date' in req.body) await db.query('UPDATE crm_deals SET ship_date=$1,updated_at=now() WHERE id=$2',[date(req.body.ship_date),d.id]);
+    return {ok:true};
   }));
   router.get('/deals/:id/events',route(async(req,res)=>{
     const d=await dealBy(pool,req.params.id);
