@@ -119,15 +119,18 @@
     updateMasterTop();
     $('main').innerHTML='<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
       var rows=deals.filter(function(d){return d.stage_id===s.id;});
-      var agOn=state.agentStages[s.code]===true;
+      // колонка «горит» только если главный включён И стадия включена
+      var agOn=state.agentGlobal===true && state.agentStages[s.code]===true;
       return '<section class="column '+(s.is_won?'won':s.is_lost?'lost':'')+'"><header class="col-head"><div class="col-top"><h2><span class="dot"></span>'+esc(s.name)+'</h2><button class="col-ag'+(agOn?' on':'')+'" data-agstage="'+esc(s.code)+'" title="Агент на этой стадии: '+(agOn?'вкл':'выкл')+'">🤖</button></div><div class="muted">'+esc(rows.length)+' · '+esc(money(rows.reduce(function(n,d){return n+Number(d.amount);},0)))+'</div></header>'+rows.map(function(d){
         var days=d.stage_entered_at?Math.max(0,Math.floor((Date.now()-new Date(d.stage_entered_at).getTime())/86400000))+' дн. в этапе':'Срок неизвестен';
         var badge=Number(d.wa_unread)>0?' <span class="wa-badge">'+esc(d.wa_unread)+'</span>':'';
-        var ag=effAgent(d)?' <span class="ag-on" title="Агент отвечает">🤖</span>':'';
         var take=s.code==='new'?'<button class="take-btn" data-take="'+esc(d.id)+'">▶ Взять в работу</button>':'';
-        var ov=d.agent_override, ovs=ov===true?'on':ov===false?'off':'inh';
-        var agBtn='<button class="deal-ag '+ovs+'" data-agdeal="'+esc(d.id)+'" title="Агент в этом чате: '+(ov===true?'включён (клик → выключить)':ov===false?'выключен (клик → по воронке)':'по воронке (клик → включить)')+'">🤖</button>';
-        return '<article class="deal">'+agBtn+'<button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+ag+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move"><button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
+        // одна кнопка-башка на карточке: зелёная = агент реально работает тут, серая = нет (учитывает главный рубильник)
+        var work=effAgent(d);
+        var agBtn='<button class="deal-ag'+(work?' on':'')+'" data-agdeal="'+esc(d.id)+'" title="Агент в этом чате: '+(work?'работает':'не работает')+' (клик меняет)">🤖</button>';
+        var amt=Number(d.amount)||0;
+        var amtHtml=amt>0?'<div class="amount">'+esc(money(amt))+'</div>':'';
+        return '<article class="deal">'+agBtn+'<button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+'</strong><div class="deal-title">'+esc(d.title)+'</div>'+amtHtml+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move"><button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
       }).join('')+(rows.length?'':'<div class="empty">'+(state.q?'Нет совпадений':'Пока нет сделок')+'</div>')+'</section>';
     }).join('')+'</div>';
     var board=$('main').querySelector('.board');
@@ -475,14 +478,16 @@
         '<div class="ch-reply" id="ch-reply" hidden></div>'+
         '<div class="wa-input">'+
           '<div class="wa-field">'+
-            '<button class="wa-in-ic" id="ch-tplbtn" title="Шаблоны">📋</button>'+
-            '<textarea id="ch-text" rows="1" placeholder="'+(waConnected?'Сообщение':'Заметка (WhatsApp позже)')+'"></textarea>'+
-            '<label class="wa-in-ic" style="cursor:pointer" title="Фото в чат (с превью)">📎<input id="ch-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden></label>'+
-            '<label class="wa-in-ic wa-hd" style="cursor:pointer" title="Фото в HD (файлом, без сжатия)">HD<input id="ch-file-hd" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden></label>'+
+            '<button class="wa-in-ic" id="ch-tplbtn" title="Скрипты продаж">📋</button>'+
+            '<textarea id="ch-text" rows="1" placeholder="Сообщение"></textarea>'+
+            '<button class="wa-in-ic" id="ch-note" title="Заметка для себя (клиент не видит)">📝</button>'+
+            '<button class="wa-in-ic" id="ch-attach" title="Прикрепить">📎</button>'+
+            '<input id="ch-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden><input id="ch-file-hd" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>'+
           '</div>'+
           '<button class="wa-send" id="ch-send" hidden>➤</button>'+
-          '<button class="wa-mic" id="ch-mic" title="Голосовое">🎤</button>'+
-        '</div>';
+          '<button class="wa-mic" id="ch-mic" title="Голосовое (запись)">🎤</button>'+
+        '</div>'+
+        '<div class="ch-attach-menu" id="ch-attach-menu" hidden><button data-att="image">🖼 Фото в чат (с превью)</button><button data-att="doc">📄 Файлом в HD (без сжатия)</button></div>';
       var log=$('ch-log'); log.scrollTop=log.scrollHeight;
       var chReply=null;
       function renderReplyBar(){ var bar=$('ch-reply'); if(!bar)return; if(!chReply){bar.hidden=true;bar.innerHTML='';return;} bar.innerHTML='<div class="ch-reply-in"><span>↩ '+esc(chReply.text||'сообщение')+'</span><button id="ch-reply-x">✕</button></div>'; bar.hidden=false; $('ch-reply-x').onclick=function(){ chReply=null; renderReplyBar(); }; var ta=$('ch-text'); if(ta)ta.focus(); }
@@ -580,6 +585,17 @@
       var chFile=$('ch-file'), chFileHd=$('ch-file-hd');
       if(chFile) chFile.onchange=function(){ var f=chFile.files[0]; chFile.value=''; sendAttach(f,'image'); };
       if(chFileHd) chFileHd.onchange=function(){ var f=chFileHd.files[0]; chFileHd.value=''; sendAttach(f,'document'); };
+      // одна кнопка «прикрепить» → меню из 2 вариантов (в чат / HD файлом)
+      var attMenu=$('ch-attach-menu');
+      if($('ch-attach')) $('ch-attach').onclick=function(e){ e.stopPropagation(); attMenu.hidden=!attMenu.hidden; };
+      if(attMenu) attMenu.querySelectorAll('[data-att]').forEach(function(b){ b.onclick=function(){ attMenu.hidden=true; if(b.dataset.att==='image')chFile.click(); else chFileHd.click(); }; });
+      document.addEventListener('click',function(){ if(attMenu&&!attMenu.hidden)attMenu.hidden=true; });
+      // заметка для себя: клиент не видит, ложится в ленту
+      if($('ch-note')) $('ch-note').onclick=async function(){
+        var t=(prompt('Заметка по клиенту (только для нас, клиент не увидит):','')||'').trim(); if(!t)return;
+        try{ await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:'📝 Заметка: '+t}); toast('Заметка добавлена'); await poll(); }
+        catch(e){ toast(error(e)); }
+      };
       async function poll(){
         if(chatDealId!==d.id)return;
         clearTimeout(chatTimer);

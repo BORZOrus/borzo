@@ -63,7 +63,13 @@
 .wa-field textarea::placeholder{color:#8696a0}
 .wa-in-ic{background:none;border:none;color:#54656f;font-size:18px;padding:8px 7px;cursor:pointer}
 .wa-hd{font-size:12px;font-weight:700;color:#00705c}
-.wa-send,.wa-mic{width:44px;height:44px;flex:0 0 44px;border-radius:50%;border:none;background:#00a884;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,168,132,.35)}
+.wa-send{width:44px;height:44px;flex:0 0 44px;border-radius:50%;border:none;background:#00a884;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,168,132,.35)}
+.wa-mic{width:44px;height:44px;flex:0 0 44px;border-radius:50%;border:none;background:#eef1f4;color:#54656f;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.wa-mic:hover{background:#e2e6ea}
+.ch-attach-menu{position:absolute;right:16px;bottom:74px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px rgba(17,27,33,.18);z-index:20;overflow:hidden;min-width:210px}
+.ch-attach-menu button{display:block;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid var(--line);padding:13px 15px;font-size:14px;cursor:pointer}
+.ch-attach-menu button:last-child{border-bottom:0}
+.ch-attach-menu button:hover{background:#f4f6f8}
 .wa-send:disabled{opacity:.6}
 .wa-soon{font-size:10.5px;color:#8696a0;font-style:italic}
 .wa-note{font-size:11.5px;color:#8a6d3b;background:#fdf6e3;border:1px solid #f0e2b8;border-radius:8px;padding:6px 10px;margin:0 -6px 6px;text-align:center}
@@ -169,8 +175,8 @@
 @keyframes micpulse{0%,100%{opacity:1}50%{opacity:.55}}
 .ag-master{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px;margin:0 0 8px;background:#fff;border:1px solid var(--line);border-radius:12px}
 .ag-master.on{background:#e6f6ec;border-color:#b8e6c8}
-.ag-master-sw{border:0;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:700;cursor:pointer;background:#eceef1;color:#5a6069}
-.ag-master.on .ag-master-sw{background:#22a45d;color:#fff}
+.ag-master-sw{border:0;border-radius:20px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;background:#eef1f4;color:#697079;transition:background .15s,box-shadow .15s}
+.ag-master.on .ag-master-sw{background:#00a884;color:#fff}
 .ag-master .muted{font-size:12px}
 .deal{position:relative}
 .deal-open strong{padding-right:30px}
@@ -180,7 +186,7 @@
 .deal-ag.inh{filter:grayscale(.55);opacity:.6}
 .deal-wa.hot{background:#fdecec;color:#c62830;border-radius:6px;padding:2px 7px;display:inline-block}
 #ag-master-top{white-space:nowrap;flex:0 0 auto}
-.ag-master-sw.on{background:#22a45d;color:#fff}
+.ag-master-sw.on{background:#00a884;color:#fff;box-shadow:0 2px 8px rgba(0,168,132,.3)}
 .toolbar input{max-width:220px;margin-left:auto}
 .deal-ag.off{filter:grayscale(1);opacity:.9;border-color:#f0c4c4;background:#fbecec}
 .deal-ag.inh{filter:grayscale(.6);opacity:.65}
@@ -193,12 +199,12 @@
 .rz-where{font-size:12px;color:var(--muted);background:#f7f8fa;border-radius:7px;padding:6px 9px;margin-top:4px}
 /* десктоп-раскладка: широкий экран использует место, шторки становятся центр-модалками. Мобильную вёрстку не трогает. */
 @media(min-width:900px){
-  .wrap{max-width:1180px}
-  .top{padding:14px 24px}
-  .tabs,.toolbar{padding-left:24px;padding-right:24px}
-  .board{padding:0 24px 24px}
+  .wrap{max-width:none;width:100%}
+  .top{padding:14px 28px}
+  .tabs,.toolbar{padding-left:28px;padding-right:28px}
+  .board{padding:0 28px 24px}
   .column{flex:0 0 300px;max-height:calc(100dvh - 230px)}
-  .content{max-width:940px;margin:0 auto;padding:0 24px}
+  .content{max-width:1100px;margin:0 auto;padding:0 28px}
   .stats{grid-template-columns:repeat(4,1fr)}
   .sheet{left:50%;top:50%;bottom:auto;transform:translate(-50%,-50%);max-width:680px;max-height:88vh;border-radius:16px}
   .scr-panel{left:50%;top:50%;bottom:auto;transform:translate(-50%,-50%);max-width:680px;height:82vh;border-radius:16px}
@@ -242,6 +248,6 @@
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden><header><h2 id="sheet-title"></h2><button class="iconbtn" id="sheet-close" aria-label="Закрыть">✕</button></header><div id="sheet-body"></div></section>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm4"></script>
-<script src="crm.js?v=crm28"></script>
+<script src="crm.js?v=crm29"></script>
 </body>
 </html>
