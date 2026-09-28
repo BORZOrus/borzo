@@ -169,6 +169,7 @@ async function initSchema(db) {
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS sale_comment TEXT;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS ship_status TEXT NOT NULL DEFAULT '';
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS writeoff BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS ship_track BOOLEAN NOT NULL DEFAULT false;
     -- сейф ключей агента (электроящик): значения ШИФРУЮТСЯ, наружу (в браузер) не отдаются никогда, только статус «есть/нет»
     CREATE TABLE IF NOT EXISTS crm_secrets (
       name TEXT PRIMARY KEY, val TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_by TEXT NOT NULL DEFAULT ''
@@ -506,13 +507,27 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     await db.query('INSERT INTO crm_secrets(name,val,updated_by) VALUES($1,$2,$3) ON CONFLICT(name) DO UPDATE SET val=$2,updated_at=now(),updated_by=$3',[name,encSecret(value),req.user.login]);
     return {ok:true,name:name,set:true};
   }));
-  // Отгрузки: все проданные сделки (won) с данными для производства/доставки
+  // Отгрузки: проданные сделки (won) + поставленные на подготовку (ship_track) с данными для производства/доставки
   router.get('/shipments',route(async(req,res)=>{
-    const r=await pool.query(`SELECT d.id, d.items, d.ship_date::text AS ship_date, d.ship_time, d.pay_method, d.sale_comment, d.writeoff, d.ship_status, d.amount, d.closed_at,
-        c.name AS client_name, c.phone, c.city, c.address
+    const r=await pool.query(`SELECT d.id, d.items, d.ship_date::text AS ship_date, d.ship_time, d.pay_method, d.sale_comment, d.writeoff, d.ship_status, d.ship_track, d.amount, d.closed_at,
+        s.is_won, c.name AS client_name, c.phone, c.city, c.address
       FROM crm_deals d JOIN crm_clients c ON c.id=d.client_id JOIN crm_stages s ON s.id=d.stage_id
-      WHERE s.is_won ORDER BY (d.ship_date IS NULL), d.ship_date, d.id`);
+      WHERE s.is_won OR d.ship_track ORDER BY (d.ship_date IS NULL), d.ship_date, d.id`);
     res.json({shipments:r.rows});
+  }));
+  // добавить заказ на отгрузку напрямую (заводит/находит клиента в CRM — для точной аналитики, потом продажа)
+  router.post('/shipments',mutate(async(req,db)=>{
+    const b=req.body;
+    const client=await clientCreate(db,{name:b.name,phone:b.phone,city:b.city,address:b.address,source:b.source||'Отгрузка'},false);
+    if((b.city||b.address)&&client.id){ await db.query('UPDATE crm_clients SET city=COALESCE(NULLIF($1,\'\'),city),address=COALESCE(NULLIF($2,\'\'),address) WHERE id=$3',[str(b.city,'Город',100),str(b.address,'Адрес',300),client.id]); }
+    const st=(await db.query("SELECT * FROM crm_stages WHERE code='selection'")).rows[0] || (await db.query("SELECT * FROM crm_stages WHERE code='new'")).rows[0];
+    const its=items(b.items||[]);
+    const title=its.length?its[0].name:'Заказ на отгрузку';
+    const r=await db.query(`INSERT INTO crm_deals(client_id,title,amount,stage_id,manager_id,source,items,ship_date,ship_track,sale_comment)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,true,$9) RETURNING id`,
+      [client.id,str(title,'Название',200),number(b.amount||0,'Сумма'),st.id,req.user.id,str(b.source||'Отгрузка','Источник',100),JSON.stringify(its),date(b.ship_date),str(b.sale_comment,'Комментарий',2000)]);
+    await event(db,req.user,r.rows[0].id,'note','🚚 Заказ добавлен на подготовку к отгрузке');
+    return {deal:await dealBy(db,r.rows[0].id)};
   }));
   router.post('/deals/:id/ship',mutate(async(req,db)=>{
     const d=await dealBy(db,req.params.id,true);

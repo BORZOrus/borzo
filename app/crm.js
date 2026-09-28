@@ -975,13 +975,20 @@
     drawAgent();
   }
   // ---------- вкладка «Отгрузки»: проданные заказы по датам отгрузки (как доска Trello) ----------
-  function shipItems(s){ try{ return (s.items||[]).map(function(i){return (i.name||'')+(Number(i.qty)>1?' ×'+i.qty:'');}).join(', ')||'—'; }catch(e){ return '—'; } }
+  // одна позиция как мини-карточка товара: модель жирным + атрибуты (цвет/ножки/размер) отдельными ячейками
+  function shipProd(it){
+    var parts=String(it.name||'').split(' · ');
+    var model=parts.shift()||'—';
+    var chips=parts.map(function(p){return '<span class="ship-chip">'+esc(p)+'</span>';}).join('');
+    return '<div class="ship-item"><div class="ship-item-h"><b>'+esc(model)+'</b>'+(Number(it.qty)>1?'<span class="ship-qty">×'+esc(it.qty)+'</span>':'')+'</div>'+(chips?'<div class="ship-chips">'+chips+'</div>':'')+'</div>';
+  }
   function shipCard(s){
     var addr=[s.city,s.address].filter(Boolean).join(', ');
     var done=s.ship_status==='shipped';
-    return '<article class="deal ship-card'+(done?' done':'')+'">'+
-      '<strong>'+esc(s.client_name||'Клиент')+'</strong>'+
-      '<div class="ship-prod">'+esc(shipItems(s))+'</div>'+
+    var prod=(s.items&&s.items.length)?s.items.map(shipProd).join(''):'<div class="ship-item muted">Состав не указан</div>';
+    return '<article class="deal ship-card'+(done?' done':'')+(!s.is_won?' prep':'')+'">'+
+      '<div class="ship-top"><strong>'+esc(s.client_name||'Клиент')+'</strong>'+(!s.is_won?'<span class="ship-tag">подготовка</span>':'')+'</div>'+
+      '<div class="ship-prod">'+prod+'</div>'+
       (addr?'<div class="ship-addr">📍 '+esc(addr)+'</div>':'<div class="ship-addr muted">📍 адрес не указан</div>')+
       (s.pay_method?'<div class="ship-meta">💳 '+esc(s.pay_method)+'</div>':'')+
       (s.ship_time?'<div class="ship-meta">🕑 '+esc(s.ship_time)+'</div>':'')+
@@ -994,17 +1001,35 @@
   }
   async function renderShipments(){
     try{ var r=await api('GET','/shipments'); if(state.tab!=='ship')return;
-      var active=r.shipments.filter(function(s){return s.ship_status!=='shipped';});
-      var shipped=r.shipments.filter(function(s){return s.ship_status==='shipped';});
+      var all=r.shipments;
+      var prep=all.filter(function(s){return s.ship_status!=='shipped'&&!s.is_won;});      // подготовка (продажи ещё нет)
+      var ready=all.filter(function(s){return s.ship_status!=='shipped'&&s.is_won;});       // проданные, ждут отгрузки
+      var shipped=all.filter(function(s){return s.ship_status==='shipped';});
       var groups={},order=[];
-      active.forEach(function(s){ var k=s.ship_date||'📦 Готовится (без даты)'; if(!groups[k]){groups[k]=[];order.push(k);} groups[k].push(s); });
-      var cols=order.map(function(k){
+      ready.forEach(function(s){ var k=s.ship_date||'📦 Без даты'; if(!groups[k]){groups[k]=[];order.push(k);} groups[k].push(s); });
+      var cols='';
+      cols+='<section class="column"><header class="col-head"><h2><span class="dot"></span>🔧 Подготовить к отгрузке</h2><div class="muted">'+prep.length+'</div></header>'+(prep.length?prep.map(shipCard).join(''):'<div class="empty">Пусто</div>')+'</section>';
+      cols+=order.map(function(k){
         return '<section class="column"><header class="col-head"><h2><span class="dot"></span>'+esc(k)+'</h2><div class="muted">'+groups[k].length+' заказ(ов)</div></header>'+groups[k].map(shipCard).join('')+'</section>';
       }).join('');
-      var shippedCol=shipped.length?'<section class="column won"><header class="col-head"><h2><span class="dot"></span>✅ Отгружено</h2><div class="muted">'+shipped.length+'</div></header>'+shipped.map(shipCard).join('')+'</section>':'';
-      $('main').innerHTML='<div class="board" aria-label="Отгрузки">'+(cols||'<div class="empty">Пока нет заказов на отгрузку. Оформи продажу — заказ появится здесь.</div>')+shippedCol+'</div>';
+      if(shipped.length) cols+='<section class="column won"><header class="col-head"><h2><span class="dot"></span>✅ Отгружено</h2><div class="muted">'+shipped.length+'</div></header>'+shipped.map(shipCard).join('')+'</section>';
+      $('main').innerHTML='<div class="content" style="padding-top:8px"><button class="btn block" id="ship-add">➕ Добавить заказ на отгрузку</button></div><div class="board" aria-label="Отгрузки">'+cols+'</div>';
+      $('ship-add').onclick=openShipForm;
       bindShip($('main'));
     }catch(e){ if(state.tab==='ship')$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p></div>'; }
+  }
+  function openShipForm(){
+    openSheet('Новый заказ на отгрузку','<form id="ship-form"><p class="hint">Клиент заводится в CRM (для точной аналитики). Если продажи ещё нет — заказ встанет в «Подготовить к отгрузке».</p>'+
+      field('Имя клиента','name','','text','required maxlength="200"')+
+      field('Телефон','phone','','tel','placeholder="+7 700 000 00 00"')+
+      field('Город','city','','text','maxlength="100"')+
+      field('Адрес доставки','address','','text','maxlength="300"')+
+      itemsForm({items:[]})+
+      area('Комментарий для производства','sale_comment','')+
+      submit('Добавить в отгрузки')+'</form>');
+    wireItems();
+    var f=$('ship-form');
+    mutation(f,'POST','/shipments',function(){ var its=readItems(); if(!its.length)throw new Error('Добавь хотя бы одну позицию из каталога'); return {reqId:uid(),name:val(f,'name'),phone:val(f,'phone'),city:val(f,'city'),address:val(f,'address'),ship_date:val(f,'ship_date'),sale_comment:val(f,'sale_comment'),items:its}; },async function(){ closeSheet(); toast('Заказ добавлен в отгрузки'); renderShipments(); });
   }
   function bindShip(root){
     root.querySelectorAll('[data-ship-wo]').forEach(function(b){b.onchange=async function(){ try{ await api('POST','/deals/'+b.dataset.shipWo+'/ship',{reqId:uid(),writeoff:b.checked}); }catch(e){ toast(error(e)); b.checked=!b.checked; } };});
