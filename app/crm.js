@@ -6,7 +6,8 @@
   // эффективный статус агента для сделки: точечный override сделки → флаг стадии → глобальный
   // Главный тумблер = рубильник НАД всеми: выключен → агент молчит везде (состояния колонок/чатов сохраняются). Включён → работают колонки и точечные override.
   function effAgent(d){ if(state.agentGlobal!==true)return false; if(d.agent_override===true)return true; if(d.agent_override===false)return false; return state.agentStages[d.stage_code]===true; }
-  function agMasterBar(){ var on=state.agentGlobal===true; return '<div class="ag-master'+(on?' on':'')+'"><button class="ag-master-sw" data-agmaster title="Главный рубильник агента">'+(on?'🤖 Агент ВКЛючён':'🤖 Агент выключен')+'</button><span class="muted">рубильник над всеми: гасит/включает разом, состояния колонок и чатов сохраняются</span></div>'; }
+  // главный рубильник агента — компактная кнопка в общей полосе (тулбар), видна только на доске
+  function updateMasterTop(){ var b=$('ag-master-top'); if(!b)return; var on=state.agentGlobal===true; b.hidden=(state.tab!=='deals'); b.textContent=on?'🤖 Агент ВКЛ':'🤖 Агент выкл'; b.title=on?'Агент включён (рубильник над всеми). Клик — выключить всех':'Агент выключен. Клик — включить (работают колонки/чаты, что были включены)'; b.classList.toggle('on',on); }
   var sheet=$('sheet'), body=$('sheet-body'), focusBefore=null, toastTimer=null, sheetGeneration=0, loading=false;
   var pendingMutation=false, uncertainMutation=false, refreshSequence=0;
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -98,15 +99,25 @@
   function ago(ts){ if(!ts)return ''; var m=Math.floor((Date.now()-new Date(ts).getTime())/60000); if(m<1)return 'только что'; if(m<60)return m+' мин'; var h=Math.floor(m/60); if(h<24)return h+' ч'; return Math.floor(h/24)+' дн'; }
   // строка состояния лида на карточке: необработанный (в первом этапе) или ждёт нашего ответа
   function waLine(d,s){
-    if(s.code==='new') return '<div class="deal-wa unh">🔴 Необработан · '+esc(ago(d.created_at))+'</div>';
-    if(!s.is_won&&!s.is_lost&&d.last_in_at&&(!d.last_msg_at||new Date(d.last_in_at)>new Date(d.last_msg_at)))
-      return '<div class="deal-wa wait">⏰ Ждёт ответа · '+esc(ago(d.last_in_at))+'</div>';
+    // необработанный лид в первом этапе: краснеет, если висит дольше 15 мин
+    if(s.code==='new'){ var mn=Math.floor((Date.now()-new Date(d.created_at).getTime())/60000); return '<div class="deal-wa unh'+(mn>15?' hot':'')+'">🔴 Необработан · '+esc(ago(d.created_at))+'</div>'; }
+    // клиент написал, ждёт нашего ответа: краснеет, если ждёт дольше часа
+    if(!s.is_won&&!s.is_lost&&d.last_in_at&&(!d.last_msg_at||new Date(d.last_in_at)>new Date(d.last_msg_at))){
+      var hr=(Date.now()-new Date(d.last_in_at).getTime())/3600000;
+      return '<div class="deal-wa wait'+(hr>=1?' hot':'')+'">⏰ Ждёт ответа · '+esc(ago(d.last_in_at))+'</div>';
+    }
+    // в работе и мы ответили последними: показываем «без коммуникации», краснеет после 2 дней тишины
+    if(!s.is_won&&!s.is_lost&&s.code!=='new'&&d.last_msg_at){
+      var dd=(Date.now()-new Date(d.last_msg_at).getTime())/86400000;
+      if(dd>=1) return '<div class="deal-wa'+(dd>=2?' hot':'')+'">💤 Без коммуникации · '+esc(ago(d.last_msg_at))+'</div>';
+    }
     return '';
   }
   function renderDeals(){
     var oldBoard=$('main').querySelector('.board'),oldScroll=oldBoard?oldBoard.scrollLeft:0;
     var deals=state.deals.filter(matches);
-    $('main').innerHTML=agMasterBar()+'<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
+    updateMasterTop();
+    $('main').innerHTML='<div class="board" aria-label="Воронка сделок">'+state.stages.map(function(s){
       var rows=deals.filter(function(d){return d.stage_id===s.id;});
       var agOn=state.agentStages[s.code]===true;
       return '<section class="column '+(s.is_won?'won':s.is_lost?'lost':'')+'"><header class="col-head"><div class="col-top"><h2><span class="dot"></span>'+esc(s.name)+'</h2><button class="col-ag'+(agOn?' on':'')+'" data-agstage="'+esc(s.code)+'" title="Агент на этой стадии: '+(agOn?'вкл':'выкл')+'">🤖</button></div><div class="muted">'+esc(rows.length)+' · '+esc(money(rows.reduce(function(n,d){return n+Number(d.amount);},0)))+'</div></header>'+rows.map(function(d){
@@ -116,7 +127,7 @@
         var take=s.code==='new'?'<button class="take-btn" data-take="'+esc(d.id)+'">▶ Взять в работу</button>':'';
         var ov=d.agent_override, ovs=ov===true?'on':ov===false?'off':'inh';
         var agBtn='<button class="deal-ag '+ovs+'" data-agdeal="'+esc(d.id)+'" title="Агент в этом чате: '+(ov===true?'включён (клик → выключить)':ov===false?'выключен (клик → по воронке)':'по воронке (клик → включить)')+'">🤖</button>';
-        return '<article class="deal"><button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+ag+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move">'+agBtn+'<button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
+        return '<article class="deal">'+agBtn+'<button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+ag+'</strong><div class="deal-title">'+esc(d.title)+'</div><div class="amount">'+esc(money(d.amount))+'</div>'+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move"><button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
       }).join('')+(rows.length?'':'<div class="empty">'+(state.q?'Нет совпадений':'Пока нет сделок')+'</div>')+'</section>';
     }).join('')+'</div>';
     var board=$('main').querySelector('.board');
@@ -176,11 +187,6 @@
       e.stopPropagation();
       var code=b.dataset.agstage, val=!(state.agentStages[code]===true);
       try{ var r=await api('POST','/agent-settings',{reqId:uid(),stageCode:code,value:val}); state.agentGlobal=r.agentGlobal; state.agentStages=r.agentStages||{}; if(state.tab==='deals')renderDeals(); }
-      catch(err){ toast(error(err)); }
-    };});
-    // главный рубильник агента (над доской)
-    root.querySelectorAll('[data-agmaster]').forEach(function(b){b.onclick=async function(){
-      try{ var r=await api('POST','/agent-settings',{reqId:uid(),global:!(state.agentGlobal===true)}); state.agentGlobal=r.agentGlobal===true; state.agentStages=r.agentStages||{}; if(state.tab==='deals')renderDeals(); }
       catch(err){ toast(error(err)); }
     };});
     // точечный тумблер агента на карточке: по воронке → вкл → выкл → по воронке
@@ -471,7 +477,8 @@
           '<div class="wa-field">'+
             '<button class="wa-in-ic" id="ch-tplbtn" title="Шаблоны">📋</button>'+
             '<textarea id="ch-text" rows="1" placeholder="'+(waConnected?'Сообщение':'Заметка (WhatsApp позже)')+'"></textarea>'+
-            '<label class="wa-in-ic" style="cursor:pointer" title="Прикрепить">📎<input id="ch-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden></label>'+
+            '<label class="wa-in-ic" style="cursor:pointer" title="Фото в чат (с превью)">📎<input id="ch-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden></label>'+
+            '<label class="wa-in-ic wa-hd" style="cursor:pointer" title="Фото в HD (файлом, без сжатия)">HD<input id="ch-file-hd" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden></label>'+
           '</div>'+
           '<button class="wa-send" id="ch-send" hidden>➤</button>'+
           '<button class="wa-mic" id="ch-mic" title="Голосовое">🎤</button>'+
@@ -548,20 +555,19 @@
           toast('Запись… нажми ещё раз, чтобы отправить');
         }catch(e){ toast('Нет доступа к микрофону'); }
       };
-      // отправка фото/документа клиенту: текст в поле = подпись
-      var chFile=$('ch-file');
-      if(chFile) chFile.onchange=async function(){
-        var f=chFile.files[0]; if(!f)return;
-        if(f.size>16*1024*1024){ toast('Файл до 16 МБ'); chFile.value=''; return; }
-        var isPdf=(f.type==='application/pdf');
+      // отправка фото/документа клиенту: mode 'image' = в чат с превью, 'document' = HD-файлом без сжатия; текст в поле = подпись
+      async function sendAttach(f, mode){
+        if(!f)return;
+        if(f.size>16*1024*1024){ toast('Файл до 16 МБ'); return; }
+        var mtype=(f.type==='application/pdf')?'document':mode;   // pdf всегда документом
         var cap=$('ch-text').value.trim();
-        chFile.disabled=true; toast('Загрузка…');
+        toast('Загрузка…');
         try{
           var data=await fileData(f);
           var up=await api('POST','/upload',{reqId:uid(),data:data});
           if(waConnected){
-            await API.waSend({deal_id:d.id, media:up.url, media_type:isPdf?'document':'image', caption:cap, reqId:uid()});
-            $('ch-text').value=''; chToggle(); toast('Отправлено'); await poll();
+            await API.waSend({deal_id:d.id, media:up.url, media_type:mtype, caption:cap, reqId:uid()});
+            $('ch-text').value=''; chToggle(); toast(mtype==='document'?'Отправлено в HD (файлом)':'Отправлено'); await poll();
           } else {
             await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:(cap?cap+'\n':'')+'[вложение] '+up.url});
             $('ch-text').value=''; chToggle(); toast('Канал не подключён — сохранено заметкой'); await poll();
@@ -570,8 +576,10 @@
           if(e&&e.status===503){ toast('WhatsApp ещё не подключён — появится в день переезда'); }
           else toast(error(e));
         }
-        chFile.value=''; chFile.disabled=false;
-      };
+      }
+      var chFile=$('ch-file'), chFileHd=$('ch-file-hd');
+      if(chFile) chFile.onchange=function(){ var f=chFile.files[0]; chFile.value=''; sendAttach(f,'image'); };
+      if(chFileHd) chFileHd.onchange=function(){ var f=chFileHd.files[0]; chFileHd.value=''; sendAttach(f,'document'); };
       async function poll(){
         if(chatDealId!==d.id)return;
         clearTimeout(chatTimer);
@@ -1126,12 +1134,13 @@
     };
   }
   async function tab(name){
-    state.tab=name;$('toolbar').hidden=!['deals','clients'].includes(name);
+    state.tab=name;$('toolbar').hidden=!['deals','clients'].includes(name);updateMasterTop();
     document.querySelectorAll('[data-tab]').forEach(function(b){b.classList.toggle('on',b.dataset.tab===name);if(b.dataset.tab===name)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
     if(name==='deals')renderDeals();else if(name==='clients')await loadClients();else if(name==='analytics')await renderAnalytics();else if(name==='templates')await renderTemplates();else if(name==='agent')await renderAgent();else if(name==='catalog')await renderCatalog();else if(name==='import'&&state.user.role==='mgr')renderImport();
   }
   var searchTimer;
   $('search').oninput=function(){state.q=this.value.trim().toLowerCase();clearTimeout(searchTimer);if(state.tab==='deals')renderDeals();else searchTimer=setTimeout(loadClients,200);};
+  $('ag-master-top').onclick=async function(){ try{ var r=await api('POST','/agent-settings',{reqId:uid(),global:!(state.agentGlobal===true)}); state.agentGlobal=r.agentGlobal===true; state.agentStages=r.agentStages||{}; updateMasterTop(); if(state.tab==='deals')renderDeals(); }catch(e){ toast(error(e)); } };
   $('refresh').onclick=reload;
   document.querySelectorAll('[data-tab]').forEach(function(b){b.onclick=function(){if(state.user)tab(b.dataset.tab);};});
   if(!API.token){location.replace('login.html?next=crm.html');return;}
