@@ -164,6 +164,7 @@ async function initSchema(db) {
     DELETE FROM crm_stages WHERE code='agreed' AND NOT EXISTS(SELECT 1 FROM crm_deals WHERE stage_id=(SELECT id FROM crm_stages WHERE code='agreed'));
     UPDATE crm_stages SET ord=CASE code WHEN 'new' THEN 1 WHEN 'working' THEN 2 WHEN 'selection' THEN 3 WHEN 'paused' THEN 4 WHEN 'won' THEN 5 WHEN 'lost' THEN 6 ELSE ord END;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS remind_at TIMESTAMPTZ;
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS remind_fired_at TIMESTAMPTZ;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS pay_method TEXT;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS sale_comment TEXT;
     -- сейф ключей агента (электроящик): значения ШИФРУЮТСЯ, наружу (в браузер) не отдаются никогда, только статус «есть/нет»
@@ -468,7 +469,7 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     const d=await dealBy(db,req.params.id,true);
     let ra=null;
     if(req.body.remind_at){ ra=new Date(req.body.remind_at); if(isNaN(ra.getTime())) throw err(400,'Неверная дата напоминания'); }
-    await db.query('UPDATE crm_deals SET remind_at=$1,updated_at=now(),rev=rev+1 WHERE id=$2',[ra,d.id]);
+    await db.query('UPDATE crm_deals SET remind_at=$1,remind_fired_at=NULL,updated_at=now(),rev=rev+1 WHERE id=$2',[ra,d.id]);
     await event(db,req.user,d.id,'note',ra?('⏰ Напоминание на '+new Date(ra).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'})):'⏰ Напоминание снято');
     return {deal:await dealBy(db,d.id)};
   }));
@@ -827,4 +828,16 @@ async function importMindSales(db,b,user) {
   }
   return {ok:true,counts};
 }
-module.exports={initSchema,register};
+// перепроверка всех сохранённых ключей (для фонового планировщика): обновляет ok/checked_at
+async function recheckSecrets(pool){
+  try{
+    const r=await pool.query('SELECT name FROM crm_secrets');
+    for(const row of r.rows){
+      if(SECRET_NAMES.indexOf(row.name)<0) continue;
+      const key=await getSecret(pool,row.name); if(!key) continue;
+      const chk=await checkProvider(row.name,key);
+      await pool.query('UPDATE crm_secrets SET ok=$1,checked_at=now() WHERE name=$2',[chk.ok,row.name]);
+    }
+  }catch(e){ console.error('recheckSecrets', e && e.message); }
+}
+module.exports={initSchema,register,recheckSecrets};

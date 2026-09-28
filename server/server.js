@@ -828,7 +828,29 @@ app.use((err, req, res, next)=>{ console.error('unhandled route error', err&&err
 // подстраховка: необработанный промис не должен ронять процесс (systemd перезапустит, но лучше логировать и жить)
 process.on('unhandledRejection', (reason)=>{ console.error('unhandledRejection', reason && (reason.message||reason)); });
 
+// Автономный планировщик (без токенов/нейросети): раз в минуту шлёт пуш просроченных пауза-напоминаний
+// и раз в час перепроверяет ключи электроящика. Чистые SQL + web-push.
+let lastKeyRecheck = 0;
+async function schedulerTick(){
+  try{
+    const due = await pool.query(
+      `SELECT d.id, c.name AS client FROM crm_deals d JOIN crm_clients c ON c.id=d.client_id
+       WHERE d.remind_at IS NOT NULL AND d.remind_at <= now() AND d.remind_fired_at IS NULL LIMIT 50`);
+    for(const row of due.rows){
+      await pool.query('UPDATE crm_deals SET remind_fired_at=now() WHERE id=$1', [row.id]);
+      const payload = { title:'BORZO · Напоминание', body:'Пора вернуться к клиенту: '+(row.client||''), url:'/crm.html' };
+      sendPushToRole('mgr', payload).catch(()=>{});
+      sendPushToRole('fin', payload).catch(()=>{});
+    }
+  }catch(e){ console.error('scheduler reminders', e && e.message); }
+  try{
+    if(Date.now() - lastKeyRecheck > 3600000){ lastKeyRecheck = Date.now(); await crm.recheckSecrets(pool); }
+  }catch(e){ console.error('scheduler keys', e && e.message); }
+}
+
 initSchema().then(()=>{
   if(!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive:true });
   app.listen(PORT, ()=> console.log('BORZO server on :'+PORT));
+  setInterval(schedulerTick, 60000);
+  setTimeout(schedulerTick, 5000);
 }).catch(e=>{ console.error('init error', e); process.exit(1); });
