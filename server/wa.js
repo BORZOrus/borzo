@@ -12,6 +12,7 @@ const API_URL = (process.env.WA_API_URL || 'https://waba-v2.360dialog.io').repla
 const API_KEY = process.env.D360_API_KEY || '';         // появится в день переезда (Change Partner → ключ канала)
 const WEBHOOK_SECRET = process.env.WA_WEBHOOK_SECRET || '';   // секрет в пути вебхука (360dialog не подписывает как Meta)
 const OUR_PHONE_ID = process.env.WA_PHONE_ID || '';     // phone_number_id нашего канала (912982958571543) — отсечь чужие каналы
+const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'https://borzopult.com').replace(/\/+$/,'');  // публичный адрес для ссылок на /uploads при отправке медиа
 
 async function initSchema(db) {
   await db.query(`
@@ -243,12 +244,17 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     res.json({ ok:true });
   }));
 
-  // отправить текст клиенту по сделке
+  // отправить клиенту по сделке: текст ИЛИ медиа (фото/документ/аудио/видео) по публичной ссылке uploads
   api.post('/send', route(async (req,res)=>{
     const dealId = Number(req.body.deal_id);
     if(!Number.isSafeInteger(dealId) || dealId<1) throw err(400,'некорректная сделка');
     const text = String(req.body.text==null?'':req.body.text).trim();
-    if(!text) throw err(400,'пустое сообщение');
+    // медиа: путь /uploads/... (уже загружено через /api/crm/upload) или полный http-URL; тип и подпись отдельно
+    const media = String(req.body.media||'').trim().slice(0,1024);
+    const mediaType = ['image','document','audio','video'].includes(req.body.media_type) ? req.body.media_type : '';
+    const hasMedia = !!(media && mediaType);
+    const caption = String(req.body.caption==null?'':req.body.caption).trim().slice(0,1024);
+    if(!text && !hasMedia) throw err(400,'пустое сообщение');
     if(text.length>4096) throw err(400,'сообщение длиннее 4096 символов');
     const reqId = (String(req.body.reqId||'').trim().slice(0,64)) || null;
 
@@ -265,10 +271,22 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     const replyTo = String(req.body.reply_to||'').trim().slice(0,256);        // wamid исходного сообщения (цитата)
     const replyText = String(req.body.reply_text||'').trim().slice(0,200);    // короткий текст для превью цитаты
     const to = phone.replace(/\D/g,'');
+
+    // тип сообщения и полезная нагрузка
+    let outType = 'text', link = '', payload;
+    if(hasMedia){
+      outType = mediaType;
+      link = /^https?:\/\//i.test(media) ? media : (PUBLIC_BASE + (media.startsWith('/')?'':'/') + media);
+      const mobj = (mediaType==='audio') ? { link } : { link, caption };      // у audio подписи нет
+      if(mediaType==='document') mobj.filename = (media.split('/').pop()||'file').slice(0,120);
+      payload = { messaging_product:'whatsapp', recipient_type:'individual', to, type:mediaType, [mediaType]:mobj };
+    } else {
+      payload = { messaging_product:'whatsapp', recipient_type:'individual', to, type:'text', text:{ body:text, preview_url:false } };
+    }
+    if(replyTo) payload.context = { message_id: replyTo };                     // ответ с цитатой (как в WhatsApp)
+
     let wamid = null, sendErr = '';
     try {
-      const payload = { messaging_product:'whatsapp', recipient_type:'individual', to, type:'text', text:{ body:text, preview_url:false } };
-      if(replyTo) payload.context = { message_id: replyTo };                  // ответ с цитатой (как в WhatsApp)
       const resp = await fetch(API_URL+'/messages', {
         method:'POST',
         headers:{ 'D360-API-KEY':API_KEY, 'Content-Type':'application/json' },
@@ -280,12 +298,14 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     } catch(e){ if(e.httpCode) throw e; throw err(502,'сеть/шлюз WhatsApp недоступен'); }
 
     const now = Date.now();
+    const dbText = hasMedia ? '' : text;
+    const dbMediaUrl = hasMedia ? link : null;
     let saved;
     try {
       saved = (await pool.query(
-        `INSERT INTO wa_messages(wamid, deal_id, client_id, direction, wa_from, wa_to, type, text, status, author_id, author_name, req_id, ts, reply_to, reply_text)
-         VALUES($1,$2,$3,'out',$4,$5,'text',$6,'sent',$7,$8,$9,$10,$11,$12) RETURNING *`,
-        [wamid, dealId, client_id, OUR_PHONE_ID||'', to, text, req.user.id, req.user.name, reqId, now, replyTo, replyText])).rows[0];
+        `INSERT INTO wa_messages(wamid, deal_id, client_id, direction, wa_from, wa_to, type, text, media_url, mime, caption, status, author_id, author_name, req_id, ts, reply_to, reply_text)
+         VALUES($1,$2,$3,'out',$4,$5,$6,$7,$8,$9,$10,'sent',$11,$12,$13,$14,$15,$16) RETURNING *`,
+        [wamid, dealId, client_id, OUR_PHONE_ID||'', to, outType, dbText, dbMediaUrl, '', caption, req.user.id, req.user.name, reqId, now, replyTo, replyText])).rows[0];
     } catch(e){
       if(e.code==='23505' && reqId){ const ex=await pool.query('SELECT * FROM wa_messages WHERE req_id=$1',[reqId]); if(ex.rowCount) return res.json({ ok:true, message:ex.rows[0], idem:true }); }
       throw e;

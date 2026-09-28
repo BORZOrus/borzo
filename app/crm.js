@@ -246,7 +246,7 @@
   // не-текстовое сообщение: если уже скачано — плеер, иначе ярлык + кнопка «Загрузить»
   function waMediaLabel(m){
     var lbl=({audio:'🎤 Голосовое',voice:'🎤 Голосовое',image:'🖼 Фото',video:'🎬 Видео',document:'📄 Документ',sticker:'🩷 Стикер'})[m.type]||('📎 '+esc(m.type||'файл'));
-    if(m.media_url) return waMediaView(m.media_url,m.mime)+(m.caption?'<div>'+esc(m.caption)+'</div>':'');
+    if(m.media_url) return waMediaView(m.media_url,m.mime||({image:'image/',audio:'audio/',video:'video/'}[m.type]||''))+(m.caption?'<div>'+esc(m.caption)+'</div>':'');
     return lbl+(m.caption?': '+esc(m.caption):'')+(m.media_id?' <button class="wa-load" data-media="'+esc(m.id)+'">▶ Загрузить</button>':'');
   }
   // пузырь реального WhatsApp-сообщения
@@ -526,6 +526,30 @@
       function chToggle(){ var has=chText.value.trim().length>0; $('ch-send').hidden=!has; $('ch-mic').hidden=has; chText.style.height='auto'; chText.style.height=Math.min(110,Math.max(38,chText.scrollHeight))+'px'; }
       chText.addEventListener('input',chToggle); chToggle();
       $('ch-mic').onclick=function(){ toast('Голосовые заработают после переезда (готовим визуал сейчас)'); };
+      // отправка фото/документа клиенту: текст в поле = подпись
+      var chFile=$('ch-file');
+      if(chFile) chFile.onchange=async function(){
+        var f=chFile.files[0]; if(!f)return;
+        if(f.size>16*1024*1024){ toast('Файл до 16 МБ'); chFile.value=''; return; }
+        var isPdf=(f.type==='application/pdf');
+        var cap=$('ch-text').value.trim();
+        chFile.disabled=true; toast('Загрузка…');
+        try{
+          var data=await fileData(f);
+          var up=await api('POST','/upload',{reqId:uid(),data:data});
+          if(waConnected){
+            await API.waSend({deal_id:d.id, media:up.url, media_type:isPdf?'document':'image', caption:cap, reqId:uid()});
+            $('ch-text').value=''; chToggle(); toast('Отправлено'); await poll();
+          } else {
+            await api('POST','/deals/'+d.id+'/events',{reqId:uid(),kind:'msg',text:(cap?cap+'\n':'')+'[вложение] '+up.url});
+            $('ch-text').value=''; chToggle(); toast('Канал не подключён — сохранено заметкой'); await poll();
+          }
+        }catch(e){
+          if(e&&e.status===503){ toast('WhatsApp ещё не подключён — появится в день переезда'); }
+          else toast(error(e));
+        }
+        chFile.value=''; chFile.disabled=false;
+      };
       async function poll(){
         if(chatDealId!==d.id)return;
         clearTimeout(chatTimer);
