@@ -136,7 +136,10 @@
         var agBtn='<button class="deal-ag'+(work?' on':'')+'" data-agdeal="'+esc(d.id)+'" title="Агент в этом чате: '+(work?'работает':'не работает')+' (клик меняет)">🤖</button>';
         var amt=Number(d.amount)||0;
         var amtHtml=amt>0?'<div class="amount">'+esc(money(amt))+'</div>':'';
-        return '<article class="deal">'+agBtn+'<button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+'</strong><div class="deal-title">'+esc(d.title)+'</div>'+amtHtml+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move"><button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
+        // «тема сделки» показываем, только если она осмысленная (не дублирует имя клиента)
+        var dt=(d.title||'').trim();
+        var dtHtml=(dt && dt.toLowerCase()!==String(d.client_name||'').trim().toLowerCase())?'<div class="deal-title">'+esc(dt)+'</div>':'';
+        return '<article class="deal">'+agBtn+'<button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+'</strong>'+dtHtml+amtHtml+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move"><button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
       }).join('')+(rows.length?'':'<div class="empty">'+(state.q?'Нет совпадений':'Пока нет сделок')+'</div>')+'</section>';
     }).join('')+'</div>';
     var board=$('main').querySelector('.board');
@@ -1166,6 +1169,7 @@
   $('search').oninput=function(){state.q=this.value.trim().toLowerCase();clearTimeout(searchTimer);if(state.tab==='deals')renderDeals();else searchTimer=setTimeout(loadClients,200);};
   $('ag-master-top').onclick=async function(){ try{ var r=await api('POST','/agent-settings',{reqId:uid(),global:!(state.agentGlobal===true)}); state.agentGlobal=r.agentGlobal===true; state.agentStages=r.agentStages||{}; updateMasterTop(); if(state.tab==='deals')renderDeals(); }catch(e){ toast(error(e)); } };
   $('refresh').onclick=reload;
+  if($('push-btn'))$('push-btn').onclick=function(){ if(window.BorzoPush)BorzoPush.enable(); else toast('Модуль уведомлений не загружен'); };
   document.querySelectorAll('[data-tab]').forEach(function(b){b.onclick=function(){if(state.user)tab(b.dataset.tab);};});
   if(!API.token){location.replace('login.html?next=crm.html');return;}
   API.me().then(async function(r){
