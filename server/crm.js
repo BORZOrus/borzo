@@ -416,6 +416,8 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     if('amount' in b) d.amount=number(b.amount,'Сумма');
     if('items' in b) d.items=items(b.items);
     if('ship_date' in b) d.ship_date=date(b.ship_date);
+    if('pay_method' in b) d.pay_method=str(b.pay_method,'Оплата',40);
+    if('sale_comment' in b) d.sale_comment=str(b.sale_comment,'Комментарий',2000);
     if('manager_id' in b) d.manager_id=await manager(db,b.manager_id);
     const currentStage=await stageBy(db,d.stage_id); wonCheck(currentStage,d);
     if('closed_at' in b){
@@ -423,8 +425,8 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
       d.closed_at=timestamp(b.closed_at,'Дата закрытия');
       if(!d.closed_at) throw err(400,'Укажите дату закрытия');
     }
-    await db.query(`UPDATE crm_deals SET title=$1,amount=$2,manager_id=$3,source=$4,note=$5,items=$6,ship_date=$7,lost_reason=$8,closed_at=$9,ship_time=$10,imported_incomplete=false,rev=rev+1,updated_at=now() WHERE id=$11`,
-      [d.title,d.amount,d.manager_id,d.source,d.note,JSON.stringify(d.items),d.ship_date,d.lost_reason,d.closed_at,d.ship_time==null?'':d.ship_time,d.id]);
+    await db.query(`UPDATE crm_deals SET title=$1,amount=$2,manager_id=$3,source=$4,note=$5,items=$6,ship_date=$7,lost_reason=$8,closed_at=$9,ship_time=$10,pay_method=$12,sale_comment=$13,imported_incomplete=false,rev=rev+1,updated_at=now() WHERE id=$11`,
+      [d.title,d.amount,d.manager_id,d.source,d.note,JSON.stringify(d.items),d.ship_date,d.lost_reason,d.closed_at,d.ship_time==null?'':d.ship_time,d.id,d.pay_method==null?'':d.pay_method,d.sale_comment==null?'':d.sale_comment]);
     await event(db,req.user,d.id,'note','Обновлены поля сделки');
     return {deal:await dealBy(db,d.id)};
   }));

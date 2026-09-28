@@ -6,6 +6,12 @@
   // эффективный статус агента для сделки: точечный override сделки → флаг стадии → глобальный
   // Главный тумблер = рубильник НАД всеми: выключен → агент молчит везде (состояния колонок/чатов сохраняются). Включён → работают колонки и точечные override.
   function effAgent(d){ if(state.agentGlobal!==true)return false; if(d.agent_override===true)return true; if(d.agent_override===false)return false; return state.agentStages[d.stage_code]===true; }
+  // кто ведёт сделку: агент / менеджер (человек) / ещё не взято
+  function leadBadge(d){
+    if(effAgent(d)) return '<div class="deal-lead by-agent">🤖 Агент ведёт</div>';
+    if(d.manager_id) return '<div class="deal-lead by-human">👤 '+esc(d.manager_name||'Менеджер')+'</div>';
+    return '<div class="deal-lead">🆕 Не взято</div>';
+  }
   // главный рубильник агента — компактная кнопка в общей полосе (тулбар), видна только на доске
   function updateMasterTop(){ var b=$('ag-master-top'); if(!b)return; var on=state.agentGlobal===true; b.hidden=(state.tab!=='deals'); b.textContent=on?'🤖 Агент ВКЛ':'🤖 Агент выкл'; b.title=on?'Агент включён (рубильник над всеми). Клик — выключить всех':'Агент выключен. Клик — включить (работают колонки/чаты, что были включены)'; b.classList.toggle('on',on); }
   var sheet=$('sheet'), body=$('sheet-body'), focusBefore=null, toastTimer=null, sheetGeneration=0, loading=false;
@@ -139,7 +145,7 @@
         // «тема сделки» показываем, только если она осмысленная (не дублирует имя клиента)
         var dt=(d.title||'').trim();
         var dtHtml=(dt && dt.toLowerCase()!==String(d.client_name||'').trim().toLowerCase())?'<div class="deal-title">'+esc(dt)+'</div>':'';
-        return '<article class="deal">'+agBtn+'<button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+'</strong>'+dtHtml+amtHtml+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div><div class="hint">'+esc(d.manager_name||'Без менеджера')+'</div></button>'+take+'<div class="deal-move"><button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
+        return '<article class="deal">'+agBtn+'<button class="deal-open" data-deal="'+esc(d.id)+'"><strong>'+esc(d.client_name)+badge+'</strong>'+dtHtml+amtHtml+waLine(d,s)+'<div class="deal-foot"><span>'+esc(d.source||'Без источника')+'</span><span>'+esc(days)+'</span></div>'+leadBadge(d)+'</button>'+take+'<div class="deal-move"><button class="mv-btn" data-mv="'+esc(d.id)+'|-1" aria-label="Влево">◀</button><button class="stage-btn" data-move="'+esc(d.id)+'">этап</button><button class="mv-btn" data-mv="'+esc(d.id)+'|1" aria-label="Вправо">▶</button></div></article>';
       }).join('')+(rows.length?'':'<div class="empty">'+(state.q?'Нет совпадений':'Пока нет сделок')+'</div>')+'</section>';
     }).join('')+'</div>';
     var board=$('main').querySelector('.board');
@@ -474,6 +480,7 @@
           '<button data-agent="on"'+(d.agent_override===true?' class="am-on"':'')+'>Включить тут</button>'+
           '<button data-agent="off"'+(d.agent_override===false?' class="am-on"':'')+'>Выключить тут</button>'+
           '<button data-agent="inherit"'+(d.agent_override==null?' class="am-on"':'')+'>По воронке</button>'+
+          '<button id="wm-takeover">✋ Вести самому (перехватить)</button>'+
           '<button id="wm-stage">📊 Сменить этап</button>'+
           '<button id="wm-info">ℹ️ Детали сделки</button>'+
           '<button id="wm-client">👤 Клиент</button>'+
@@ -640,6 +647,10 @@
       };});
       $('wm-stage').onclick=function(){ stopChat(); showStage(d.id,d); };
       $('wm-info').onclick=function(){ stopChat(); showDealInfo(d.id); };
+      if($('wm-takeover'))$('wm-takeover').onclick=async function(){
+        try{ await api('POST','/deals/'+d.id+'/agent',{reqId:uid(),mode:'off'}); await api('PATCH','/deals/'+d.id,{baseRev:d.rev,manager_id:state.userId}); toast('Теперь ведёте вы — агент выключен в этом чате'); showDeal(d.id); reload(); }
+        catch(e){ toast(error(e)); }
+      };
       $('wm-client').onclick=function(){ stopChat(); showClient(d.client_id); };
     }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
   }
@@ -724,6 +735,7 @@
       mutation(f,'POST','/deals/'+d.id+'/stage',function(){
         var b={baseRev:d.rev,stage_id:won.id,amount:val(f,'amount'),items:readItems(),ship_date:val(f,'ship_date'),pay_method:val(f,'pay_method'),sale_comment:val(f,'sale_comment')};
         if(!b.items.length)throw new Error('Добавь хотя бы одну позицию — выбери модель из каталога выше');
+        if(!(Number(b.amount)>0))throw new Error('Укажи сумму продажи больше нуля');
         return b;
       },async function(){toast('Продажа оформлена ✅');await showDeal(d.id);await reload();});
     }catch(e){if(gen===sheetGeneration)body.innerHTML='<p class="error">'+esc(error(e))+'</p>';}
@@ -744,9 +756,10 @@
     mutation(f,'POST','/deals/'+d.id+'/stage',function(){var stage=state.stages.find(function(x){return x.id===Number(val(f,'stage_id'));});var b={baseRev:d.rev,stage_id:stage.id,lost_reason:val(f,'lost_reason')};if(stage.is_won){b.amount=val(f,'amount');b.items=readItems();b.ship_date=val(f,'ship_date');if(!b.items.length)throw new Error('Добавьте хотя бы одну позицию');}return b;},async function(){var stage=state.stages.find(function(x){return x.id===Number(val(f,'stage_id'));});if(stage&&stage.code==='paused'){var rv=val(f,'remind_at');try{await api('POST','/deals/'+d.id+'/remind',{reqId:uid(),remind_at:rv?rv+':00+05:00':null});}catch(e){}}toast('Этап сохранён');await showDeal(d.id);await reload();});
   }
   function editDeal(d){
-    openSheet('Изменить сделку','<form id="deal-form">'+field('Название','title',d.title,'text','required maxlength="200"')+field('Сумма сделки, ₸','amount',d.amount,'number','required min="0" max="1000000000000" step="0.01"')+select('Менеджер','manager_id',state.managers,d.manager_id)+source(d.source)+area('Заметка о сделке','note',d.note)+itemsForm(d)+((d.is_won||d.is_lost)?field('Дата закрытия','closed_date',d.closed_at?new Date(new Date(d.closed_at).getTime()+5*3600000).toISOString().slice(0,10):'','date'):'')+submit()+'</form>');wireItems();
+    var payHtml=d.is_won?'<label class="field">Способ оплаты<select name="pay_method"><option value="">— выбрать —</option>'+['Kaspi магазин','Наличные','Kaspi перевод','Рассрочка Kaspi 24 мес','Счёт на оплату'].map(function(o){return '<option'+(d.pay_method===o?' selected':'')+'>'+o+'</option>';}).join('')+'</select></label>'+area('Комментарий к заказу (для производства)','sale_comment',d.sale_comment||''):'';
+    openSheet('Изменить сделку','<form id="deal-form">'+field('Название','title',d.title,'text','required maxlength="200"')+field('Сумма сделки, ₸','amount',d.amount,'number','required min="0" max="1000000000000" step="0.01"')+select('Менеджер','manager_id',state.managers,d.manager_id)+source(d.source)+area('Заметка о сделке','note',d.note)+itemsForm(d)+payHtml+((d.is_won||d.is_lost)?field('Дата закрытия','closed_date',d.closed_at?new Date(new Date(d.closed_at).getTime()+5*3600000).toISOString().slice(0,10):'','date'):'')+submit()+'</form>');wireItems();
     var f=$('deal-form');if(d.is_won)f.elements.namedItem('ship_date').required=true;
-    mutation(f,'PATCH','/deals/'+d.id,function(){var b={baseRev:d.rev,title:val(f,'title'),amount:val(f,'amount'),manager_id:Number(val(f,'manager_id')),source:val(f,'source'),note:val(f,'note'),items:readItems(),ship_date:val(f,'ship_date')};if(f.elements.namedItem('closed_date')&&val(f,'closed_date')){var original=d.closed_at?new Date(new Date(d.closed_at).getTime()+5*3600000).toISOString().slice(0,10):'';if(val(f,'closed_date')!==original)b.closed_at=val(f,'closed_date')+'T12:00:00+05:00';}return b;},async function(){toast('Сделка сохранена');await showDeal(d.id);await reload();});
+    mutation(f,'PATCH','/deals/'+d.id,function(){var b={baseRev:d.rev,title:val(f,'title'),amount:val(f,'amount'),manager_id:Number(val(f,'manager_id')),source:val(f,'source'),note:val(f,'note'),items:readItems(),ship_date:val(f,'ship_date')};if(f.elements.namedItem('pay_method')){b.pay_method=val(f,'pay_method');b.sale_comment=val(f,'sale_comment');}if(f.elements.namedItem('closed_date')&&val(f,'closed_date')){var original=d.closed_at?new Date(new Date(d.closed_at).getTime()+5*3600000).toISOString().slice(0,10):'';if(val(f,'closed_date')!==original)b.closed_at=val(f,'closed_date')+'T12:00:00+05:00';}return b;},async function(){toast('Сделка сохранена');await showDeal(d.id);await reload();});
   }
   var clientSeq=0;
   async function loadClients(){var seq=++clientSeq;try{var r=await api('GET','/clients?q='+encodeURIComponent(state.q));if(state.tab!=='clients'||seq!==clientSeq)return;state.clients=r.clients;$('main').innerHTML='<div class="content"><button class="btn block" id="new-deal-c" style="margin-bottom:12px">+ Новая заявка вручную</button>'+(r.clients.length?r.clients.map(function(c){return '<button class="card client-row" data-client="'+esc(c.id)+'"><strong>'+esc(c.name)+'</strong><div class="muted">'+esc(c.phone||'Без телефона')+' · Сделок: '+esc(c.deals_count)+'</div></button>';}).join(''):'<div class="empty">'+(state.q?'Клиенты не найдены':'Клиенты появятся после создания первой заявки')+'</div>')+'</div>';$('new-deal-c').onclick=function(){quickDeal();};$('main').querySelectorAll('[data-client]').forEach(function(b){b.onclick=function(){showClient(b.dataset.client);};});}catch(e){if(state.tab==='clients')$('status').textContent=error(e);}}
