@@ -5,6 +5,24 @@ const path = require('path');
 const express = require('express');
 const GATE = 7381, REQUEST = 7382, PHONE = 7383;
 
+// ---- Сейф ключей агента: AES-256-GCM, ключ шифрования выводится из серверного секрета (в БД лежит только шифртекст) ----
+const SECRET_NAMES = ['ANTHROPIC_API_KEY','OPENAI_API_KEY','GOOGLE_API_KEY','DEEPGRAM_API_KEY','ELEVENLABS_API_KEY','OPENROUTER_API_KEY'];
+const SECRETS_KEY = crypto.createHash('sha256').update(process.env.SECRETS_KEY || process.env.JWT_SECRET || 'borzo-secrets-fallback').digest();
+function encSecret(plain){
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', SECRETS_KEY, iv);
+  const enc = Buffer.concat([c.update(String(plain),'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
+}
+function decSecret(b64){
+  const raw = Buffer.from(b64,'base64');
+  const d = crypto.createDecipheriv('aes-256-gcm', SECRETS_KEY, raw.subarray(0,12));
+  d.setAuthTag(raw.subarray(12,28));
+  return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8');
+}
+// внутреннее чтение ключа сервером в момент вызова (наружу НЕ отдаётся)
+async function getSecret(pool, name){ try{ const r=await pool.query('SELECT val FROM crm_secrets WHERE name=$1',[name]); return r.rowCount ? decSecret(r.rows[0].val) : ''; }catch(e){ return ''; } }
+
 async function initSchema(db) {
   await db.query(`
     CREATE TABLE IF NOT EXISTS crm_stages (
@@ -131,6 +149,10 @@ async function initSchema(db) {
     DELETE FROM crm_stages WHERE code='agreed' AND NOT EXISTS(SELECT 1 FROM crm_deals WHERE stage_id=(SELECT id FROM crm_stages WHERE code='agreed'));
     UPDATE crm_stages SET ord=CASE code WHEN 'new' THEN 1 WHEN 'working' THEN 2 WHEN 'selection' THEN 3 WHEN 'paused' THEN 4 WHEN 'won' THEN 5 WHEN 'lost' THEN 6 ELSE ord END;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS remind_at TIMESTAMPTZ;
+    -- сейф ключей агента (электроящик): значения ШИФРУЮТСЯ, наружу (в браузер) не отдаются никогда, только статус «есть/нет»
+    CREATE TABLE IF NOT EXISTS crm_secrets (
+      name TEXT PRIMARY KEY, val TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_by TEXT NOT NULL DEFAULT ''
+    );
   `);
 }
 function err(code, message) { const e = new Error(message); e.httpCode = code; return e; }
@@ -426,6 +448,22 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     await db.query('UPDATE crm_deals SET remind_at=$1,updated_at=now(),rev=rev+1 WHERE id=$2',[ra,d.id]);
     await event(db,req.user,d.id,'note',ra?('⏰ Напоминание на '+new Date(ra).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'})):'⏰ Напоминание снято');
     return {deal:await dealBy(db,d.id)};
+  }));
+  // ---- Электроящик: сейф ключей. ТОЛЬКО руководитель. Значения наружу не отдаём — лишь «есть/нет» ----
+  router.get('/secrets',route(async(req,res)=>{
+    if(req.user.login!=='ruslan') throw err(403,'Доступ только у руководителя');
+    const r=await pool.query('SELECT name,updated_at,updated_by FROM crm_secrets');
+    const by={}; r.rows.forEach(x=>by[x.name]=x);
+    res.json({ status: SECRET_NAMES.map(function(n){ return { name:n, set:!!by[n], updated_at:(by[n]||{}).updated_at||null }; }) });
+  }));
+  router.post('/secrets',mutate(async(req,db)=>{
+    if(req.user.login!=='ruslan') throw err(403,'Доступ только у руководителя');
+    const name=String(req.body.name||''); if(SECRET_NAMES.indexOf(name)<0) throw err(400,'Неизвестный ключ');
+    const value=String(req.body.value==null?'':req.body.value).trim();
+    if(!value){ await db.query('DELETE FROM crm_secrets WHERE name=$1',[name]); return {ok:true,name:name,set:false}; }
+    if(value.length>2000) throw err(400,'Слишком длинный ключ');
+    await db.query('INSERT INTO crm_secrets(name,val,updated_by) VALUES($1,$2,$3) ON CONFLICT(name) DO UPDATE SET val=$2,updated_at=now(),updated_by=$3',[name,encSecret(value),req.user.login]);
+    return {ok:true,name:name,set:true};
   }));
   router.get('/deals/:id/events',route(async(req,res)=>{
     const d=await dealBy(pool,req.params.id);

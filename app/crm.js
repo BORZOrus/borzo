@@ -766,7 +766,7 @@
   async function copy(t){try{await navigator.clipboard.writeText(t.text);toast('Шаблон скопирован');}catch(e){openSheet('Скопируйте текст',area(t.title,'copy',t.text));var el=body.querySelector('textarea');el.readOnly=true;el.focus();el.select();}}
   function bindCopy(root){root.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){var t=state.templates.find(function(x){return x.id===Number(b.dataset.copy);});if(t)copy(t);};});}
   // ---------- вкладка «Агент»: видимый шкаф знаний (инструкция + материалы + уроки) ----------
-  var agentKb=null, agentRev=0;
+  var agentKb=null, agentRev=0, agentSecrets={};
   async function saveAgent(){ try{ var r=await api('PUT','/agent-kb',{reqId:uid(),data:agentKb,baseRev:agentRev}); agentRev=r.rev; return true; }catch(e){ if(e&&e.status===409){ toast('База агента изменилась — обновляю'); await renderAgent(); } else toast(error(e)); return false; } }
   function agAddMaterial(type){
     var title=(prompt('Подпись (что это):','')||'').trim(); if(!title)return;
@@ -843,25 +843,41 @@
   }
   // Розетки: все подключения, что подведём к агенту. Ключи вставляются на СЕРВЕРЕ (.env) — не в браузере (безопасно). Тут — карта: что, зачем, где взять ключ.
   var AG_ROZETKI=[
-    {n:'Anthropic',ru:'мозг агента (Claude: Opus / Sonnet / Haiku / Fable)',where:'console.anthropic.com → API Keys (ключи API) → Create Key (создать ключ)',st:'dev',stt:'не подключено'},
-    {n:'OpenAI',ru:'резервный мозг (GPT) для автопереключения',where:'platform.openai.com → API keys (ключи) → Create new secret key (создать секретный ключ)',st:'dev',stt:'не подключено'},
-    {n:'Google · Gemini',ru:'резервный мозг (Gemini)',where:'aistudio.google.com → Get API key (получить ключ API)',st:'dev',stt:'не подключено'},
-    {n:'OpenRouter',ru:'единый доступ к моделям по токенам (не подписка) — для тестов',where:'openrouter.ai → Keys (ключи) → Create Key',st:'live',stt:'ключ уже в системе'},
-    {n:'Deepgram',ru:'агент ПОНИМАЕТ голосовые клиента (речь → текст)',where:'console.deepgram.com → API Keys (ключи) → Create a Key (создать ключ)',st:'dev',stt:'не подключено'},
-    {n:'ElevenLabs',ru:'голос агента: озвучка ответов + клон голоса Ульяны',where:'elevenlabs.io → Profile (профиль) → API Key (ключ API). Клон: Voice Lab → Add Voice → нужно ~30 мин записи голоса',st:'dev',stt:'не подключено'},
-    {n:'WhatsApp · 360dialog',ru:'канал переписки (приём и отправка)',where:'hub.360dialog.com → API Key (ключ) — уже настроено',st:'live',stt:'подключено'}
+    {n:'Anthropic',key:'ANTHROPIC_API_KEY',ru:'мозг агента (Claude: Opus / Sonnet / Haiku / Fable)',where:'console.anthropic.com → API Keys (ключи API) → Create Key (создать ключ)'},
+    {n:'OpenAI',key:'OPENAI_API_KEY',ru:'резервный мозг (GPT) для автопереключения',where:'platform.openai.com → API keys (ключи) → Create new secret key (создать секретный ключ)'},
+    {n:'Google · Gemini',key:'GOOGLE_API_KEY',ru:'резервный мозг (Gemini)',where:'aistudio.google.com → Get API key (получить ключ API)'},
+    {n:'OpenRouter',key:'OPENROUTER_API_KEY',ru:'единый доступ к моделям по токенам (не подписка) — для тестов',where:'openrouter.ai → Keys (ключи) → Create Key'},
+    {n:'Deepgram',key:'DEEPGRAM_API_KEY',ru:'агент ПОНИМАЕТ голосовые клиента (речь → текст)',where:'console.deepgram.com → API Keys (ключи) → Create a Key (создать ключ)'},
+    {n:'ElevenLabs',key:'ELEVENLABS_API_KEY',ru:'голос агента: озвучка ответов + клон голоса Ульяны',where:'elevenlabs.io → Profile (профиль) → API Key (ключ API). Клон: Voice Lab → Add Voice → нужно ~30 мин записи голоса'},
+    {n:'WhatsApp · 360dialog',key:'',ru:'канал переписки (приём и отправка)',where:'hub.360dialog.com → API Key (ключ) — ставится в день переезда',st:'live',stt:'подключено'}
   ];
   function drawRozetki(){
     var rows=AG_ROZETKI.map(function(r){
-      return '<div class="rz-row"><div class="rz-head"><span class="ag-dot '+(r.st==='live'?'on':'off')+'"></span><b>'+esc(r.n)+'</b>'+agPill(r.stt,r.st)+'</div>'+
+      var set = r.key ? !!agentSecrets[r.key] : (r.st==='live');
+      var pill = r.key ? (set?agPill('ключ сохранён · зашифрован','live'):agPill('ключ не задан','dev')) : agPill(r.stt||'—',r.st||'dev');
+      var keyField = r.key ? '<div class="rz-key"><input type="password" placeholder="'+(set?'ключ сохранён — вставь новый, чтобы заменить':'вставь ключ')+'" data-secret="'+esc(r.key)+'" autocomplete="off"><button class="ghost" data-secret-save="'+esc(r.key)+'">Сохранить</button>'+(set?'<button class="ghost danger" data-secret-del="'+esc(r.key)+'">Убрать</button>':'')+'</div>' : '';
+      return '<div class="rz-row"><div class="rz-head"><span class="ag-dot '+(set?'on':'off')+'"></span><b>'+esc(r.n)+'</b>'+pill+'</div>'+
         '<div class="rz-what">'+esc(r.ru)+'</div>'+
-        '<div class="rz-where"><b>Где взять ключ:</b> '+esc(r.where)+'</div></div>';
+        '<div class="rz-where"><b>Где взять ключ:</b> '+esc(r.where)+'</div>'+keyField+'</div>';
     }).join('');
-    return '<div class="card"><h2>🔌 Розетки — что подключаем</h2>'+
-      '<p class="hint">Все подключения агента в одном месте: что это, зачем, где взять ключ. Готовим впрок — когда скажешь, за один заход подключим все ключи разом. Зелёная точка = реально работает.</p>'+
+    return '<div class="card"><h2>🔌 Розетки — ключи подключений</h2>'+
+      '<p class="hint">Вставляешь ключ прямо здесь и жмёшь «Сохранить» → он <b>шифруется на сервере</b>, в браузер обратно НЕ отдаётся (видно только «ключ сохранён»). Загорается зелёным. Виден только тебе (руководителю).</p>'+
       '<div class="rz-list">'+rows+'</div>'+
-      '<p class="hint">⚠️ Ключи вставляются в защищённую настройку СЕРВЕРА (.env), не в браузер — так их не видно в коде страницы. В момент подключения дай мне ключи (или впишем вместе), я пропишу их на сервере и точки станут зелёными по факту.</p>'+
+      '<p class="hint">🔒 Безопасность: ключи хранятся в зашифрованном виде на твоём сервере, не в коде страницы и не у менеджеров. Полностью «неизвлекаемо» не бывает ни у кого (сервер расшифровывает ключ в момент вызова) — но от утечки через браузер, дамп базы и доступ менеджера защищено.</p>'+
       '</div>';
+  }
+  function bindRozetki(){
+    $('main').querySelectorAll('[data-secret-save]').forEach(function(b){b.onclick=async function(){
+      var name=b.dataset.secretSave, inp=$('main').querySelector('[data-secret="'+name+'"]'), v=inp?inp.value.trim():'';
+      if(!v){toast('Вставь ключ');return;}
+      b.disabled=true;
+      try{ await api('POST','/secrets',{reqId:uid(),name:name,value:v}); agentSecrets[name]=true; if(inp)inp.value=''; toast('Ключ сохранён (зашифрован)'); drawAgent(); }
+      catch(e){ toast(error(e)); b.disabled=false; }
+    };});
+    $('main').querySelectorAll('[data-secret-del]').forEach(function(b){b.onclick=async function(){
+      if(!confirm('Убрать ключ?'))return; var name=b.dataset.secretDel;
+      try{ await api('POST','/secrets',{reqId:uid(),name:name,value:''}); agentSecrets[name]=false; toast('Ключ убран'); drawAgent(); }catch(e){toast(error(e));}
+    };});
   }
   // ---------- заход 3: живой чат с агентом (Ульяна/Руслан дообучают; сжатие в навыки) ----------
   function drawChat(){
@@ -897,9 +913,8 @@
     var lessons=agentKb.lessons.map(function(l,i){
       return '<div class="ag-lesson"><div class="ag-lesson-t">'+esc(l.text||'')+'</div><div class="muted" style="font-size:11px">'+esc(l.author||'')+(l.ts?' · '+day(l.ts):'')+' <button class="scr-mini danger" data-lesdel="'+i+'" style="margin-left:6px">🗑</button></div></div>';
     }).join('')||'<p class="muted">Пока нет уроков. Тут Ульяна оставляет коррекции: «на возражение X отвечай так», «в такой момент — вот это фото».</p>';
+    var isOwner=state.user&&state.user.login==='ruslan';
     $('main').innerHTML='<div class="content">'+
-      drawElektro()+
-      drawRozetki()+
       drawChat()+
       '<div class="card"><h2>🧠 Инструкция агента</h2><p class="hint">«Мозг»: кто он, как говорит, факты о товаре, отработка возражений. Правь и сохраняй.</p>'+
         '<textarea id="ag-instr" style="min-height:220px">'+esc(agentKb.instruction||'')+'</textarea>'+
@@ -910,7 +925,7 @@
       '<div class="card"><h2>🎓 Уроки и коррекции</h2><p class="hint">Ульяна пишет, что поправить. Всё видно и хранится структурно — контекст агента не переполняется, знания лежат здесь, а не в бесконечной переписке.</p>'+
         '<div id="ag-lessons">'+lessons+'</div>'+
         '<form id="ag-lesson-form" class="sub-form"><textarea id="ag-lesson-text" placeholder="Новый урок агенту…" style="min-height:70px"></textarea><button class="ghost" type="submit">+ Добавить урок</button></form></div>'+
-      '<p class="hint">Живой чат с агентом (надиктовать голосом, дообучить в разговоре) добавим, когда подключим его мозг к нейросети. Пока собираем шкаф здесь: всё видно, ничего не теряется.</p>'+
+      (isOwner ? (drawElektro()+drawRozetki()) : '<p class="hint">🔒 Пульт подключений (электроящик и ключи) виден только руководителю.</p>')+
       '</div>';
     $('ag-save-instr').onclick=async function(){ agentKb.instruction=$('ag-instr').value; this.disabled=true; if(await saveAgent())toast('Инструкция сохранена'); this.disabled=false; };
     if($('ag-seed'))$('ag-seed').onclick=async function(){ try{ await api('POST','/agent-kb/seed',{reqId:uid()}); toast('Базовая инструкция загружена'); await renderAgent(); }catch(e){toast(error(e));} };
@@ -920,11 +935,15 @@
     $('main').querySelectorAll('[data-lesdel]').forEach(function(b){b.onclick=async function(){ agentKb.lessons.splice(Number(b.dataset.lesdel),1); if(await saveAgent())drawAgent(); };});
     $('ag-lesson-form').onsubmit=async function(e){ e.preventDefault(); var t=$('ag-lesson-text').value.trim(); if(!t)return; agentKb.lessons.unshift({text:t,author:state.user.name,ts:new Date().toISOString()}); if(await saveAgent())drawAgent(); };
     bindElektro();
+    bindRozetki();
     bindChat();
   }
   async function renderAgent(){
     try{ var r=await api('GET','/agent-kb'); if(state.tab!=='agent')return; agentKb=(r.data&&typeof r.data==='object')?r.data:{instruction:'',materials:[],lessons:[]}; if(!agentKb.materials)agentKb.materials=[]; if(!agentKb.lessons)agentKb.lessons=[]; if(!agentKb.conn)agentKb.conn={}; if(!agentKb.chat)agentKb.chat=[]; agentRev=r.rev||0; }
     catch(e){ if(state.tab==='agent')$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p></div>'; return; }
+    agentSecrets={};
+    if(state.user&&state.user.login==='ruslan'){ try{ var sr=await api('GET','/secrets'); (sr.status||[]).forEach(function(s){ agentSecrets[s.name]=s.set; }); }catch(e){} }
+    if(state.tab!=='agent')return;
     drawAgent();
   }
   async function renderTemplates(){
