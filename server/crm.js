@@ -22,6 +22,21 @@ function decSecret(b64){
 }
 // внутреннее чтение ключа сервером в момент вызова (наружу НЕ отдаётся)
 async function getSecret(pool, name){ try{ const r=await pool.query('SELECT val FROM crm_secrets WHERE name=$1',[name]); return r.rowCount ? decSecret(r.rows[0].val) : ''; }catch(e){ return ''; } }
+// реальная проверка ключа: лёгкий запрос к провайдеру. Возвращает {ok, detail}
+async function checkProvider(name, key){
+  const opt = (h)=>({ headers:h, signal: AbortSignal.timeout(7000) });
+  try{
+    let r;
+    if(name==='ANTHROPIC_API_KEY') r=await fetch('https://api.anthropic.com/v1/models', opt({'x-api-key':key,'anthropic-version':'2023-06-01'}));
+    else if(name==='OPENAI_API_KEY') r=await fetch('https://api.openai.com/v1/models', opt({'Authorization':'Bearer '+key}));
+    else if(name==='GOOGLE_API_KEY') r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(key), opt({}));
+    else if(name==='OPENROUTER_API_KEY') r=await fetch('https://openrouter.ai/api/v1/key', opt({'Authorization':'Bearer '+key}));
+    else if(name==='DEEPGRAM_API_KEY') r=await fetch('https://api.deepgram.com/v1/projects', opt({'Authorization':'Token '+key}));
+    else if(name==='ELEVENLABS_API_KEY') r=await fetch('https://api.elevenlabs.io/v1/user', opt({'xi-api-key':key}));
+    else return { ok:false, detail:'проверка не поддержана' };
+    return { ok: r.ok, detail: r.ok ? 'ключ рабочий' : ('провайдер ответил '+r.status+(r.status===401||r.status===403?' — ключ неверный/нет прав':'')) };
+  }catch(e){ return { ok:false, detail: (e.name==='TimeoutError'?'провайдер не ответил (таймаут)':'ошибка сети: '+(e.message||e)) }; }
+}
 
 async function initSchema(db) {
   await db.query(`
@@ -149,10 +164,14 @@ async function initSchema(db) {
     DELETE FROM crm_stages WHERE code='agreed' AND NOT EXISTS(SELECT 1 FROM crm_deals WHERE stage_id=(SELECT id FROM crm_stages WHERE code='agreed'));
     UPDATE crm_stages SET ord=CASE code WHEN 'new' THEN 1 WHEN 'working' THEN 2 WHEN 'selection' THEN 3 WHEN 'paused' THEN 4 WHEN 'won' THEN 5 WHEN 'lost' THEN 6 ELSE ord END;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS remind_at TIMESTAMPTZ;
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS pay_method TEXT;
+    ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS sale_comment TEXT;
     -- сейф ключей агента (электроящик): значения ШИФРУЮТСЯ, наружу (в браузер) не отдаются никогда, только статус «есть/нет»
     CREATE TABLE IF NOT EXISTS crm_secrets (
       name TEXT PRIMARY KEY, val TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_by TEXT NOT NULL DEFAULT ''
     );
+    ALTER TABLE crm_secrets ADD COLUMN IF NOT EXISTS ok BOOLEAN;
+    ALTER TABLE crm_secrets ADD COLUMN IF NOT EXISTS checked_at TIMESTAMPTZ;
   `);
 }
 function err(code, message) { const e = new Error(message); e.httpCode = code; return e; }
@@ -416,6 +435,8 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     const s=await stageBy(db,b.stage_id), prev=await stageBy(db,d.stage_id);
     if('items' in b) d.items=items(b.items);
     if('ship_date' in b) d.ship_date=date(b.ship_date);
+    if('pay_method' in b) d.pay_method=str(b.pay_method,'Оплата',40);
+    if('sale_comment' in b) d.sale_comment=str(b.sale_comment,'Комментарий',2000);
     wonCheck(s,d);
     const reason=s.is_lost?str(b.lost_reason||d.lost_reason,'Причина отказа',1000):'';
     if(s.id===d.stage_id) {
@@ -426,8 +447,8 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
       return {deal:await dealBy(db,d.id)};
     }
     await db.query(`UPDATE crm_deals SET stage_id=$1,items=$2,ship_date=$3,lost_reason=$4,
-      closed_at=CASE WHEN $5 THEN now() ELSE NULL END,imported_incomplete=false,stage_entered_at=now(),updated_at=now(),rev=rev+1,amount=$6 WHERE id=$7`,
-      [s.id,JSON.stringify(d.items),d.ship_date,reason,s.is_won||s.is_lost,d.amount,d.id]);
+      closed_at=CASE WHEN $5 THEN now() ELSE NULL END,imported_incomplete=false,stage_entered_at=now(),updated_at=now(),rev=rev+1,amount=$6,pay_method=$8,sale_comment=$9 WHERE id=$7`,
+      [s.id,JSON.stringify(d.items),d.ship_date,reason,s.is_won||s.is_lost,d.amount,d.id,d.pay_method==null?'':d.pay_method,d.sale_comment==null?'':d.sale_comment]);
     await event(db,req.user,d.id,'status',prev.name+' → '+s.name+(reason?' · '+reason:''),prev.id,s.id);
     return {deal:await dealBy(db,d.id)};
   }));
@@ -452,9 +473,17 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
   // ---- Электроящик: сейф ключей. ТОЛЬКО руководитель. Значения наружу не отдаём — лишь «есть/нет» ----
   router.get('/secrets',route(async(req,res)=>{
     if(req.user.login!=='ruslan') throw err(403,'Доступ только у руководителя');
-    const r=await pool.query('SELECT name,updated_at,updated_by FROM crm_secrets');
+    const r=await pool.query('SELECT name,updated_at,ok,checked_at FROM crm_secrets');
     const by={}; r.rows.forEach(x=>by[x.name]=x);
-    res.json({ status: SECRET_NAMES.map(function(n){ return { name:n, set:!!by[n], updated_at:(by[n]||{}).updated_at||null }; }) });
+    res.json({ status: SECRET_NAMES.map(function(n){ var x=by[n]||{}; return { name:n, set:!!by[n], updated_at:x.updated_at||null, ok:x.ok===true, checked:!!x.checked_at, checked_at:x.checked_at||null }; }) });
+  }));
+  router.post('/secrets/check',mutate(async(req,db)=>{
+    if(req.user.login!=='ruslan') throw err(403,'Доступ только у руководителя');
+    const name=String(req.body.name||''); if(SECRET_NAMES.indexOf(name)<0) throw err(400,'Неизвестный ключ');
+    const key=await getSecret(pool,name); if(!key) throw err(400,'Ключ не задан');
+    const chk=await checkProvider(name,key);
+    await db.query('UPDATE crm_secrets SET ok=$1,checked_at=now() WHERE name=$2',[chk.ok,name]);
+    return { name:name, ok:chk.ok, detail:chk.detail };
   }));
   router.post('/secrets',mutate(async(req,db)=>{
     if(req.user.login!=='ruslan') throw err(403,'Доступ только у руководителя');

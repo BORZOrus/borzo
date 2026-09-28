@@ -710,16 +710,19 @@
         '<p class="hint">Выбери из каталога, что именно продали, проверь сумму и поставь дату отгрузки. После сохранения сделка станет «'+esc(won.name)+'» — состав уйдёт в производство и отгрузку, оттуда спишется склад.</p>'+
         field('Сумма продажи, ₸','amount',d.amount,'number','required min="0" max="1000000000000" step="0.01"')+
         itemsForm(d)+
+        '<label class="field">Способ оплаты<select name="pay_method"><option value="">— выбрать —</option><option>Kaspi магазин</option><option>Наличные</option><option>Kaspi перевод</option><option>Рассрочка Kaspi 24 мес</option><option>Счёт на оплату</option></select></label>'+
+        area('Комментарий к заказу (для производства)','sale_comment',d.sale_comment||'')+
         '<p class="hint">📎 Документ оплаты (чек Kaspi) можно прикрепить скрепкой в чате — карточка напомнит, если его нет.</p>'+
         submit('✅ Оформить продажу')+'</form>';
       wireItems();var f=$('sale-form');
       f.elements.namedItem('ship_date').required=true;
+      if(d.pay_method&&f.elements.namedItem('pay_method'))f.elements.namedItem('pay_method').value=d.pay_method;
       var manualAmount=Number(d.amount)>0;
       f.elements.namedItem('amount').oninput=function(){manualAmount=true;};
       function total(){if(!manualAmount)f.elements.namedItem('amount').value=String(Math.round(readItems().reduce(function(n,x){return n+Number(x.qty||0)*Number(x.price||0);},0)*100)/100);}
       $('items').addEventListener('input',total);$('items').addEventListener('click',total);total();
       mutation(f,'POST','/deals/'+d.id+'/stage',function(){
-        var b={baseRev:d.rev,stage_id:won.id,amount:val(f,'amount'),items:readItems(),ship_date:val(f,'ship_date')};
+        var b={baseRev:d.rev,stage_id:won.id,amount:val(f,'amount'),items:readItems(),ship_date:val(f,'ship_date'),pay_method:val(f,'pay_method'),sale_comment:val(f,'sale_comment')};
         if(!b.items.length)throw new Error('Добавь хотя бы одну позицию — выбери модель из каталога выше');
         return b;
       },async function(){toast('Продажа оформлена ✅');await showDeal(d.id);await reload();});
@@ -853,10 +856,16 @@
   ];
   function drawRozetki(){
     var rows=AG_ROZETKI.map(function(r){
-      var set = r.key ? !!agentSecrets[r.key] : (r.st==='live');
-      var pill = r.key ? (set?agPill('ключ сохранён · зашифрован','live'):agPill('ключ не задан','dev')) : agPill(r.stt||'—',r.st||'dev');
-      var keyField = r.key ? '<div class="rz-key"><input type="password" placeholder="'+(set?'ключ сохранён — вставь новый, чтобы заменить':'вставь ключ')+'" data-secret="'+esc(r.key)+'" autocomplete="off"><button class="ghost" data-secret-save="'+esc(r.key)+'">Сохранить</button>'+(set?'<button class="ghost danger" data-secret-del="'+esc(r.key)+'">Убрать</button>':'')+'</div>' : '';
-      return '<div class="rz-row"><div class="rz-head"><span class="ag-dot '+(set?'on':'off')+'"></span><b>'+esc(r.n)+'</b>'+pill+'</div>'+
+      var s = r.key ? agentSecrets[r.key] : null;
+      var set = r.key ? (s&&s.set) : (r.st==='live');
+      var dot, pill;
+      if(!r.key){ dot=(r.st==='live'?'on':'off'); pill=agPill(r.stt||'—', r.st||'dev'); }
+      else if(!set){ dot='off'; pill=agPill('ключ не задан','dev'); }
+      else if(!s.checked){ dot='warn'; pill=agPill('сохранён · не проверен','dev'); }
+      else if(s.ok){ dot='on'; pill=agPill('рабочий ✓','live'); }
+      else { dot='bad'; pill=agPill('не отвечает / ключ неверный','bad'); }
+      var keyField = r.key ? '<div class="rz-key"><input type="password" placeholder="'+(set?'ключ сохранён — вставь новый, чтобы заменить':'вставь ключ')+'" data-secret="'+esc(r.key)+'" autocomplete="off"><button class="ghost" data-secret-save="'+esc(r.key)+'">Сохранить</button>'+(set?'<button class="ghost" data-secret-check="'+esc(r.key)+'">Проверить</button><button class="ghost danger" data-secret-del="'+esc(r.key)+'">Убрать</button>':'')+'</div>' : '';
+      return '<div class="rz-row"><div class="rz-head"><span class="ag-dot '+dot+'"></span><b>'+esc(r.n)+'</b>'+pill+'</div>'+
         '<div class="rz-what">'+esc(r.ru)+'</div>'+
         '<div class="rz-where"><b>Где взять ключ:</b> '+esc(r.where)+'</div>'+keyField+'</div>';
     }).join('');
@@ -866,17 +875,23 @@
       '<p class="hint">🔒 Безопасность: ключи хранятся в зашифрованном виде на твоём сервере, не в коде страницы и не у менеджеров. Полностью «неизвлекаемо» не бывает ни у кого (сервер расшифровывает ключ в момент вызова) — но от утечки через браузер, дамп базы и доступ менеджера защищено.</p>'+
       '</div>';
   }
+  async function secretCheck(name){
+    try{ var r=await api('POST','/secrets/check',{reqId:uid(),name:name}); agentSecrets[name]={set:true,checked:true,ok:r.ok}; toast(r.ok?('✓ '+name.replace('_API_KEY','')+': ключ рабочий'):('✗ '+r.detail)); }
+    catch(e){ agentSecrets[name]={set:true,checked:true,ok:false}; toast(error(e)); }
+    drawAgent();
+  }
   function bindRozetki(){
     $('main').querySelectorAll('[data-secret-save]').forEach(function(b){b.onclick=async function(){
       var name=b.dataset.secretSave, inp=$('main').querySelector('[data-secret="'+name+'"]'), v=inp?inp.value.trim():'';
       if(!v){toast('Вставь ключ');return;}
       b.disabled=true;
-      try{ await api('POST','/secrets',{reqId:uid(),name:name,value:v}); agentSecrets[name]=true; if(inp)inp.value=''; toast('Ключ сохранён (зашифрован)'); drawAgent(); }
+      try{ await api('POST','/secrets',{reqId:uid(),name:name,value:v}); if(inp)inp.value=''; toast('Ключ сохранён — проверяю…'); agentSecrets[name]={set:true,checked:false,ok:false}; await secretCheck(name); }
       catch(e){ toast(error(e)); b.disabled=false; }
     };});
+    $('main').querySelectorAll('[data-secret-check]').forEach(function(b){b.onclick=async function(){ b.disabled=true; b.textContent='Проверяю…'; await secretCheck(b.dataset.secretCheck); };});
     $('main').querySelectorAll('[data-secret-del]').forEach(function(b){b.onclick=async function(){
       if(!confirm('Убрать ключ?'))return; var name=b.dataset.secretDel;
-      try{ await api('POST','/secrets',{reqId:uid(),name:name,value:''}); agentSecrets[name]=false; toast('Ключ убран'); drawAgent(); }catch(e){toast(error(e));}
+      try{ await api('POST','/secrets',{reqId:uid(),name:name,value:''}); agentSecrets[name]={set:false}; toast('Ключ убран'); drawAgent(); }catch(e){toast(error(e));}
     };});
   }
   // ---------- заход 3: живой чат с агентом (Ульяна/Руслан дообучают; сжатие в навыки) ----------
@@ -942,7 +957,7 @@
     try{ var r=await api('GET','/agent-kb'); if(state.tab!=='agent')return; agentKb=(r.data&&typeof r.data==='object')?r.data:{instruction:'',materials:[],lessons:[]}; if(!agentKb.materials)agentKb.materials=[]; if(!agentKb.lessons)agentKb.lessons=[]; if(!agentKb.conn)agentKb.conn={}; if(!agentKb.chat)agentKb.chat=[]; agentRev=r.rev||0; }
     catch(e){ if(state.tab==='agent')$('main').innerHTML='<div class="content"><p class="error">'+esc(error(e))+'</p></div>'; return; }
     agentSecrets={};
-    if(state.user&&state.user.login==='ruslan'){ try{ var sr=await api('GET','/secrets'); (sr.status||[]).forEach(function(s){ agentSecrets[s.name]=s.set; }); }catch(e){} }
+    if(state.user&&state.user.login==='ruslan'){ try{ var sr=await api('GET','/secrets'); (sr.status||[]).forEach(function(s){ agentSecrets[s.name]=s; }); }catch(e){} }
     if(state.tab!=='agent')return;
     drawAgent();
   }
@@ -1153,31 +1168,34 @@
       });
     });
   }
-  // пикер «из каталога» для состава сделки: модель → вариант → позиция с ценой и variant_id
-  function pickerHtml(){return '<div class="card" id="cat-pick"><div class="muted">Добавить из каталога</div><select id="pick-model"><option value="">— модель —</option></select><select id="pick-variant" hidden></select><button type="button" class="ghost" id="pick-add" hidden>+ В состав</button></div>';}
+  // визуальный пикер каталога: карточки моделей → варианты (фото + цвет корпуса/ножек/длина + цена) → позиция в состав
+  function pickerHtml(){return '<button type="button" class="ghost block" id="cat-pick-btn">➕ Выбрать из каталога</button><div id="cat-pick-panel" class="cat-pick-panel" hidden></div>';}
   async function wirePicker(){
-    try{await loadCatalog();}catch(e){var el=$('cat-pick');if(el)el.innerHTML='<div class="muted">Каталог недоступен</div>';return;}
-    var pm=$('pick-model'),pv=$('pick-variant'),pa=$('pick-add');if(!pm)return;
-    cat.models.filter(function(m){return !m.archived&&variantsOf(m).length;}).forEach(function(m){var o=document.createElement('option');o.value=m.id;o.textContent=m.name;pm.appendChild(o);});
-    pv.onchange=function(){
-      var old=$('pick-img');if(old)old.remove();
-      var v=cat.variants.find(function(x){return x.id===Number(pv.value);});
-      if(v&&v.photo){var im=document.createElement('img');im.id='pick-img';im.className='cat-thumb big';im.src=v.photo;pa.parentNode.insertBefore(im,pa);}
-    };
-    pm.onchange=function(){
-      pv.innerHTML='';pv.hidden=pa.hidden=!pm.value;var old=$('pick-img');if(old)old.remove();if(!pm.value)return;
-      var m=cat.models.find(function(x){return x.id===Number(pm.value);});
-      variantsOf(m).forEach(function(v){var o=document.createElement('option');o.value=v.id;o.textContent=variantLabel(v,m)+(v.price!=null?' · '+money(v.price):' · цены нет');pv.appendChild(o);});pv.onchange();
-    };
-    pa.onclick=function(){
-      var m=cat.models.find(function(x){return x.id===Number(pm.value);});
-      var v=cat.variants.find(function(x){return x.id===Number(pv.value);});
-      if(!m||!v)return;
-      var name=m.name+(variantLabel(v,m)!=='базовый'?' · '+variantLabel(v,m):'');
-      $('items').insertAdjacentHTML('beforeend',itemHtml({name:name,qty:1,price:v.price!=null?v.price:0,variant_id:v.id}));
-      body.querySelectorAll('[data-remove]').forEach(function(b){b.onclick=function(){b.closest('.item').remove();};});
-      $('items').dispatchEvent(new Event('input'));
-    };
+    var btn=$('cat-pick-btn'), panel=$('cat-pick-panel'); if(!btn)return;
+    try{await loadCatalog();}catch(e){ btn.disabled=true; btn.textContent='Каталог недоступен'; return; }
+    function rebindRemove(){ $('items').querySelectorAll('[data-remove]').forEach(function(x){x.onclick=function(){x.closest('.item').remove();$('items').dispatchEvent(new Event('input'));};}); }
+    function showModels(){
+      var ms=cat.models.filter(function(m){return !m.archived&&variantsOf(m).length;});
+      panel.innerHTML = ms.length? ms.map(function(m){ var vs=variantsOf(m); var ph=vs.filter(function(v){return v.photo;})[0];
+        return '<button type="button" class="cat-pick-m" data-pm="'+m.id+'">'+(ph?'<img src="'+esc(ph.photo)+'">':'<span class="cat-pick-noimg">🖼</span>')+'<span class="cat-pick-mt"><b>'+esc(m.name)+'</b><small>'+vs.length+' вариант(ов)</small></span></button>';
+      }).join('') : '<div class="muted">Каталог пуст — сначала заполни его во вкладке «Каталог».</div>';
+      panel.querySelectorAll('[data-pm]').forEach(function(b){b.onclick=function(){showVariants(Number(b.dataset.pm));};});
+    }
+    function showVariants(mid){
+      var m=cat.models.find(function(x){return x.id===mid;}); var vs=variantsOf(m);
+      panel.innerHTML='<button type="button" class="cat-pick-back" id="cat-pick-back">← к моделям</button>'+vs.map(function(v){
+        return '<button type="button" class="cat-pick-v" data-pv="'+v.id+'">'+(v.photo?'<img src="'+esc(v.photo)+'">':'<span class="cat-pick-noimg">🖼</span>')+'<span class="cat-pick-vt"><b>'+esc(m.name)+'</b><small>'+esc(variantLabel(v,m))+'</small></span><em>'+(v.price!=null?esc(money(v.price)):'цены нет')+'</em></button>';
+      }).join('');
+      $('cat-pick-back').onclick=showModels;
+      panel.querySelectorAll('[data-pv]').forEach(function(b){b.onclick=function(){
+        var v=cat.variants.find(function(x){return x.id===Number(b.dataset.pv);});
+        var name=m.name+(variantLabel(v,m)!=='базовый'?' · '+variantLabel(v,m):'');
+        $('items').insertAdjacentHTML('beforeend',itemHtml({name:name,qty:1,price:v.price!=null?v.price:0,variant_id:v.id}));
+        rebindRemove(); $('items').dispatchEvent(new Event('input'));
+        panel.hidden=true; btn.textContent='➕ Добавить ещё из каталога'; toast('Добавлено: '+name);
+      };});
+    }
+    btn.onclick=function(){ panel.hidden=!panel.hidden; if(!panel.hidden)showModels(); };
   }
   async function tab(name){
     state.tab=name;$('toolbar').hidden=!['deals','clients'].includes(name);updateMasterTop();

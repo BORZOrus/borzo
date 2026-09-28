@@ -150,6 +150,7 @@
 .ag-pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
 .ag-pill.live{background:#e6f6ec;color:#1a7f43;border:1px solid #b8e6c8}
 .ag-pill.dev{background:#f1f2f4;color:#8a8f98;border:1px solid #e0e2e6}
+.ag-pill.bad{background:#fdecec;color:#c62830;border:1px solid #f2c4c4}
 .ag-depth{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .ag-depth button{border:0;background:#fff;padding:7px 12px;font-size:13px;cursor:pointer;border-right:1px solid var(--line)}
 .ag-depth button:last-child{border-right:0}
@@ -159,6 +160,8 @@
 .ag-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:8px;vertical-align:middle}
 .ag-dot.off{background:#c7ccd4}
 .ag-dot.on{background:#008069;box-shadow:0 0 0 3px #d6f2e1}
+.ag-dot.warn{background:#e6a700;box-shadow:0 0 0 3px #f7ecc9}
+.ag-dot.bad{background:#dc3f46;box-shadow:0 0 0 3px #f7d4d6}
 .agc-card{background:#f3f0fb;border-color:#ddd3f2}
 .agc-log{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;padding:8px 2px;margin:6px 0}
 .agc-msg{display:flex;flex-direction:column;max-width:82%}
@@ -200,6 +203,14 @@
 .rz-key{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .rz-key input{flex:1;min-width:150px}
 .rz-key button{flex:0 0 auto;min-height:40px}
+.cat-pick-panel{border:1px solid var(--line);border-radius:12px;margin:8px 0;padding:6px;max-height:320px;overflow-y:auto;background:#fafbfc}
+.cat-pick-m,.cat-pick-v{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px;margin:6px 0;cursor:pointer;color:inherit;font:inherit}
+.cat-pick-m img,.cat-pick-v img,.cat-pick-noimg{width:48px;height:48px;border-radius:8px;object-fit:cover;flex:0 0 48px;background:#eef1f4;display:flex;align-items:center;justify-content:center;font-size:20px}
+.cat-pick-mt,.cat-pick-vt{display:flex;flex-direction:column;flex:1;min-width:0}
+.cat-pick-mt b,.cat-pick-vt b{font-size:14px}
+.cat-pick-mt small,.cat-pick-vt small{font-size:12px;color:var(--mut)}
+.cat-pick-v em{font-style:normal;font-weight:700;color:var(--blue);white-space:nowrap}
+.cat-pick-back{background:#eef1f4;border:0;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;margin:4px 0}
 /* десктоп-раскладка: широкий экран использует место, шторки становятся центр-модалками. Мобильную вёрстку не трогает. */
 @media(min-width:900px){
   .wrap{max-width:none;width:100%}
@@ -252,6 +263,6 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="api.js?v=crm4"></script>
 <script src="push.js?v=1"></script>
-<script src="crm.js?v=crm33"></script>
+<script src="crm.js?v=crm35"></script>
 </body>
 </html>
