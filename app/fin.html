@@ -98,11 +98,16 @@
   .anrow{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
   .anrow:last-child{border-bottom:none}
   .op-search{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:14px;font-family:inherit;margin-bottom:8px}
-  .dept-head{font-size:14px;padding:6px 2px 8px;color:var(--mut)}
-  .dept-head b{color:var(--ink);font-size:16px}
-  .dept-t{font-size:13px;font-weight:700;margin:14px 0 6px;padding:7px 10px;border-radius:8px;display:flex;justify-content:space-between;gap:8px}
+  .dept-cols{display:flex;gap:8px;align-items:flex-start}
+  .dept-col{flex:1;min-width:0}
+  .dept-t{font-size:12px;font-weight:700;margin:0 0 4px;padding:7px 8px;border-radius:8px;display:flex;flex-direction:column;gap:1px;line-height:1.2}
   .dept-t.in{background:rgba(59,130,246,.12);color:var(--blue)}
   .dept-t.out{background:rgba(240,85,92,.12);color:var(--red)}
+  .dept-t b{font-size:13px;font-weight:800}
+  .drow{padding:8px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+  .drow-t{font-size:12px;font-weight:600;overflow-wrap:anywhere;line-height:1.25}
+  .drow-b{display:flex;justify-content:space-between;gap:5px;margin-top:3px;font-size:10.5px;color:var(--mut)}
+  .drow-b b{font-weight:800;white-space:nowrap}
   .bar{height:6px;border-radius:3px;background:var(--blue);margin-top:4px}
 #tab-work.on,#tab-pers.on{outline:1.5px solid var(--amber,#f0a621);outline-offset:-1.5px}
 </style>
@@ -237,6 +242,6 @@
 <script src="theme.js?v=1"></script>
 <script src="api.js?v=11"></script>
 <script src="push.js?v=1"></script>
-<script src="fin.js?v=62"></script>
+<script src="fin.js?v=63"></script>
 </body>
 </html>

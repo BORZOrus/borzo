@@ -960,12 +960,14 @@
       var outs=d.filter(function(o){return deptDir(o)==='out';});
       var sumIn=ins.reduce(function(s,o){return s+Number(o.amount||0);},0);
       var sumOut=outs.reduce(function(s,o){return s+Number(o.amount||0);},0);
-      var CAP=80;
-      function sec(arr){ return arr.length?(arr.slice(0,CAP).map(opRow).join('')+(arr.length>CAP?'<div class="empty">…и ещё '+(arr.length-CAP)+' (показаны последние '+CAP+')</div>':'')):'<div class="empty">Пока пусто</div>'; }
+      var CAP=120;
+      function drow(o,dir){ return '<div class="drow" data-op="'+o.id+'"><div class="drow-t">'+esc(opKindLabel(o))+'</div><div class="drow-b"><span>'+esc(fdate(o.ts))+'</span><b class="'+(dir==='in'?'amt-in':'amt-out')+'">'+(dir==='in'?'+':'−')+money(o.amount)+'</b></div></div>'; }
+      function col(arr,dir){ return arr.length?(arr.slice(0,CAP).map(function(o){return drow(o,dir);}).join('')+(arr.length>CAP?'<div class="empty" style="padding:10px 0">…ещё '+(arr.length-CAP)+'</div>':'')):'<div class="empty" style="padding:16px 0">Пусто</div>'; }
       listEl.innerHTML=
-        '<div class="dept-head">🧑‍💼 Мой отдел сейчас: <b>'+money(safeBal('ulyana'))+'</b></div>'+
-        '<div class="dept-t in">⬇ Пришло · <b>+'+money(sumIn)+'</b></div>'+sec(ins)+
-        '<div class="dept-t out">⬆ Ушло · <b>−'+money(sumOut)+'</b></div>'+sec(outs);
+        '<div class="dept-cols">'+
+          '<div class="dept-col"><div class="dept-t in">⬇ Пришло <b>+'+money(sumIn)+'</b></div>'+col(ins,'in')+'</div>'+
+          '<div class="dept-col"><div class="dept-t out">⬆ Ушло <b>−'+money(sumOut)+'</b></div>'+col(outs,'out')+'</div>'+
+        '</div>';
       Array.prototype.forEach.call(listEl.querySelectorAll('[data-op]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-op'));};});
     } else {
       if(srch)srch.style.display='';
