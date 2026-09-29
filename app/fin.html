@@ -98,6 +98,11 @@
   .anrow{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
   .anrow:last-child{border-bottom:none}
   .op-search{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:14px;font-family:inherit;margin-bottom:8px}
+  .dept-head{font-size:14px;padding:6px 2px 8px;color:var(--mut)}
+  .dept-head b{color:var(--ink);font-size:16px}
+  .dept-t{font-size:13px;font-weight:700;margin:14px 0 6px;padding:7px 10px;border-radius:8px;display:flex;justify-content:space-between;gap:8px}
+  .dept-t.in{background:rgba(59,130,246,.12);color:var(--blue)}
+  .dept-t.out{background:rgba(240,85,92,.12);color:var(--red)}
   .bar{height:6px;border-radius:3px;background:var(--blue);margin-top:4px}
 #tab-work.on,#tab-pers.on{outline:1.5px solid var(--amber,#f0a621);outline-offset:-1.5px}
 </style>
@@ -186,6 +191,7 @@
       <button class="an-btn" data-an="uborzo">📊 Аналитика</button>
       <div class="h1">Операции</div>
       <div id="uborzo-feed" style="display:flex;gap:8px;margin-bottom:10px">
+        <button data-uf="dept" style="flex:1;padding:10px;border-radius:9px;border:1px solid var(--line);font-weight:700;font-size:13px;font-family:inherit;cursor:pointer">🧑‍💼 Мой отдел</button>
         <button data-uf="fin" style="flex:1;padding:10px;border-radius:9px;border:1px solid var(--line);font-weight:700;font-size:13px;font-family:inherit;cursor:pointer">💼 Финансы</button>
         <button data-uf="snab" style="flex:1;padding:10px;border-radius:9px;border:1px solid var(--line);font-weight:700;font-size:13px;font-family:inherit;cursor:pointer">🛒 Снабжение</button>
       </div>
@@ -231,6 +237,6 @@
 <script src="theme.js?v=1"></script>
 <script src="api.js?v=11"></script>
 <script src="push.js?v=1"></script>
-<script src="fin.js?v=60"></script>
+<script src="fin.js?v=61"></script>
 </body>
 </html>

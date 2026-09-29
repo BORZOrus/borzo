@@ -29,7 +29,7 @@
   // облако: залогинен (есть токен) → сервер источник правды; нет токена → демо на localStorage как раньше
   var CLOUD = !!(window.API && window.API.token && window.API.finPut);
   var pushT=null, pushing=false, pendAgain=false;
-  var uFeed='fin';   // лента Ульяны в BORZO: 'fin' финансы (ручные) | 'snab' снабжение (закупки/выдачи)
+  var uFeed='dept';  // лента Ульяны в BORZO: 'dept' мой отдел (пришло/утекло) | 'fin' финансы (ручные) | 'snab' снабжение (закупки/выдачи)
   var synced=false;      // до завершения первого finGet НИЧЕГО не отправляем на сервер (защита от затирания истории пустой базой)
   var curRev=0;          // версия, на которой построена локальная база (для сравнения версий на сервере)
   var conflictTries=0;   // ограничитель повторов при конфликте
@@ -928,15 +928,51 @@
     }
     if(inp) inp.oninput=draw; draw(); }
 
-  // лента BORZO у Ульяны: две вкладки — финансы (ручные) и снабжение (закупки+выдачи снабженцу)
+  // все операции, реально двигающие отдел котла (who) — зеркалит логику safeBal: приход/расход/переводы/платёжки
+  function deptOps(who){
+    var startTs=(DB.safeStart&&DB.safeStart.ts)||0;
+    return opsSorted().filter(function(o){
+      if((o.supplyExpense||o.supplyIssue)&&(o.ts||0)>startTs) return o.who===who;
+      if(!o.safeTracked)return false;
+      if(o.kind==='safemove') return o.safeFrom===who||o.safeTo===who;
+      if(o.who!==who)return false;
+      return (o.kind==='in'&&o.acc==='BORZO')||((o.kind==='out'||o.kind==='return')&&o.acc==='BORZO')||(o.kind==='transfer'&&o.from==='BORZO');
+    });
+  }
+  // направление операции для отдела who: 'in' пришло (+), 'out' утекло (−)
+  function deptDir(o,who){
+    if(o.supplyExpense||o.supplyIssue) return 'out';
+    if(o.kind==='safemove') return o.safeTo===who?'in':'out';
+    if(o.kind==='in') return 'in';
+    return 'out';
+  }
+  // лента BORZO у Ульяны: «Мой отдел» (пришло/утекло) + финансы (ручные) + снабжение
   function drawUBorzo(){
     var box=$('uborzo-feed'); if(!box) return;
     // снабжение = закупы/выдачи через кассу снабжения + любые расходы сырья (это снабженческая зона, не финансовая)
     function isSnab(o){ return o.supplyExpense||o.supplyIssue||(o.kind==='out'&&o.category==='Сырьё'); }
-    var fin=opsSorted().filter(function(o){return ((o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO'))&&!o.family&&!isSnab(o);});
-    var snab=opsSorted().filter(isSnab);
-    var ops=uFeed==='snab'?snab:fin;
-    wireSearch('s-uborzo',$('u-borzo-list'),ops,uFeed==='snab'?'Закупок снабжения пока нет.':'Операций пока нет.');
+    var srch=$('s-uborzo'), listEl=$('u-borzo-list');
+    if(uFeed==='dept'){
+      if(srch)srch.style.display='none';
+      var d=deptOps('ulyana');
+      var ins=d.filter(function(o){return deptDir(o,'ulyana')==='in';});
+      var outs=d.filter(function(o){return deptDir(o,'ulyana')==='out';});
+      var sumIn=ins.reduce(function(s,o){return s+Number(o.amount||0);},0);
+      var sumOut=outs.reduce(function(s,o){return s+Number(o.amount||0);},0);
+      listEl.innerHTML=
+        '<div class="dept-head">🧑‍💼 Мой отдел сейчас: <b>'+money(safeBal('ulyana'))+'</b></div>'+
+        '<div class="dept-t in">⬇ Пришло в мой отдел · <b>+'+money(sumIn)+'</b></div>'+
+        (ins.length?ins.map(opRow).join(''):'<div class="empty">Пока пусто</div>')+
+        '<div class="dept-t out">⬆ Утекло из моего отдела · <b>−'+money(sumOut)+'</b></div>'+
+        (outs.length?outs.map(opRow).join(''):'<div class="empty">Пока пусто</div>');
+      Array.prototype.forEach.call(listEl.querySelectorAll('[data-op]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-op'));};});
+    } else {
+      if(srch)srch.style.display='';
+      var fin=opsSorted().filter(function(o){return ((o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO'))&&!o.family&&!isSnab(o);});
+      var snab=opsSorted().filter(isSnab);
+      var ops=uFeed==='snab'?snab:fin;
+      wireSearch('s-uborzo',listEl,ops,uFeed==='snab'?'Закупок снабжения пока нет.':'Операций пока нет.');
+    }
     Array.prototype.forEach.call(box.querySelectorAll('[data-uf]'),function(b){
       var on=b.getAttribute('data-uf')===uFeed;
       b.style.background=on?'var(--blue)':'var(--card2)'; b.style.color=on?'#fff':'var(--mut)'; b.style.borderColor=on?'var(--blue)':'var(--line)';
