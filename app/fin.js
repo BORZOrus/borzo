@@ -928,22 +928,23 @@
     }
     if(inp) inp.oninput=draw; draw(); }
 
-  // все операции, реально двигающие отдел котла (who) — зеркалит логику safeBal: приход/расход/переводы/платёжки
-  function deptOps(who){
-    var startTs=(DB.safeStart&&DB.safeStart.ts)||0;
+  // лента «Мой отдел» Ульяны: вся её история по котлу BORZO (и старые движения), приход+расход.
+  // Убираем шум: семейное, импортные начисления ЗП (salary+out), чужие НОВЫЕ движения (who!=ulyana).
+  function deptFeedOps(){
     return opsSorted().filter(function(o){
-      if((o.supplyExpense||o.supplyIssue)&&(o.ts||0)>startTs) return o.who===who;
-      if(!o.safeTracked)return false;
-      if(o.kind==='safemove') return o.safeFrom===who||o.safeTo===who;
-      if(o.who!==who)return false;
-      return (o.kind==='in'&&o.acc==='BORZO')||((o.kind==='out'||o.kind==='return')&&o.acc==='BORZO')||(o.kind==='transfer'&&o.from==='BORZO');
+      if(o.family) return false;
+      if(o.salary&&o.kind==='out') return false;                      // импортные начисления ЗП — шум
+      if(o.kind==='safemove') return o.safeFrom==='ulyana'||o.safeTo==='ulyana';
+      if(o.who && o.who!=='ulyana') return false;                     // чужие (новые) движения — не её
+      if(o.supplyExpense||o.supplyIssue) return true;                 // платёжки/накладные/сырьё (утекло с её отдела)
+      return (o.project==='BORZO')||(o.kind==='transfer'&&o.to==='BORZO');
     });
   }
-  // направление операции для отдела who: 'in' пришло (+), 'out' утекло (−)
-  function deptDir(o,who){
-    if(o.supplyExpense||o.supplyIssue) return 'out';
-    if(o.kind==='safemove') return o.safeTo===who?'in':'out';
+  // направление для её котла: 'in' пришло (+), 'out' утекло (−)
+  function deptDir(o){
+    if(o.kind==='safemove') return o.safeTo==='ulyana'?'in':'out';
     if(o.kind==='in') return 'in';
+    if(o.kind==='transfer') return o.to==='BORZO'?'in':'out';
     return 'out';
   }
   // лента BORZO у Ульяны: «Мой отдел» (пришло/утекло) + финансы (ручные) + снабжение
@@ -954,17 +955,17 @@
     var srch=$('s-uborzo'), listEl=$('u-borzo-list');
     if(uFeed==='dept'){
       if(srch)srch.style.display='none';
-      var d=deptOps('ulyana');
-      var ins=d.filter(function(o){return deptDir(o,'ulyana')==='in';});
-      var outs=d.filter(function(o){return deptDir(o,'ulyana')==='out';});
+      var d=deptFeedOps();
+      var ins=d.filter(function(o){return deptDir(o)==='in';});
+      var outs=d.filter(function(o){return deptDir(o)==='out';});
       var sumIn=ins.reduce(function(s,o){return s+Number(o.amount||0);},0);
       var sumOut=outs.reduce(function(s,o){return s+Number(o.amount||0);},0);
+      var CAP=80;
+      function sec(arr){ return arr.length?(arr.slice(0,CAP).map(opRow).join('')+(arr.length>CAP?'<div class="empty">…и ещё '+(arr.length-CAP)+' (показаны последние '+CAP+')</div>':'')):'<div class="empty">Пока пусто</div>'; }
       listEl.innerHTML=
         '<div class="dept-head">🧑‍💼 Мой отдел сейчас: <b>'+money(safeBal('ulyana'))+'</b></div>'+
-        '<div class="dept-t in">⬇ Пришло в мой отдел · <b>+'+money(sumIn)+'</b></div>'+
-        (ins.length?ins.map(opRow).join(''):'<div class="empty">Пока пусто</div>')+
-        '<div class="dept-t out">⬆ Утекло из моего отдела · <b>−'+money(sumOut)+'</b></div>'+
-        (outs.length?outs.map(opRow).join(''):'<div class="empty">Пока пусто</div>');
+        '<div class="dept-t in">⬇ Пришло · <b>+'+money(sumIn)+'</b></div>'+sec(ins)+
+        '<div class="dept-t out">⬆ Ушло · <b>−'+money(sumOut)+'</b></div>'+sec(outs);
       Array.prototype.forEach.call(listEl.querySelectorAll('[data-op]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-op'));};});
     } else {
       if(srch)srch.style.display='';
