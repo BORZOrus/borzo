@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eef1f4">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="BORZO">
+<title>BORZO CRM · прототип</title>
+<style>
+:root{
+  --bg:#eef1f4;--card:#ffffff;--card2:#f6f8fa;--ink:#111b21;--mut:#66757f;--line:#e5eaee;
+  --brand:#0a7d68;--brand-d:#065f4f;--accent:#12a05f;--red:#dc3f46;--amber:#c98600;--blue:#2b7fff;
+  --wa-out:#d9fdd3;--wa-in:#ffffff;--wa-bg:#efeae2;
+  --sh:0 1px 2px rgba(17,27,33,.06);--sh2:0 4px 16px rgba(17,27,33,.10);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#dfe4e9;color:var(--ink);font-family:Inter,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+/* телефон-рамка по центру на десктопе */
+.phone{max-width:460px;margin:0 auto;min-height:100vh;background:var(--bg);position:relative;box-shadow:0 0 0 1px rgba(140,140,140,.16),0 24px 80px rgba(0,0,0,.25);display:flex;flex-direction:column}
+@media(min-width:600px){.phone{min-height:calc(100vh - 40px);margin:20px auto;border-radius:26px;overflow:hidden}}
+
+/* ШАПКА */
+.hdr{background:var(--brand);color:#fff;padding:14px 16px 12px;position:sticky;top:0;z-index:20}
+.hdr-row{display:flex;align-items:center;gap:12px}
+.hdr h1{font-size:19px;margin:0;font-weight:700;flex:1}
+.hdr .ic{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;color:#fff}
+.hdr .ic:active{background:rgba(255,255,255,.15)}
+.hdr .sub{font-size:12.5px;opacity:.85;margin-top:2px}
+
+/* НИЖНЕЕ МЕНЮ */
+.nav{position:sticky;bottom:0;z-index:20;background:#fff;border-top:1px solid var(--line);display:flex;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;color:var(--mut);font-size:10.5px;font-weight:600;border-radius:12px}
+.nav button .ni{font-size:21px;line-height:1}
+.nav button.on{color:var(--brand)}
+.nav button.on .ni{transform:translateY(-1px)}
+
+/* КОНТЕНТ */
+.scr{flex:1;overflow-y:auto;padding-bottom:12px}
+.scr[hidden]{display:none}
+.pad{padding:14px 16px}
+.h2{font-size:15px;font-weight:700;margin:16px 16px 8px}
+.muted{color:var(--mut)}
+
+/* КАРТОЧКА-СТАТ */
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px 4px}
+.kpi{background:var(--card);border-radius:16px;padding:14px;box-shadow:var(--sh)}
+.kpi .l{font-size:11.5px;color:var(--mut);font-weight:600}
+.kpi .v{font-size:22px;font-weight:800;margin-top:5px}
+.kpi .d{font-size:11px;margin-top:3px;font-weight:600}
+.up{color:var(--accent)}.dn{color:var(--red)}
+
+/* ВОРОНКА — компактные строки-этапы */
+.stages{padding:6px 16px 14px}
+.stage{background:var(--card);border-radius:14px;box-shadow:var(--sh);margin-bottom:10px;overflow:hidden}
+.stage-h{display:flex;align-items:center;gap:10px;padding:12px 14px}
+.stage-h .bar{width:4px;height:34px;border-radius:3px;flex:0 0 4px}
+.stage-h .nm{flex:1;font-weight:700;font-size:14px}
+.stage-h .ct{font-size:12px;color:var(--mut);text-align:right;line-height:1.3}
+.stage-h .ct b{display:block;color:var(--ink);font-size:13px}
+.chev{color:var(--mut);font-size:18px;transition:transform .2s}
+.stage.open .chev{transform:rotate(90deg)}
+.stage-body{display:none;padding:0 10px 8px}
+.stage.open .stage-body{display:block}
+
+/* КАРТОЧКА ЛИДА в воронке */
+.lead{display:flex;gap:11px;align-items:center;background:var(--card2);border-radius:12px;padding:10px 12px;margin:6px 0}
+.lead:active{background:#eef2f5}
+.ava{width:42px;height:42px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex:0 0 42px}
+.ava.g2{background:#7b61ff}.ava.g3{background:#e8734a}.ava.g4{background:#2b9fd6}.ava.g5{background:#d64c8f}
+.lead .info{flex:1;min-width:0}
+.lead .info .n{font-weight:600;font-size:14px}
+.lead .info .m{font-size:12px;color:var(--mut);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lead .sum{font-weight:700;font-size:13px;white-space:nowrap}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;margin-left:6px}
+.tag.hot{background:#ffe3e0;color:#d6402f}.tag.wa{background:#dcf6e4;color:#0a7d3f}.tag.ig{background:#fce4f0;color:#c23b83}
+
+/* СПИСОК КЛИЕНТОВ */
+.list{padding:8px 16px}
+.crow{display:flex;gap:12px;align-items:center;background:var(--card);border-radius:14px;padding:12px 14px;margin-bottom:8px;box-shadow:var(--sh);width:100%;text-align:left}
+.crow:active{background:var(--card2)}
+.crow .info{flex:1;min-width:0}
+.crow .n{font-weight:600;font-size:14.5px}
+.crow .m{font-size:12.5px;color:var(--mut);margin-top:2px}
+.crow .go{color:var(--mut);font-size:18px}
+
+/* ЧАТ (WhatsApp) */
+.chat-wrap{position:fixed;inset:0;z-index:60;background:var(--wa-bg);display:none;flex-direction:column;max-width:460px;margin:0 auto}
+.chat-wrap.on{display:flex}
+@media(min-width:600px){.chat-wrap.on{border-radius:26px;overflow:hidden;top:20px;bottom:20px}}
+.chat-hdr{background:var(--brand);color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.chat-hdr .ava{width:38px;height:38px;flex:0 0 38px}
+.chat-hdr .who{flex:1;min-width:0}
+.chat-hdr .who .n{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-hdr .who .s{font-size:11.5px;opacity:.85}
+.chat-hdr .ci{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px}
+.chat-hdr .ci:active{background:rgba(255,255,255,.15)}
+/* полоска этапов в чате */
+.chat-stages{background:#fff;display:flex;gap:6px;overflow-x:auto;padding:9px 12px;border-bottom:1px solid var(--line);scrollbar-width:none}
+.chat-stages::-webkit-scrollbar{display:none}
+.stchip{flex:0 0 auto;border:1px solid var(--line);color:var(--mut);border-radius:16px;padding:7px 13px;font-size:12px;font-weight:600;background:#fff}
+.stchip.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.stchip.won.on{background:var(--accent);border-color:var(--accent)}
+.chat-log{flex:1;overflow-y:auto;padding:14px 10px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cg fill='none' stroke='%23e0d7cc' stroke-width='1.3'%3E%3Ccircle cx='20' cy='24' r='6'/%3E%3Cpath d='M56 16l9 9M56 25l9-9'/%3E%3Crect x='96' y='12' width='14' height='11' rx='3'/%3E%3Cpath d='M26 72c5-7 13-7 18 0'/%3E%3Ccircle cx='88' cy='66' r='8'/%3E%3Cpath d='M124 58v14M117 65h14'/%3E%3C/g%3E%3C/svg%3E")}
+.msg{max-width:80%;padding:7px 10px 8px;border-radius:9px;font-size:14px;line-height:1.35;margin-bottom:7px;box-shadow:0 1px .5px rgba(17,27,33,.13);position:relative}
+.msg .t{font-size:10.5px;color:rgba(17,27,33,.45);float:right;margin:6px 0 -2px 10px}
+.msg.in{background:var(--wa-in);border-top-left-radius:0}
+.msg.out{background:var(--wa-out);border-top-right-radius:0;margin-left:auto}
+.msg .tick{color:#53bdeb;font-size:11px}
+.day{text-align:center;margin:8px 0}
+.day span{background:#fff;color:#54656f;font-size:11px;padding:4px 11px;border-radius:8px;box-shadow:0 1px .5px rgba(17,27,33,.13)}
+.sys{text-align:center;margin:8px 0}
+.sys span{background:#fff8e1;color:#8a6d00;font-size:11.5px;padding:5px 12px;border-radius:10px;display:inline-block}
+.chat-input{background:#f0f2f5;padding:8px 10px calc(8px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:flex-end}
+.chat-field{flex:1;display:flex;align-items:center;background:#fff;border-radius:22px;padding:4px 8px}
+.chat-field input{flex:1;border:none;outline:none;font:inherit;font-size:14.5px;padding:8px 4px;background:none}
+.chat-field .fi{font-size:19px;color:#54656f;padding:6px}
+.send{width:46px;height:46px;flex:0 0 46px;border-radius:50%;background:var(--brand);color:#fff;font-size:19px;display:flex;align-items:center;justify-content:center}
+/* меню чата */
+.menu{position:absolute;right:10px;top:56px;background:#fff;border-radius:12px;box-shadow:var(--sh2);z-index:5;min-width:220px;overflow:hidden;display:none}
+.menu.on{display:block}
+.menu button{display:block;width:100%;text-align:left;padding:13px 16px;font-size:14px}
+.menu button:active{background:var(--card2)}
+
+/* НИЖНИЙ ЛИСТ (продажа/детали) */
+.sheet-bg{position:fixed;inset:0;background:rgba(17,27,33,.45);z-index:70;display:none}
+.sheet-bg.on{display:block}
+.sheet{position:fixed;left:50%;bottom:0;transform:translateX(-50%) translateY(100%);transition:transform .25s;z-index:71;background:var(--bg);border-radius:22px 22px 0 0;width:100%;max-width:460px;max-height:92vh;overflow-y:auto;padding:8px 16px calc(24px + env(safe-area-inset-bottom))}
+.sheet.on{transform:translateX(-50%) translateY(0)}
+.sheet .grab{width:40px;height:4px;border-radius:3px;background:#cfd6db;margin:6px auto 12px}
+.sheet h3{font-size:17px;margin:4px 0 14px}
+.fld{margin-bottom:13px}
+.fld label{display:block;font-size:12.5px;color:var(--mut);margin-bottom:6px;font-weight:600}
+.fld input,.fld select{width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;font:inherit;font-size:15px;background:#fff}
+.btn{display:block;width:100%;padding:14px;border-radius:13px;font-weight:700;font-size:15px;text-align:center}
+.btn.primary{background:var(--brand);color:#fff}
+.btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.btn.green{background:var(--accent);color:#fff}
+.prod{display:flex;gap:10px;align-items:center;background:#fff;border-radius:12px;padding:10px;margin-bottom:8px}
+.prod img{width:52px;height:52px;border-radius:9px;object-fit:cover;flex:0 0 52px;background:#e7ebee}
+.prod .info{flex:1;min-width:0}.prod .info .n{font-weight:600;font-size:13.5px}.prod .info .m{font-size:12px;color:var(--mut)}
+.prod .sum{font-weight:700;font-size:13px}
+
+/* аналитика бары */
+.bar{display:flex;align-items:center;gap:10px;margin:9px 0}
+.bar .bl{width:96px;font-size:12.5px;color:var(--mut);flex:0 0 96px}
+.bar .bt{flex:1;height:22px;border-radius:6px;background:var(--brand);min-width:2px}
+.bar .bv{font-size:12.5px;font-weight:700;flex:0 0 auto}
+
+/* каталог */
+.catcard{background:var(--card);border-radius:14px;box-shadow:var(--sh);margin-bottom:10px;padding:11px 12px}
+.catcard .ch{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.catcard .ch .n{font-weight:700;font-size:14px;flex:1}
+.strip{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.strip img{width:60px;height:60px;border-radius:10px;object-fit:cover;flex:0 0 60px;background:#e7ebee}
+.fab{position:absolute;right:16px;bottom:78px;width:56px;height:56px;border-radius:50%;background:var(--brand);color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh2);z-index:15}
+</style>
+</head>
+<body>
+<div class="phone">
+  <!-- ШАПКА -->
+  <div class="hdr">
+    <div class="hdr-row">
+      <div id="hdr-title" style="flex:1"><h1>Сделки</h1><div class="sub" id="hdr-sub">Воронка продаж · 12 активных</div></div>
+      <button class="ic" onclick="alert('Поиск (в проде)')">🔍</button>
+      <button class="ic" onclick="alert('Настройки (в проде)')">⚙️</button>
+    </div>
+  </div>
+
+  <!-- ЭКРАН: СДЕЛКИ (воронка) -->
+  <div class="scr" id="s-deals">
+    <div class="kpis">
+      <div class="kpi"><div class="l">Заявок за месяц</div><div class="v">34</div><div class="d up">▲ +8 к прошлому</div></div>
+      <div class="kpi"><div class="l">Продаж за месяц</div><div class="v">4,2 млн</div><div class="d up">▲ 11 сделок</div></div>
+    </div>
+    <div class="stages" id="stages"></div>
+  </div>
+
+  <!-- ЭКРАН: КЛИЕНТЫ -->
+  <div class="scr" id="s-clients" hidden>
+    <div class="list" id="clients"></div>
+  </div>
+
+  <!-- ЭКРАН: АНАЛИТИКА -->
+  <div class="scr" id="s-anal" hidden>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Конверсия</div><div class="v">32%</div><div class="d up">▲ +4%</div></div>
+      <div class="kpi"><div class="l">Ср. чек</div><div class="v">385 000</div><div class="d">за 30 дней</div></div>
+    </div>
+    <div class="h2">Заявки по источникам</div>
+    <div class="pad" style="padding-top:0" id="anal-src"></div>
+    <div class="h2">Где теряются сделки</div>
+    <div class="pad" style="padding-top:0" id="anal-lost"></div>
+  </div>
+
+  <!-- ЭКРАН: КАТАЛОГ -->
+  <div class="scr" id="s-cat" hidden>
+    <div class="pad" id="catalog"></div>
+    <button class="fab" onclick="alert('Добавить позицию (в проде)')">+</button>
+  </div>
+
+  <!-- НИЖНЕЕ МЕНЮ -->
+  <div class="nav" id="nav">
+    <button data-s="deals" class="on" onclick="nav('deals')"><span class="ni">🗂️</span>Сделки</button>
+    <button data-s="clients" onclick="nav('clients')"><span class="ni">👥</span>Клиенты</button>
+    <button data-s="anal" onclick="nav('anal')"><span class="ni">📊</span>Аналитика</button>
+    <button data-s="cat" onclick="nav('cat')"><span class="ni">📦</span>Каталог</button>
+  </div>
+</div>
+
+<!-- ЧАТ ЛИДА -->
+<div class="chat-wrap" id="chat">
+  <div class="chat-hdr">
+    <button class="ci" onclick="closeChat()">←</button>
+    <div class="ava" id="chat-ava">А</div>
+    <div class="who"><div class="n" id="chat-name">Айгерим</div><div class="s" id="chat-stage">Переговоры · 🤖 агент вкл</div></div>
+    <button class="ci" onclick="alert('Звонок (WhatsApp, в проде)')">📞</button>
+    <button class="ci" onclick="toggleMenu()">⋮</button>
+    <div class="menu" id="chat-menu">
+      <button onclick="openSale()">✅ Оформить продажу</button>
+      <button onclick="alert('Открыть в WhatsApp (в проде)')">🟢 Открыть в WhatsApp</button>
+      <button onclick="alert('Агент выключен в этом чате')">🤖 Агент: выключить тут</button>
+      <button onclick="alert('Детали сделки (в проде)')">ℹ️ Детали сделки</button>
+      <button onclick="closeMenu()">✕ Закрыть меню</button>
+    </div>
+  </div>
+  <div class="chat-stages" id="chat-stages"></div>
+  <div class="chat-log" id="chat-log"></div>
+  <div class="chat-input">
+    <div class="chat-field">
+      <button class="fi" onclick="alert('Шаблоны ответов (в проде)')">📋</button>
+      <input id="chat-text" placeholder="Сообщение">
+      <button class="fi" onclick="alert('Прикрепить файл (в проде)')">📎</button>
+    </div>
+    <button class="send" onclick="sendMsg()">➤</button>
+  </div>
+</div>
+
+<!-- НИЖНИЙ ЛИСТ -->
+<div class="sheet-bg" id="sheet-bg" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet"><div class="grab"></div><div id="sheet-body"></div></div>
+
+<script>
+// ---------- фейковые данные ----------
+var STAGES=[
+  {id:'new',nm:'Новые заявки',color:'#2b7fff'},
+  {id:'talk',nm:'Переговоры',color:'#c98600'},
+  {id:'offer',nm:'Замер / КП',color:'#7b61ff'},
+  {id:'pay',nm:'Ждём оплату',color:'#e8734a'},
+  {id:'won',nm:'Выполнено',color:'#12a05f'}
+];
+var LEADS=[
+  {id:1,name:'Айгерим',g:'',stage:'talk',sum:'385 000',src:'Стол-трансформер 3 м, белый',tag:'wa',hot:true},
+  {id:2,name:'Мадияр',g:'g2',stage:'new',sum:'—',src:'Instagram: сколько стоит?',tag:'ig'},
+  {id:3,name:'Санжар',g:'g3',stage:'new',sum:'—',src:'WhatsApp: столик Nelly',tag:'wa'},
+  {id:4,name:'Динара',g:'g4',stage:'offer',sum:'540 000',src:'Замер во вторник',tag:'wa'},
+  {id:5,name:'Ерлан',g:'g5',stage:'pay',sum:'420 000',src:'Ждём чек Kaspi',tag:'wa'},
+  {id:6,name:'Гульнара',g:'g2',stage:'talk',sum:'310 000',src:'Торгуется по цене',tag:'ig'},
+  {id:7,name:'Тимур',g:'g3',stage:'won',sum:'385 000',src:'Оплачено, на отгрузку',tag:'wa'},
+  {id:8,name:'Асель',g:'g4',stage:'won',sum:'1 155 000',src:'3 стола, опт',tag:'wa'}
+];
+var CLIENTS=[
+  {name:'Айгерим',g:'',m:'+7 707 123 45 67 · 2 сделки'},
+  {name:'Мадияр',g:'g2',m:'+7 701 555 00 11 · новый'},
+  {name:'Динара',g:'g4',m:'+7 775 900 88 77 · 1 сделка'},
+  {name:'Ерлан',g:'g5',m:'+7 702 340 12 00 · 3 сделки'},
+  {name:'Тимур',g:'g3',m:'+7 700 111 22 33 · 1 сделка'}
+];
+var CAT=[
+  {t:'Столы-трансформеры',n:'Геометрия',v:6,imgs:['#c9b7a3','#8fa9b8','#b8a2c9']},
+  {t:'Столы-трансформеры',n:'LUX',v:4,imgs:['#a9c9b7','#c9c1a2']},
+  {t:'Столики',n:'Nelly 3N',v:3,imgs:['#d6c3b0','#b0c3d6']},
+  {t:'Консоли',n:'Слим',v:2,imgs:['#c3b0d6']}
+];
+var CHAT=[
+  {d:'Вчера'},
+  {t:'in',x:'Здравствуйте! Увидела у вас стол-трансформер в инстаграме, 3 метра. Сколько стоит?',tm:'14:02'},
+  {t:'out',x:'Айгерим, здравствуйте! Стол-трансформер 3 м — от 385 000 ₸. Цвет какой рассматриваете?',tm:'14:05'},
+  {t:'in',x:'Белый. А доставка по Астане есть?',tm:'14:08'},
+  {t:'out',x:'Да, доставка по Астане 10 000 ₸, подъём бесплатно. Белый есть в наличии 🙂',tm:'14:09'},
+  {sys:'🤖 Агент ответил автоматически'},
+  {d:'Сегодня'},
+  {t:'in',x:'Хорошо, а можно в рассрочку через Kaspi?',tm:'09:30'}
+];
+
+// ---------- рендер ----------
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function avaClass(g){return 'ava'+(g?' '+g:'');}
+function tagHtml(l){var t='';if(l.tag==='wa')t='<span class="tag wa">WhatsApp</span>';if(l.tag==='ig')t='<span class="tag ig">Instagram</span>';if(l.hot)t+='<span class="tag hot">🔥 горячий</span>';return t;}
+
+function renderStages(){
+  var box=document.getElementById('stages');
+  box.innerHTML=STAGES.map(function(s,i){
+    var rows=LEADS.filter(function(l){return l.stage===s.id;});
+    var sum=rows.reduce(function(n,l){return n+(parseInt(l.sum.replace(/\D/g,''))||0);},0);
+    return '<div class="stage'+(i===1?' open':'')+'" id="st-'+s.id+'">'+
+      '<button class="stage-h" onclick="toggleStage(\''+s.id+'\')">'+
+        '<span class="bar" style="background:'+s.color+'"></span>'+
+        '<span class="nm">'+s.nm+'</span>'+
+        '<span class="ct"><b>'+rows.length+' сделок</b>'+(sum?fmt(sum)+' ₸':'')+'</span>'+
+        '<span class="chev">›</span>'+
+      '</button>'+
+      '<div class="stage-body">'+(rows.length?rows.map(leadHtml).join(''):'<div class="muted" style="padding:10px 12px;font-size:13px">Пусто</div>')+'</div>'+
+    '</div>';
+  }).join('');
+}
+function leadHtml(l){
+  return '<div class="lead" onclick="openChat('+l.id+')">'+
+    '<div class="'+avaClass(l.g)+'">'+l.name.charAt(0)+'</div>'+
+    '<div class="info"><div class="n">'+esc(l.name)+tagHtml(l)+'</div><div class="m">'+esc(l.src)+'</div></div>'+
+    '<div class="sum">'+(l.sum==='—'?'':l.sum+' ₸')+'</div>'+
+  '</div>';
+}
+function fmt(n){return n.toLocaleString('ru-RU');}
+function toggleStage(id){document.getElementById('st-'+id).classList.toggle('open');}
+
+function renderClients(){
+  document.getElementById('clients').innerHTML=CLIENTS.map(function(c){
+    return '<button class="crow" onclick="alert(\'Карточка клиента: '+c.name+'\')">'+
+      '<div class="'+avaClass(c.g)+'">'+c.name.charAt(0)+'</div>'+
+      '<div class="info"><div class="n">'+esc(c.name)+'</div><div class="m">'+esc(c.m)+'</div></div>'+
+      '<div class="go">›</div></button>';
+  }).join('');
+}
+function renderAnal(){
+  var src=[['Instagram',18,'#c23b83'],['WhatsApp',11,'#0a7d3f'],['Сайт',3,'#2b7fff'],['Kaspi',2,'#c98600']];
+  var mx=18;
+  document.getElementById('anal-src').innerHTML=src.map(function(s){
+    return '<div class="bar"><span class="bl">'+s[0]+'</span><span class="bt" style="width:'+(s[1]/mx*100)+'%;background:'+s[2]+'"></span><span class="bv">'+s[1]+'</span></div>';
+  }).join('');
+  var lost=[['Новые',2],['Переговоры',5],['Замер / КП',3],['Ждём оплату',1]];
+  document.getElementById('anal-lost').innerHTML=lost.map(function(s){
+    return '<div class="bar"><span class="bl">'+s[0]+'</span><span class="bt" style="width:'+(s[1]/5*100)+'%;background:var(--red)"></span><span class="bv">'+s[1]+' ушло</span></div>';
+  }).join('');
+}
+function renderCat(){
+  document.getElementById('catalog').innerHTML=CAT.map(function(c){
+    return '<div class="catcard">'+
+      '<div class="ch"><span class="n">'+esc(c.n)+' <span class="muted" style="font-weight:400;font-size:12px">· '+c.t+'</span></span><span class="muted" style="font-size:12px">'+c.v+' вар.</span></div>'+
+      '<div class="strip">'+c.imgs.map(function(col){return '<img alt="" style="background:'+col+'">';}).join('')+'</div>'+
+    '</div>';
+  }).join('');
+}
+
+// ---------- навигация ----------
+var TITLES={deals:['Сделки','Воронка продаж · 12 активных'],clients:['Клиенты','Всего 47 · 5 показано'],anal:['Аналитика','За последние 30 дней'],cat:['Каталог','46 моделей · 166 вариантов']};
+function nav(s){
+  ['deals','clients','anal','cat'].forEach(function(x){document.getElementById('s-'+x).hidden=(x!==s);});
+  Array.prototype.forEach.call(document.querySelectorAll('#nav button'),function(b){b.classList.toggle('on',b.getAttribute('data-s')===s);});
+  document.getElementById('hdr-title').innerHTML='<h1>'+TITLES[s][0]+'</h1><div class="sub">'+TITLES[s][1]+'</div>';
+}
+
+// ---------- чат ----------
+function openChat(id){
+  var l=LEADS.find(function(x){return x.id===id;})||LEADS[0];
+  document.getElementById('chat-ava').textContent=l.name.charAt(0);
+  document.getElementById('chat-name').textContent=l.name;
+  var st=STAGES.find(function(s){return s.id===l.stage;});
+  document.getElementById('chat-stage').textContent=(st?st.nm:'')+' · 🤖 агент вкл';
+  document.getElementById('chat-stages').innerHTML=STAGES.map(function(s){
+    return '<button class="stchip'+(s.id===l.stage?' on':'')+(s.id==='won'?' won':'')+'" onclick="moveStage(\''+s.id+'\',\''+s.nm+'\')">'+(s.id==='won'?'✅ ':'')+s.nm+'</button>';
+  }).join('');
+  renderChatLog();
+  document.getElementById('chat').classList.add('on');
+}
+function renderChatLog(){
+  document.getElementById('chat-log').innerHTML=CHAT.map(function(m){
+    if(m.d)return '<div class="day"><span>'+m.d+'</span></div>';
+    if(m.sys)return '<div class="sys"><span>'+m.sys+'</span></div>';
+    return '<div class="msg '+m.t+'">'+esc(m.x)+'<span class="t">'+m.tm+(m.t==='out'?' <span class="tick">✓✓</span>':'')+'</span></div>';
+  }).join('');
+  var log=document.getElementById('chat-log');log.scrollTop=log.scrollHeight;
+}
+function sendMsg(){
+  var i=document.getElementById('chat-text');if(!i.value.trim())return;
+  CHAT.push({t:'out',x:i.value.trim(),tm:'сейчас'});i.value='';renderChatLog();
+}
+function moveStage(id,nm){
+  document.getElementById('chat-stage').textContent=nm+' · 🤖 агент вкл';
+  Array.prototype.forEach.call(document.querySelectorAll('#chat-stages .stchip'),function(b){b.classList.remove('on');});
+  event.target.classList.add('on');
+  if(id==='won'){openSale();return;}
+  CHAT.push({sys:'Этап изменён: '+nm});renderChatLog();
+}
+function closeChat(){document.getElementById('chat').classList.remove('on');closeMenu();}
+function toggleMenu(){document.getElementById('chat-menu').classList.toggle('on');}
+function closeMenu(){document.getElementById('chat-menu').classList.remove('on');}
+
+// ---------- нижний лист: оформить продажу ----------
+function openSale(){
+  closeMenu();
+  document.getElementById('sheet-body').innerHTML=
+    '<h3>✅ Оформить продажу</h3>'+
+    '<div class="muted" style="font-size:13px;margin-bottom:14px">Что продали — подтянется в производство и отгрузку, спишется склад.</div>'+
+    '<div class="fld"><label>Что продали (из каталога)</label>'+
+      '<div class="prod"><img alt="" style="background:#c9b7a3"><div class="info"><div class="n">Геометрия 3 м · белый</div><div class="m">Стол-трансформер</div></div><div class="sum">385 000</div></div>'+
+      '<button class="btn ghost" onclick="alert(\'Выбор из каталога (в проде)\')">+ Добавить позицию</button></div>'+
+    '<div class="fld"><label>Сумма продажи, ₸</label><input value="385 000"></div>'+
+    '<div class="fld"><label>Способ оплаты</label><select><option>Kaspi</option><option>Каспий рассрочка</option><option>Наличные</option><option>Перевод</option></select></div>'+
+    '<div class="fld"><label>Дата отгрузки</label><input type="date"></div>'+
+    '<button class="btn green" onclick="alert(\'Продажа оформлена ✅ (в проде уйдёт в производство)\');closeSheet();">✅ Оформить продажу</button>'+
+    '<button class="btn ghost" style="margin-top:8px" onclick="closeSheet()">Отмена</button>';
+  document.getElementById('sheet-bg').classList.add('on');
+  document.getElementById('sheet').classList.add('on');
+}
+function closeSheet(){document.getElementById('sheet-bg').classList.remove('on');document.getElementById('sheet').classList.remove('on');}
+
+// init
+renderStages();renderClients();renderAnal();renderCat();
+document.getElementById('chat-text').addEventListener('keydown',function(e){if(e.key==='Enter')sendMsg();});
+</script>
+</body>
+</html>
