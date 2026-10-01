@@ -6,7 +6,7 @@ const express = require('express');
 const GATE = 7381, REQUEST = 7382, PHONE = 7383;
 
 // ---- Сейф ключей агента: AES-256-GCM, ключ шифрования выводится из серверного секрета (в БД лежит только шифртекст) ----
-const SECRET_NAMES = ['ANTHROPIC_API_KEY','OPENAI_API_KEY','GOOGLE_API_KEY','DEEPGRAM_API_KEY','ELEVENLABS_API_KEY','OPENROUTER_API_KEY'];
+const SECRET_NAMES = ['ANTHROPIC_API_KEY','OPENAI_API_KEY','GOOGLE_API_KEY','GOOGLE_TRANSLATE_API_KEY','DEEPGRAM_API_KEY','ELEVENLABS_API_KEY','OPENROUTER_API_KEY','D360_API_KEY'];
 const SECRETS_KEY = crypto.createHash('sha256').update(process.env.SECRETS_KEY || process.env.JWT_SECRET || 'borzo-secrets-fallback').digest();
 function encSecret(plain){
   const iv = crypto.randomBytes(12);
@@ -30,9 +30,23 @@ async function checkProvider(name, key){
     if(name==='ANTHROPIC_API_KEY') r=await fetch('https://api.anthropic.com/v1/models', opt({'x-api-key':key,'anthropic-version':'2023-06-01'}));
     else if(name==='OPENAI_API_KEY') r=await fetch('https://api.openai.com/v1/models', opt({'Authorization':'Bearer '+key}));
     else if(name==='GOOGLE_API_KEY') r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(key), opt({}));
+    else if(name==='GOOGLE_TRANSLATE_API_KEY'){
+      // реальный тест-перевод: 200 = ключ рабочий; 400/403 = ключ неверный / Translate API не включён; 429 = лимит/нет средств
+      r=await fetch('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(key), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:'тест',target:'en',format:'text'}),signal:AbortSignal.timeout(7000)});
+      if(r.ok) return { ok:true, detail:'ключ рабочий' };
+      const bad=(r.status===400||r.status===401||r.status===403);
+      return { ok:false, detail: bad ? ('ключ неверный или не включён Cloud Translation API ('+r.status+')') : (r.status===429 ? 'превышен лимит / нет средств (429)' : ('провайдер ответил '+r.status)) };
+    }
     else if(name==='OPENROUTER_API_KEY') r=await fetch('https://openrouter.ai/api/v1/key', opt({'Authorization':'Bearer '+key}));
     else if(name==='DEEPGRAM_API_KEY') r=await fetch('https://api.deepgram.com/v1/projects', opt({'Authorization':'Token '+key}));
     else if(name==='ELEVENLABS_API_KEY') r=await fetch('https://api.elevenlabs.io/v1/user', opt({'xi-api-key':key}));
+    else if(name==='D360_API_KEY'){
+      // 360dialog Cloud API: авторизованный GET конфига вебхука. 401/403 = ключ неверный; иначе ключ принят.
+      const base=(process.env.WA_API_URL||'https://waba-v2.360dialog.io').replace(/\/+$/,'');
+      r=await fetch(base+'/v1/configs/webhook', opt({'D360-API-KEY':key}));
+      const bad = (r.status===401||r.status===403);
+      return { ok: !bad, detail: bad ? ('ключ неверный/нет прав (360dialog ответил '+r.status+')') : (r.ok?'ключ рабочий':'ключ принят (360dialog ответил '+r.status+')') };
+    }
     else return { ok:false, detail:'проверка не поддержана' };
     return { ok: r.ok, detail: r.ok ? 'ключ рабочий' : ('провайдер ответил '+r.status+(r.status===401||r.status===403?' — ключ неверный/нет прав':'')) };
   }catch(e){ return { ok:false, detail: (e.name==='TimeoutError'?'провайдер не ответил (таймаут)':'ошибка сети: '+(e.message||e)) }; }
@@ -156,13 +170,17 @@ async function initSchema(db) {
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) VALUES
       ('new','Новая заявка',1,false,false), ('working','В работе',2,false,false),
       ('selection','Подбор решения',3,false,false), ('paused','Пауза',4,false,false),
-      ('won','Продажа',5,true,false), ('lost','Отказ',6,false,true)
+      ('won','Продажа',5,true,false), ('lost','Отказ / Игнор',6,false,true),
+      ('junk','Нецелевой',7,false,true)
     ON CONFLICT(code) DO NOTHING;
     -- миграция набора стадий к актуальному (идемпотентно): +Пауза, Выполнено→Продажа, убрать пустой agreed, порядок, поле напоминания
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) SELECT 'paused','Пауза',4,false,false WHERE NOT EXISTS(SELECT 1 FROM crm_stages WHERE code='paused');
+    -- «Нецелевой»: отдельная корзина (не валим в Отказ). Закрывающий этап (is_lost) → помесячный бакет + при новом сообщении история переписки цепляется к сделке (как в WhatsApp)
+    INSERT INTO crm_stages(code,name,ord,is_won,is_lost) SELECT 'junk','Нецелевой',7,false,true WHERE NOT EXISTS(SELECT 1 FROM crm_stages WHERE code='junk');
     UPDATE crm_stages SET name='Продажа' WHERE code='won' AND name='Выполнено';
+    UPDATE crm_stages SET name='Отказ / Игнор' WHERE code='lost' AND name='Отказ';
     DELETE FROM crm_stages WHERE code='agreed' AND NOT EXISTS(SELECT 1 FROM crm_deals WHERE stage_id=(SELECT id FROM crm_stages WHERE code='agreed'));
-    UPDATE crm_stages SET ord=CASE code WHEN 'new' THEN 1 WHEN 'working' THEN 2 WHEN 'selection' THEN 3 WHEN 'paused' THEN 4 WHEN 'won' THEN 5 WHEN 'lost' THEN 6 ELSE ord END;
+    UPDATE crm_stages SET ord=CASE code WHEN 'new' THEN 1 WHEN 'working' THEN 2 WHEN 'selection' THEN 3 WHEN 'paused' THEN 4 WHEN 'won' THEN 5 WHEN 'lost' THEN 6 WHEN 'junk' THEN 7 ELSE ord END;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS remind_at TIMESTAMPTZ;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS remind_fired_at TIMESTAMPTZ;
     ALTER TABLE crm_deals ADD COLUMN IF NOT EXISTS pay_method TEXT;
@@ -456,6 +474,12 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
       closed_at=CASE WHEN $5 THEN now() ELSE NULL END,imported_incomplete=false,stage_entered_at=now(),updated_at=now(),rev=rev+1,amount=$6,pay_method=$8,sale_comment=$9 WHERE id=$7`,
       [s.id,JSON.stringify(d.items),d.ship_date,reason,s.is_won||s.is_lost,d.amount,d.id,d.pay_method==null?'':d.pay_method,d.sale_comment==null?'':d.sale_comment]);
     await event(db,req.user,d.id,'status',prev.name+' → '+s.name+(reason?' · '+reason:''),prev.id,s.id);
+    // авто-взятие: при переходе в РАБОЧИЙ этап (не новый/не продажа/не отказ) без назначенного менеджера — помечаем «взято Ульяной»
+    // (ответственная за клиентов; даже если двигал Руслан — клиент её. Ведёт ли АГЕНТ — определяется отдельно по воронке/override и показывается приоритетно).
+    if(!s.is_won && !s.is_lost && s.code!=='new' && !d.manager_id){
+      const uly=await db.query("SELECT id FROM users WHERE login='ulyana' OR role='fin' ORDER BY (login='ulyana') DESC LIMIT 1");
+      if(uly.rowCount) await db.query('UPDATE crm_deals SET manager_id=$1 WHERE id=$2',[uly.rows[0].id,d.id]);
+    }
     // новый заказ на отгрузку → пуш производству (пока роли mgr/fin, позже отдельная роль производства)
     if(s.is_won && sendPushToRole){
       const prod = (d.items && d.items.length) ? (d.items[0].name||'заказ') : 'заказ';
@@ -711,6 +735,61 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     const r=await pool.query('SELECT data,rev,updated_at FROM crm_scripts WHERE id=1');
     res.json(r.rowCount?{data:r.rows[0].data,rev:r.rows[0].rev,updated_at:Number(r.rows[0].updated_at)||0}:{data:null,rev:0});
   }));
+  // перевод сообщений чата: при наличии кредита OpenRouter — ИИ (качество как Google), иначе бесплатный MyMemory. Переводим только НЕ-целевой язык.
+  let _orCooldown=0;   // если OpenRouter без денег (402/403/429) — временно не дёргаем
+  const trClean=s=>String(s||'').replace(/&quot;/g,'"').replace(/&#3[49];/g,"'").replace(/&apos;/g,"'").replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/^\s*&\s+/,'').trim();
+  router.post('/translate',route(async(req,res)=>{
+    const texts=Array.isArray(req.body.texts)?req.body.texts.slice(0,120).map(t=>String(t||'').slice(0,480)):[];
+    const toKz=(req.body.to==='kz');
+    const kzRe=/[әғқңөұүһі]/i;
+    if(!texts.length) return res.json({translations:[]});
+    // 1) Google Cloud Translation (лучшее качество, 500k симв/мес бесплатно) — если задан ключ
+    const GKEY=(await getSecret(pool,'GOOGLE_TRANSLATE_API_KEY'))||process.env.GOOGLE_TRANSLATE_API_KEY;
+    if(GKEY){
+      try{
+        const target=toKz?'kk':'ru';
+        // экономим лимит: переводим только НЕ на целевом языке, остальные отдаём как есть
+        const idx=[], q=[];
+        texts.forEach((t,i)=>{ const isKz=kzRe.test(t); if(t.trim() && (toKz?!isKz:isKz)){ idx.push(i); q.push(t); } });
+        if(!q.length) return res.json({translations:texts.map(String)});
+        const r=await fetch('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(GKEY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,target,format:'text'})});
+        if(r.ok){
+          const j=await r.json(); const tr=(j.data&&j.data.translations)||[];
+          if(tr.length===q.length){ const out=texts.slice(); idx.forEach((pos,k)=>{ out[pos]=trClean(tr[k].translatedText||texts[pos]); }); return res.json({translations:out.map(String)}); }
+        }
+      }catch(e){ /* упадём на следующий провайдер */ }
+    }
+    // 2) ИИ через OpenRouter (грамотно), если есть кредит
+    const KEY=process.env.OPENROUTER_API_KEY;
+    if(KEY && Date.now()>_orCooldown){
+      try{
+        const to=toKz?'казахский':'русский';
+        const payload={model:process.env.TR_MODEL||'openai/gpt-4o-mini',temperature:0.1,messages:[
+          {role:'system',content:'Ты профессиональный переводчик чата (мебель BORZO). Переводи каждый элемент на '+to+' язык грамотно и естественно, сохраняй эмодзи. Если элемент уже на '+to+' языке — верни без изменений. НЕ добавляй символов и пояснений. Ответ — СТРОГО JSON-массив строк той же длины и порядка.'},
+          {role:'user',content:JSON.stringify(texts)}]};
+        const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        if([402,403,429].includes(r.status)){ _orCooldown=Date.now()+10*60*1000; }
+        else if(r.ok){
+          const j=await r.json(); let c=((j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||'').replace(/```json/gi,'').replace(/```/g,'').trim();
+          let arr=null; try{arr=JSON.parse(c);}catch(e){const i=c.indexOf('['),k=c.lastIndexOf(']'); if(i>=0&&k>i){ try{arr=JSON.parse(c.slice(i,k+1));}catch(_){} }}
+          if(Array.isArray(arr)&&arr.length===texts.length) return res.json({translations:arr.map(t=>trClean(String(t)))});
+        }
+      }catch(e){ _orCooldown=Date.now()+10*60*1000; }
+    }
+    // 2) бесплатный MyMemory
+    async function tr(q){
+      if(!q||!q.trim()) return q;
+      const isKz=kzRe.test(q); if(toKz?isKz:!isKz) return q;
+      try{
+        const url='https://api.mymemory.translated.net/get?langpair='+(toKz?'ru|kk':'kk|ru')+'&de=borzopult@gmail.com&q='+encodeURIComponent(q);
+        const r=await fetch(url); if(!r.ok) return q;
+        const j=await r.json(); const t=j.responseData&&j.responseData.translatedText;
+        return (t && !/MYMEMORY WARNING|QUOTA|INVALID/i.test(t)) ? trClean(t) : q;
+      }catch(e){ return q; }
+    }
+    const out=await Promise.all(texts.map(tr));
+    res.json({translations: out.map(String)});
+  }));
   router.put('/scripts',mutate(async(req,db)=>{
     const data=req.body.data;
     if(!data||typeof data!=='object'||Array.isArray(data)) throw err(400,'нужен объект скриптов');
@@ -879,4 +958,4 @@ async function recheckSecrets(pool){
     }
   }catch(e){ console.error('recheckSecrets', e && e.message); }
 }
-module.exports={initSchema,register,recheckSecrets};
+module.exports={initSchema,register,recheckSecrets,getSecret};

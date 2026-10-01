@@ -7,10 +7,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
+const { getSecret } = require('./crm');   // ключ 360dialog хранится в зашифрованном сейфе crm_secrets (розетка электроящика)
 
 const PHONE_LOCK = 7383;          // тот же смысл, что PHONE в crm.js — сериализуем find-or-create клиента по телефону
 const API_URL = (process.env.WA_API_URL || 'https://waba-v2.360dialog.io').replace(/\/+$/,'');
-const API_KEY = process.env.D360_API_KEY || '';         // появится в день переезда (Change Partner → ключ канала)
+// Ключ D360 берём динамически из сейфа (розетка WhatsApp в электроящике), с откатом на env — см. getApiKey() внутри register()
 const WEBHOOK_SECRET = process.env.WA_WEBHOOK_SECRET || '';   // секрет в пути вебхука (360dialog не подписывает как Meta)
 const OUR_PHONE_ID = process.env.WA_PHONE_ID || '';     // phone_number_id нашего канала (912982958571543) — отсечь чужие каналы
 const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || 'https://borzopult.com').replace(/\/+$/,'');  // публичный адрес для ссылок на /uploads при отправке медиа
@@ -51,6 +52,8 @@ async function initSchema(db) {
     -- ответ на сообщение (цитата): id исходного сообщения WhatsApp + короткий текст для превью
     ALTER TABLE wa_messages ADD COLUMN IF NOT EXISTS reply_to TEXT NOT NULL DEFAULT '';
     ALTER TABLE wa_messages ADD COLUMN IF NOT EXISTS reply_text TEXT NOT NULL DEFAULT '';
+    -- реакция (эмодзи) на это сообщение: своя (менеджер) или клиента, как в WhatsApp
+    ALTER TABLE wa_messages ADD COLUMN IF NOT EXISTS reaction TEXT NOT NULL DEFAULT '';
   `);
 }
 
@@ -89,6 +92,17 @@ function messageContent(m){
 
 function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadDir }) {
   const UPLOAD_DIR = uploadDir || '/var/www/borzo/uploads';
+  // Ключ 360dialog: сначала из зашифрованного сейфа (розетка электроящика), иначе из env. Кэш 15с, чтобы не дёргать БД на каждый вызов.
+  let _keyCache = { v:'', t:0 };
+  async function getApiKey(){
+    const now = Date.now();
+    if(_keyCache.v && (now - _keyCache.t) < 15000) return _keyCache.v;
+    let k = '';
+    try { k = await getSecret(pool, 'D360_API_KEY'); } catch(e){ k=''; }
+    if(!k) k = process.env.D360_API_KEY || '';
+    _keyCache = { v:k, t:now };
+    return k;
+  }
   const pub = express.Router();     // публичный (без токена): 360dialog постит сюда
   const api = express.Router();     // авторизованный
 
@@ -131,6 +145,13 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
 
   // один входящий → найти/создать клиента и открытую сделку, записать сообщение
   async function ingestInbound(m, profileName){
+    // реакция клиента на наше сообщение (👍 ❤️ …): не новое сообщение, а отметка на существующем
+    if(m.type==='reaction' && m.reaction){
+      const tgt=String(m.reaction.message_id||''), emo=String(m.reaction.emoji||'').slice(0,8);
+      if(tgt){ try{ await pool.query('UPDATE wa_messages SET reaction=$1 WHERE wamid=$2',[emo,tgt]); }catch(e){ console.error('wa reaction in', e&&e.message); } }
+      if(emo && sendPushToRole){ const b=(profileName?profileName+': ':'')+'реакция '+emo; sendPushToRole('mgr',{title:'BORZO · WhatsApp',body:b,url:'/crm.html'}).catch(()=>{}); }
+      return;
+    }
     const wamid = String(m.id||'');
     if(!wamid) return;
     const phone = waPhone(m.from);
@@ -155,11 +176,25 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
         await db.query('UPDATE crm_clients SET wa_name=$1 WHERE id=$2', [profileName, client.id]);
       }
 
-      // открытая сделка клиента (не выиграна и не проиграна) — самая свежая; иначе новая в стадии «Новая заявка»
+      // 1) открытая сделка клиента (не выиграна и не проиграна) — самая свежая
       let deal = (await db.query(
         `SELECT d.* FROM crm_deals d JOIN crm_stages s ON s.id=d.stage_id
          WHERE d.client_id=$1 AND NOT s.is_won AND NOT s.is_lost ORDER BY d.updated_at DESC, d.id DESC LIMIT 1`,
         [client.id])).rows[0];
+      // 2) открытой нет, но есть ЗАКРЫТАЯ (продажа/отказ) — цепляем сообщение к НЕЙ, а не плодим оторванную новую карточку.
+      //    так переписка после закрытия не теряется: карточка «пингуется» (wa_unread) и всплывает, менеджер решит — ответить или вернуть в воронку.
+      if(!deal){
+        deal = (await db.query(
+          `SELECT d.* FROM crm_deals d JOIN crm_stages s ON s.id=d.stage_id
+           WHERE d.client_id=$1 AND (s.is_won OR s.is_lost) ORDER BY d.updated_at DESC, d.id DESC LIMIT 1`,
+          [client.id])).rows[0];
+        if(deal){
+          await db.query(
+            `INSERT INTO crm_events(deal_id, kind, text, author_name) VALUES($1,'status','Клиент написал после закрытия сделки','WhatsApp')`,
+            [deal.id]);
+        }
+      }
+      // 3) сделок нет вообще — заводим новую заявку в стадии «Новая заявка»
       if(!deal){
         const st = (await db.query("SELECT id FROM crm_stages WHERE code='new'")).rows[0];
         // рекламный источник (Meta присылает referral в первом сообщении click-to-WhatsApp)
@@ -200,6 +235,7 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
 
   // подключён ли WhatsApp (есть ли ключ) — фронт показывает статус
   api.get('/status', route(async (req,res)=>{
+    const API_KEY = await getApiKey();
     res.json({ connected: !!API_KEY, phone_id: OUR_PHONE_ID || null });
   }));
 
@@ -211,13 +247,16 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     if(!m) throw err(404,'сообщение не найдено');
     if(m.media_url) return res.json({ url:m.media_url, mime:m.mime||'' });     // уже скачано
     if(!m.media_id) throw err(400,'у сообщения нет вложения');
+    const API_KEY = await getApiKey();
     if(!API_KEY) throw err(503,'WhatsApp ещё не подключён — вложения появятся после переезда');
     // 1) метаданные медиа (Meta/360dialog: GET /{media-id} → {url, mime_type})
     const meta = await fetch(API_URL+'/'+encodeURIComponent(m.media_id), { headers:{ 'D360-API-KEY':API_KEY } });
     const mj = await meta.json().catch(()=>({}));
     if(!meta.ok || !mj.url) throw err(502,'не удалось получить ссылку на вложение');
-    // 2) сами байты (у 360dialog ссылка требует тот же ключ)
-    const bin = await fetch(mj.url, { headers:{ 'D360-API-KEY':API_KEY } });
+    // 2) сами байты. 360dialog Cloud API отдаёт Meta-ссылку (lookaside.fbsbx.com) — напрямую даёт 401,
+    //    качать надо через хост 360dialog с тем же ключом (подменяем протокол+хост на API_URL).
+    const dlUrl = mj.url.replace(/^https?:\/\/[^/]+/, API_URL);
+    const bin = await fetch(dlUrl, { headers:{ 'D360-API-KEY':API_KEY } });
     if(!bin.ok) throw err(502,'не удалось скачать вложение');
     const buf = Buffer.from(await bin.arrayBuffer());
     if(!buf.length || buf.length > 25*1024*1024) throw err(413,'вложение слишком большое (до 25 МБ)');
@@ -228,6 +267,43 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     const url = '/uploads/'+name;
     await pool.query('UPDATE wa_messages SET media_url=$1, mime=$2 WHERE id=$3',[url, mime, mid]);
     res.json({ url:url, mime:mime });
+  }));
+  // распознать голосовое (Deepgram) и перевести на русский (MyMemory, если казахский)
+  api.post('/transcribe/:msgId', route(async (req,res)=>{
+    const mid=Number(req.params.msgId);
+    if(!Number.isSafeInteger(mid)||mid<1) throw err(400,'некорректное сообщение');
+    const m=(await pool.query('SELECT * FROM wa_messages WHERE id=$1',[mid])).rows[0];
+    if(!m) throw err(404,'сообщение не найдено');
+    if(!/^(audio|voice)/.test(m.type||'')) throw err(400,'это не голосовое');
+    const DG=process.env.DEEPGRAM_API_KEY;
+    if(!DG) throw err(503,'распознавание не настроено');
+    let url=m.media_url||'';
+    if(!url) throw err(400,'аудио ещё не скачано — откройте его в чате');
+    if(!/^https?:\/\//i.test(url)) url=PUBLIC_BASE+(url.charAt(0)==='/'?'':'/')+url;
+    // ЖЁСТКО: клиенты пишут ТОЛЬКО на казахском или русском (оба кириллицей). Авто-определение Deepgram уходило в чужие языки (португальский) → каша.
+    // Nova-3 с language=kk: корректно слышит казахский (с буквами әғқң…), а русскую речь (тоже кириллица) пишет как русскую. Никакого английского.
+    let transcript='';
+    try{
+      const dr=await fetch('https://api.deepgram.com/v1/listen?model=nova-3&language=kk&smart_format=true',{method:'POST',headers:{'Authorization':'Token '+DG,'Content-Type':'application/json'},body:JSON.stringify({url})});
+      const dj=await dr.json();
+      const alt=(((dj.results&&dj.results.channels&&dj.results.channels[0]&&dj.results.channels[0].alternatives)||[])[0])||{};
+      transcript=alt.transcript||'';
+    }catch(e){}
+    if(!transcript || !transcript.trim()) throw err(502,'не удалось распознать голос');
+    const trClean=s=>String(s||'').replace(/&quot;/g,'"').replace(/&#3[49];/g,"'").replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/^\s*&\s+/,'').trim();
+    let ru=transcript;
+    // переводим на русский ТОЛЬКО если это казахский (по казахским буквам). Русский оставляем как есть.
+    if(/[әғқңөұүһі]/i.test(transcript)){
+      const q=transcript.slice(0,1500);
+      // 1) Google (качество, ключ в сейфе) — источник kk, цель ru
+      const gkey=(await getSecret(pool,'GOOGLE_TRANSLATE_API_KEY'))||process.env.GOOGLE_TRANSLATE_API_KEY;
+      if(gkey){ try{ const gr=await fetch('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(gkey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,source:'kk',target:'ru',format:'text'})});
+        if(gr.ok){ const gj=await gr.json(); const t=gj.data&&gj.data.translations&&gj.data.translations[0]&&gj.data.translations[0].translatedText; if(t) ru=trClean(t); } }catch(e){} }
+      // 2) запасной MyMemory, если Google не дал
+      if(ru===transcript){ try{ const tr=await fetch('https://api.mymemory.translated.net/get?langpair=kk|ru&de=borzopult@gmail.com&q='+encodeURIComponent(q.slice(0,480)));
+        const tj=await tr.json(); let t=tj.responseData&&tj.responseData.translatedText; if(t&&!/MYMEMORY WARNING|QUOTA|INVALID/i.test(t)) ru=trClean(t); }catch(e){} }
+    }
+    res.json({ transcript:transcript, ru:ru });
   }));
   // лента чата по сделке
   api.get('/messages/:dealId', route(async (req,res)=>{
@@ -267,6 +343,7 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     if(!d.rowCount) throw err(404,'сделка не найдена');
     const { client_id, phone } = d.rows[0];
     if(!phone) throw err(400,'у клиента нет телефона');
+    const API_KEY = await getApiKey();
     if(!API_KEY) throw err(503,'WhatsApp ещё не подключён — ключ появится в день переезда');
 
     const replyTo = String(req.body.reply_to||'').trim().slice(0,256);        // wamid исходного сообщения (цитата)
@@ -294,7 +371,7 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
         body: JSON.stringify(payload)
       });
       const j = await resp.json().catch(()=>({}));
-      if(!resp.ok){ sendErr = (j.error && (j.error.message||j.error.title)) || ('HTTP '+resp.status); throw err(502, 'WhatsApp не принял сообщение: '+sendErr); }
+      if(!resp.ok){ sendErr = (typeof j.error==='string'?j.error:(j.error&&(j.error.message||j.error.title)))||j.message||('HTTP '+resp.status); throw err(502, 'WhatsApp не принял сообщение: '+sendErr); }
       wamid = (j.messages && j.messages[0] && j.messages[0].id) || null;
     } catch(e){ if(e.httpCode) throw e; throw err(502,'сеть/шлюз WhatsApp недоступен'); }
 
@@ -315,10 +392,35 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     res.json({ ok:true, message: saved });
   }));
 
+  // поставить/снять реакцию (эмодзи) на сообщение — как в WhatsApp (долгое нажатие)
+  api.post('/react', route(async (req,res)=>{
+    const dealId = Number(req.body.deal_id);
+    if(!Number.isSafeInteger(dealId) || dealId<1) throw err(400,'некорректная сделка');
+    const wamid = String(req.body.wamid||'').trim().slice(0,256);
+    if(!wamid) throw err(400,'нет сообщения');
+    const emoji = String(req.body.emoji==null?'':req.body.emoji).trim().slice(0,8);   // пустая строка = снять реакцию
+    const d = await pool.query('SELECT d.id, c.phone FROM crm_deals d JOIN crm_clients c ON c.id=d.client_id WHERE d.id=$1',[dealId]);
+    if(!d.rowCount) throw err(404,'сделка не найдена');
+    const phone = d.rows[0].phone;
+    if(!phone) throw err(400,'у клиента нет телефона');
+    const API_KEY = await getApiKey();
+    if(!API_KEY) throw err(503,'WhatsApp ещё не подключён');
+    const to = phone.replace(/\D/g,'');
+    const payload = { messaging_product:'whatsapp', recipient_type:'individual', to, type:'reaction', reaction:{ message_id: wamid, emoji } };
+    try{
+      const resp = await fetch(API_URL+'/messages', { method:'POST', headers:{ 'D360-API-KEY':API_KEY, 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
+      const j = await resp.json().catch(()=>({}));
+      if(!resp.ok){ const se=(typeof j.error==='string'?j.error:(j.error&&(j.error.message||j.error.title)))||j.message||('HTTP '+resp.status); throw err(502,'WhatsApp не принял реакцию: '+se); }
+    } catch(e){ if(e.httpCode) throw e; throw err(502,'сеть/шлюз WhatsApp недоступен'); }
+    await pool.query('UPDATE wa_messages SET reaction=$1 WHERE wamid=$2 AND deal_id=$3',[emoji,wamid,dealId]);
+    res.json({ ok:true, wamid, emoji });
+  }));
+
   // запись из браузера (webm/mp4/ogg) → ogg/opus (формат голосовых WhatsApp) через ffmpeg
   function saveVoice(dataUrl){
     return new Promise((resolve,reject)=>{
-      const m = String(dataUrl||'').match(/^data:(audio\/[\w.+-]+);base64,(.+)$/);
+      // Chrome отдаёт тип с параметром кодека: data:audio/webm;codecs=opus;base64,... — принимаем любые параметры между mime и ;base64,
+      const m = String(dataUrl||'').match(/^data:(audio\/[\w.+-]+)(?:;[\w.+=-]+)*;base64,([\s\S]+)$/);
       if(!m) return reject(err(400,'формат аудио не распознан'));
       const ext=(m[1].split('/')[1]||'webm').replace(/[^\w]/g,'').slice(0,8) || 'webm';
       const id=crypto.randomUUID();
@@ -348,6 +450,7 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     if(!d.rowCount) throw err(404,'сделка не найдена');
     const { client_id, phone } = d.rows[0];
     if(!phone) throw err(400,'у клиента нет телефона');
+    const API_KEY = await getApiKey();
     if(!API_KEY) throw err(503,'WhatsApp ещё не подключён — ключ появится в день переезда');
 
     const oggPath = await saveVoice(audio);                 // '/uploads/<id>.ogg'
@@ -355,10 +458,11 @@ function register(app, { pool, auth, requireAny, withTx, sendPushToRole, uploadD
     const to = phone.replace(/\D/g,'');
     let wamid=null, sendErr='';
     try {
-      const payload = { messaging_product:'whatsapp', recipient_type:'individual', to, type:'audio', audio:{ link } };
+      // voice:true → WhatsApp покажет это как голосовое (волна + мгновенное воспроизведение), а НЕ как файл со «скачать»
+      const payload = { messaging_product:'whatsapp', recipient_type:'individual', to, type:'audio', audio:{ link, voice:true } };
       const resp = await fetch(API_URL+'/messages', { method:'POST', headers:{ 'D360-API-KEY':API_KEY, 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
       const j = await resp.json().catch(()=>({}));
-      if(!resp.ok){ sendErr = (j.error && (j.error.message||j.error.title)) || ('HTTP '+resp.status); throw err(502,'WhatsApp не принял голосовое: '+sendErr); }
+      if(!resp.ok){ sendErr = (typeof j.error==='string'?j.error:(j.error&&(j.error.message||j.error.title)))||j.message||('HTTP '+resp.status); throw err(502,'WhatsApp не принял голосовое: '+sendErr); }
       wamid = (j.messages && j.messages[0] && j.messages[0].id) || null;
     } catch(e){ if(e.httpCode) throw e; throw err(502,'сеть/шлюз WhatsApp недоступен'); }
 
