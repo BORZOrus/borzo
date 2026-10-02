@@ -85,6 +85,7 @@ async function initSchema() {
       paid_ts BIGINT,
       kassa_tx_id TEXT
     );
+    ALTER TABLE bills ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false;
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS sig TEXT;
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS dup BOOLEAN DEFAULT false;
     ALTER TABLE kassa_tx ADD COLUMN IF NOT EXISTS inv_no TEXT DEFAULT '';
@@ -114,7 +115,7 @@ async function sendPushToRole(role, payload){
   const r = await pool.query('SELECT endpoint, sub FROM push_subs WHERE role=$1',[role]);
   for(const row of r.rows){
     try { await webpush.sendNotification(row.sub, JSON.stringify(payload)); }
-    catch(e){ if(e.statusCode===404||e.statusCode===410){ await pool.query('DELETE FROM push_subs WHERE endpoint=$1',[row.endpoint]); } }
+    catch(e){ if(e.statusCode===404||e.statusCode===410||e.statusCode===403){ await pool.query('DELETE FROM push_subs WHERE endpoint=$1',[row.endpoint]); } }
   }
 }
 
@@ -298,6 +299,13 @@ async function bookSupplyExpense(amount, category, note, kassaId, who, db, per, 
   }
   return ok;
 }
+// ЗАРПЛАТА через счёт: Ульяна выплатила сотруднику → операция ложится в котёл как обычная зарплата (salary:{emp,type}), списывается с её отдела (safeTracked, who=ulyana), падает в историю/журнал зарплат как будто её начислил Руслан.
+async function bookSalary(amount, who, emp, salType, per, note, kassaId, db){
+  const type = salType==='advance' ? 'advance' : 'salary';
+  return bookPot({ id:'sal_'+kassaId, ts:Date.now(), per: per||monthPerNow(), kind:'out', acc:'BORZO', project:'BORZO',
+    amount: money(amount), category: type==='advance'?'Аванс':'Зарплата', who: who||'ulyana',
+    salary:{ emp:emp||'', type:type }, note: note||'', safeTracked:true }, db);
+}
 // ВЫДАЧА снабженцу → видимая строка в ленте Финансов (Руслан+Ульяна), НЕ расход (котёл не трогает, из аналитики исключена).
 async function bookSupplyIssue(amount, kassaId, db){
   return bookPot({ id:'supi_'+kassaId, ts:Date.now(), per:monthPerNow(), kind:'issue', project:'BORZO',
@@ -322,11 +330,20 @@ app.post('/api/kassa/issue', auth, requireRole('mgr'), async (req,res)=>{
 
 // подтвердить получение (снабженец)
 app.post('/api/kassa/accept/:id', auth, requireRole('sup'), async (req,res)=>{
-  const r = await pool.query(`UPDATE kassa_tx SET status='accepted' WHERE id=$1 AND kind='issue' AND status='wait' RETURNING id, amount`,[req.params.id]);
-  if(!r.rowCount) return res.status(400).json({error:'нечего подтверждать'});
-  // подтверждённая выдача → видимая строка в ленте Финансов (не расход)
-  await bookSupplyIssue(r.rows[0].amount, r.rows[0].id);
-  res.json({ ok:true });
+  try{
+    // атомарно: пометка «принято» и строка в ленте Финансов в ОДНОЙ транзакции — иначе при сбое выдача принята, а в Финансах её нет (рассинхрон касса↔Финансы без самоизлечения)
+    await withTx(async (c)=>{
+      await c.query('SELECT pg_advisory_xact_lock($1)',[KASSA_LOCK]);
+      const r = await c.query(`UPDATE kassa_tx SET status='accepted' WHERE id=$1 AND kind='issue' AND status='wait' RETURNING id, amount`,[req.params.id]);
+      if(!r.rowCount) throw httpErr(400,'нечего подтверждать');
+      // подтверждённая выдача → видимая строка в ленте Финансов (не расход)
+      await bookSupplyIssue(r.rows[0].amount, r.rows[0].id, c);
+    });
+    res.json({ ok:true });
+  }catch(e){
+    if(e && e.httpCode) return res.status(e.httpCode).json({error:e.message});
+    console.error('accept error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'});
+  }
 });
 
 // расход (снабженец или руководитель — руководитель закупается сам)
@@ -362,8 +379,11 @@ app.post('/api/kassa/expense', auth, requireAny(['sup','mgr']), async (req,res)=
       if(reqId){ const ex = await c.query('SELECT id, dup FROM kassa_tx WHERE req_id=$1',[reqId]); if(ex.rowCount) return { id:ex.rows[0].id, dup:ex.rows[0].dup, potBooked:true, idem:true }; }
       // ограничение «не больше кассы» — для снабженца (его подотчёт), теперь под замком → без гонки перерасхода
       if(actRole==='sup'){ const bal = await balance(c); if(amount > bal) throw httpErr(400,'нельзя списать больше, чем в кассе снабженца (сейчас '+bal+')'); }
-      // защита от дублей: тот же № накладной ИЛИ те же позиции+сумма+категория в ту же дату документа
-      const dupR = await c.query("SELECT to_timestamp(ts/1000) t FROM kassa_tx WHERE kind='expense' AND ((COALESCE(inv_no,'')<>'' AND inv_no=$2) OR (sig=$1 AND ($3='' OR COALESCE(doc_date,'')=$3))) ORDER BY ts DESC LIMIT 1",[sig, invNo||' ', docDate]);
+      // ЖЁСТКАЯ блокировка повторной накладной: один и тот же № накладной нельзя провести дважды — защита от двойного списания при повторном заходе (новый reqId обходил мягкий флаг)
+      if(invNo){ const dupInv = await c.query("SELECT id FROM kassa_tx WHERE kind='expense' AND COALESCE(inv_no,'')<>'' AND inv_no=$1 LIMIT 1",[invNo]);
+        if(dupInv.rowCount) throw httpErr(409,'Накладная № '+invNo+' уже проведена — повторное списание отклонено. Если это другая закупка, укажите другой номер.'); }
+      // мягкий флаг: те же позиции+сумма+категория в ту же дату (возможен ЗАКОННЫЙ повтор — не блокируем, только помечаем)
+      const dupR = await c.query("SELECT to_timestamp(ts/1000) t FROM kassa_tx WHERE kind='expense' AND sig=$1 AND ($2='' OR COALESCE(doc_date,'')=$2) ORDER BY ts DESC LIMIT 1",[sig, docDate]);
       const isDup = dupR.rowCount>0;
       await c.query(`INSERT INTO kassa_tx(id,kind,ts,amount,category,items,invoice,receipt,created_by,sig,dup,inv_no,rec_no,doc_date,req_id) VALUES($1,'expense',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [id, now, amount, req.body.category||'Сырьё', JSON.stringify(cleanItems), invoice, receipt, creator, sig, isDup, invNo, recNo, docDate, reqId]);
@@ -588,6 +608,25 @@ app.get('/api/bills', auth, requireAny(['mgr','fin','sup']), async (req,res)=>{
 });
 // выставить счёт (снабженец или Руслан)
 app.post('/api/bills', auth, requireAny(['mgr','sup']), async (req,res)=>{
+  // ЗАРПЛАТНЫЙ СЧЁТ: Руслан поручает Ульяне выплатить сотруднику (деньги с её отдела, не гоняем через Руслана)
+  if(req.body.kind==='salary'){
+    if(req.user.role!=='mgr') return res.status(403).json({error:'зарплатный счёт выставляет только Руслан'});
+    const emp = String(req.body.emp||'').trim().slice(0,80);
+    if(!emp) return res.status(400).json({error:'выберите сотрудника'});
+    const salType = req.body.salType==='advance' ? 'advance' : 'salary';
+    const per = String(req.body.per||'').slice(0,20) || monthPerNow();
+    const monthName = String(req.body.monthName||'').slice(0,40);
+    const amount = money(req.body.amount);
+    if(amount<=0) return res.status(400).json({error:'укажите сумму'});
+    const note = String(req.body.note||'').slice(0,300);   // куда перечислять (номер карты/получатель)
+    const items = [{ name:(salType==='advance'?'Аванс':'Зарплата')+' · '+emp+(monthName?' · '+monthName:''), emp, salType, per, qty:1, unit:'', price:amount, sum:amount, isSalary:true }];
+    const id = crypto.randomUUID();
+    await pool.query(`INSERT INTO bills(id,ts,created_by,created_role,to_whom,amount,category,items,invoice,inv_no,doc_date,note,status)
+      VALUES($1,$2,$3,$4,'ulyana',$5,'Зарплата',$6,NULL,'','',$7,'wait')`,
+      [id, Date.now(), req.user.id, req.user.role, amount, JSON.stringify(items), note]);
+    sendPushToRole('fin', { title:'BORZO · зарплата на выплату', body:(salType==='advance'?'Аванс':'Зарплата')+' '+emp+' · '+money(amount).toLocaleString('ru-RU')+' ₸ — нажми «Выплатил», когда переведёшь', url:'/fin.html' }).catch(()=>{});
+    return res.json({ ok:true, id });
+  }
   const to = req.body.to==='ulyana' ? 'ulyana' : (req.body.to==='ruslan' ? 'ruslan' : null);
   if(!to) return res.status(400).json({error:'выберите, кому счёт: Ульяне или Руслану'});
   const category = req.body.category==='Сырьё' ? 'Сырьё' : 'Операционка';
@@ -620,6 +659,14 @@ app.post('/api/bills/:id/pay', auth, requireAny(['mgr','fin']), async (req,res)=
       if(b.status!=='wait') throw httpErr(400,'счёт уже '+(b.status==='paid'?'оплачен':'отменён'));
       // платит только адресат: Ульяне → роль fin, Руслану → роль mgr
       if(billRoleForWhom(b.to_whom)!==req.user.role) throw httpErr(403,'этот счёт выставлен не тебе');
+      // ЗАРПЛАТНЫЙ СЧЁТ: Ульяна выплатила сотруднику → зарплата в котёл (история + журнал зарплат), списание с её отдела. Склад/накладную/кассу снабжения НЕ трогаем.
+      if(b.category==='Зарплата'){
+        const it=(Array.isArray(b.items)&&b.items[0])||{};
+        const kassaId=crypto.randomUUID(), now=Date.now();
+        await bookSalary(money(b.amount), b.to_whom, it.emp||'', it.salType||'salary', it.per||monthPerNow(), (it.salType==='advance'?'Аванс':'Зарплата')+' выплачена Ульяной'+(b.note?' · '+b.note:''), kassaId, c);
+        await c.query(`UPDATE bills SET status='paid', paid_by=$1, paid_ts=$2, kassa_tx_id=$3 WHERE id=$4`,[req.user.id, now, kassaId, b.id]);
+        return { kassaId, createdBy:b.created_by, salary:true };
+      }
       const who = b.to_whom;                       // расход спишется с отдела оплатившего
       const items = Array.isArray(b.items)? b.items : [];
       const cat = b.category||'Сырьё';
@@ -644,7 +691,10 @@ app.post('/api/bills/:id/pay', auth, requireAny(['mgr','fin']), async (req,res)=
     });
     // уведомить того, кто выставил счёт
     if(out.createdBy!=null){ const cr=await pool.query('SELECT role FROM users WHERE id=$1',[out.createdBy]);
-      if(cr.rows[0]) sendPushToRole(cr.rows[0].role, { title:'BORZO · счёт оплачен', body:'Твой счёт оплачен — закуп попал в снабжение и на склад', url:'/kassa.html' }).catch(()=>{}); }
+      if(cr.rows[0]){ const msg = out.salary
+        ? { title:'BORZO · зарплата выплачена', body:'Ульяна выплатила зарплату — проведено в финансах', url:'/fin.html' }
+        : { title:'BORZO · счёт оплачен', body:'Твой счёт оплачен — закуп попал в снабжение и на склад', url:'/kassa.html' };
+        sendPushToRole(cr.rows[0].role, msg).catch(()=>{}); } }
     res.json({ ok:true, kassaId:out.kassaId });
   }catch(e){ if(e&&e.httpCode) return res.status(e.httpCode).json({error:e.message}); console.error('bill pay error', e&&e.message); if(!res.headersSent) res.status(500).json({error:'внутренняя ошибка сервера'}); }
 });
@@ -658,6 +708,17 @@ app.post('/api/bills/:id/cancel', auth, requireAny(['mgr','fin','sup']), async (
   const isAddressee = billRoleForWhom(b.to_whom)===req.user.role;
   if(!isCreator && !isAddressee && req.user.role!=='mgr') return res.status(403).json({error:'нет прав отменить этот счёт'});
   await pool.query("UPDATE bills SET status='cancelled' WHERE id=$1",[b.id]);
+  res.json({ ok:true });
+});
+
+// убрать завершённый счёт из своего списка «Мои счета» (создатель прячет оплаченный/отменённый — только из виду, деньги/склад не трогаем)
+app.post('/api/bills/:id/archive', auth, requireAny(['mgr','fin','sup']), async (req,res)=>{
+  const r = await pool.query('SELECT * FROM bills WHERE id=$1',[req.params.id]);
+  const b = r.rows[0];
+  if(!b) return res.status(404).json({error:'счёт не найден'});
+  if(b.created_by!==req.user.id && req.user.role!=='mgr') return res.status(403).json({error:'убрать можно только свой счёт'});
+  if(b.status==='wait') return res.status(400).json({error:'счёт ещё не завершён — убрать нельзя'});
+  await pool.query('UPDATE bills SET archived=true WHERE id=$1',[b.id]);
   res.json({ ok:true });
 });
 
@@ -814,6 +875,29 @@ app.post('/api/push/subscribe', auth, async (req,res)=>{
     ON CONFLICT (endpoint) DO UPDATE SET user_id=EXCLUDED.user_id, role=EXCLUDED.role, sub=EXCLUDED.sub`,
     [sub.endpoint, req.user.id, req.user.role, JSON.stringify(sub)]);
   res.json({ ok:true });
+});
+// отписка (тумблер выключен)
+app.post('/api/push/unsubscribe', auth, async (req,res)=>{
+  const ep = req.body && req.body.endpoint;
+  if(ep) await pool.query('DELETE FROM push_subs WHERE endpoint=$1 AND user_id=$2',[ep, req.user.id]);
+  res.json({ ok:true });
+});
+// статус: сколько подписок у ЭТОГО пользователя на сервере (для «тумблер соответствует действительности»)
+app.get('/api/push/status', auth, async (req,res)=>{
+  const r = await pool.query('SELECT COUNT(*)::int AS n FROM push_subs WHERE user_id=$1',[req.user.id]);
+  res.json({ configured: !!process.env.VAPID_PUBLIC, count: (r.rows[0]&&r.rows[0].n)||0 });
+});
+// тест-пуш САМОМУ СЕБЕ (проверка, что реально доходит)
+app.post('/api/push/test', auth, async (req,res)=>{
+  if(!process.env.VAPID_PUBLIC) return res.status(503).json({error:'push на сервере не настроен'});
+  const r = await pool.query('SELECT endpoint, sub FROM push_subs WHERE user_id=$1',[req.user.id]);
+  if(!r.rowCount) return res.status(400).json({error:'нет активной подписки — включи тумблер'});
+  let sent=0, dead=0;
+  for(const row of r.rows){
+    try { await webpush.sendNotification(row.sub, JSON.stringify({title:'BORZO · проверка', body:'Push работает ✓ Уведомления будут приходить сюда.', url:'/home.html'})); sent++; }
+    catch(e){ if(e.statusCode===404||e.statusCode===410){ await pool.query('DELETE FROM push_subs WHERE endpoint=$1',[row.endpoint]); dead++; } }
+  }
+  res.json({ ok:sent>0, sent, dead });
 });
 
 // CRM uses the existing helpers without modifying other modules.

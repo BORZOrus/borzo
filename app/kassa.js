@@ -57,7 +57,7 @@
   sheet.addEventListener('focusin',function(e){ var t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA')){ setTimeout(function(){ try{ t.scrollIntoView({block:'center',behavior:'smooth'}); }catch(_){} },250); } });
 
   function fail(e){ alert((e&&e.message)||'Ошибка. Проверьте связь.'); }
-  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   // ГГГГ-ММ-ДД → ДД.ММ.ГГГГ (для показа); некорректное — как есть
   function fmtDate(s){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||'')); return m?(m[3]+'.'+m[2]+'.'+m[1]):String(s||''); }
   function refresh(){ return API.kassa().then(function(d){ STATE.balance=d.balance; STATE.tx=d.tx; renderCurrent(); }).catch(function(e){ if((e&&e.message)!=='401') console.warn(e); }); }
@@ -145,7 +145,7 @@
       box.innerHTML = it.length ?
         '<div class="h1">📦 Склад (накопительно)</div><table class="sk"><thead><tr><th>Позиция</th><th style="text-align:right">Всего</th><th style="text-align:right">Сумма</th></tr></thead><tbody>'+
         it.map(function(a){ var pill=a.cat==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Операционка</span>';
-          return '<tr><td>'+a.name+' '+pill+'</td><td style="text-align:right;font-weight:600">'+(Math.round(a.qty*100)/100)+' '+a.unit+'</td><td style="text-align:right" class="muted">'+money(a.sum)+'</td></tr>';
+          return '<tr><td>'+esc(a.name)+' '+pill+'</td><td style="text-align:right;font-weight:600">'+(Math.round(a.qty*100)/100)+' '+esc(a.unit)+'</td><td style="text-align:right" class="muted">'+money(a.sum)+'</td></tr>';
         }).join('')+'</tbody></table>' :
         '<div class="empty">Склад пуст. Позиции появятся после закупок.</div>';
     }).catch(function(){ box.innerHTML='<div class="empty">Не удалось загрузить склад.</div>'; });
@@ -397,13 +397,13 @@
     $('items').innerHTML=buf.items.map(function(it,i){
       var c=catOf(it), syr=c==='Сырьё';
       return '<div class="item-line">'+
-        '<div class="ln1"><input class="nm" placeholder="наименование" value="'+(it.name||'')+'" data-i="'+i+'" data-f="name">'+
+        '<div class="ln1"><input class="nm" placeholder="наименование" value="'+esc(it.name||'')+'" data-i="'+i+'" data-f="name">'+
           (buf.items.length>1?'<button class="del" data-del="'+i+'">✕</button>':'')+'</div>'+
         '<div class="ln2">'+
-          '<input class="qt" inputmode="decimal" placeholder="кол-во" value="'+(it.qty||'')+'" data-i="'+i+'" data-f="qty">'+
+          '<input class="qt" inputmode="decimal" placeholder="кол-во" value="'+esc(it.qty||'')+'" data-i="'+i+'" data-f="qty">'+
           '<button class="un" data-un="'+i+'" title="ед. изм.">'+(it.unit||'шт')+'</button>'+
           '<span class="mult">×</span>'+
-          '<input class="pr" inputmode="decimal" placeholder="цена/ед" value="'+(it.price||'')+'" data-i="'+i+'" data-f="price">'+
+          '<input class="pr" inputmode="decimal" placeholder="цена/ед" value="'+esc(it.price||'')+'" data-i="'+i+'" data-f="price">'+
           '<span class="eq">=</span>'+
           '<span class="rsum" data-sum="'+i+'">'+money(rowSum(it))+'</span>'+
           '<button class="catdot '+(syr?'syr':'gen')+'" data-cat="'+i+'" title="категория позиции">'+(syr?'С':'О')+'</button>'+
@@ -547,12 +547,14 @@
       .catch(function(e){ if($('do-bill'))$('do-bill').disabled=false; fail(e); });
   }
   function billStatusPill(b){ return b.status==='paid'?'<span class="pill pill-doc">оплачен</span>':(b.status==='cancelled'?'<span class="pill pill-nodoc">отменён</span>':'<span class="pill pill-wait">ждёт оплаты</span>'); }
-  function billCard(b,canPay){
+  function billCard(b,canPay,canArchive){
     var toName=b.to_whom==='ulyana'?'Ульяне':'Руслану';
     var title=(b.items&&b.items.length&&b.items[0].name)?esc(b.items[0].name)+(b.items.length>1?' +'+(b.items.length-1):''):'Счёт';
-    var h='<div class="card"><div class="row"><div class="grow"><div style="font-weight:700">🧾 '+title+' · '+money(b.amount)+'</div>'+
+    // галочка «убрать завершённый» — только у завершённых (оплачен/отменён) счетов в «Мои счета»
+    var done=(canArchive && b.status!=='wait')?'<button data-billarchive="'+b.id+'" title="Убрать завершённый счёт из списка" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;background:#123d2e;border:1px solid #1f6b4f;color:#43d39a;font-size:19px;line-height:1;align-self:flex-start;margin-left:8px">✓</button>':'';
+    var h='<div class="card" data-billid="'+b.id+'"><div class="row"><div class="grow"><div style="font-weight:700">🧾 '+title+' · '+money(b.amount)+'</div>'+
       '<div class="muted fz12" style="margin-top:2px">кому: '+toName+' · '+stamp(b.ts)+' '+billStatusPill(b)+'</div>'+
-      (b.note?'<div class="fz12" style="margin-top:3px">'+esc(b.note)+'</div>':'')+'</div></div>';
+      (b.note?'<div class="fz12" style="margin-top:3px">'+esc(b.note)+'</div>':'')+'</div>'+done+'</div>';
     if(canPay && b.status==='wait') h+='<button class="btn btn-ok" data-billpay="'+b.id+'" style="margin-top:10px">✓ Оплатил — провести закуп</button>';
     if(b.status==='wait') h+='<button class="btn btn-ghost" data-billcancel="'+b.id+'" style="margin-top:8px;font-size:13px">Отменить счёт</button>';
     return h+'</div>';
@@ -564,16 +566,22 @@
     var toPay = (R==='mgr') ? billsCache.filter(function(b){return b.to_whom==='ruslan'&&b.status==='wait';}) : [];
     // мои выставленные (ждут/оплачены за 30 дней), чтобы видеть статус
     var lim=Date.now()-30*86400000;
-    var mine = billsCache.filter(function(b){ return b.created_by===(STATE.user&&STATE.user.id) && (b.status==='wait' || (+b.ts)>lim); });
+    var mine = billsCache.filter(function(b){ return b.created_by===(STATE.user&&STATE.user.id) && !b.archived && (b.status==='wait' || (+b.ts)>lim); });
     var h='';
     if(toPay.length) h+='<div class="h1" style="margin:6px 0 8px">🧾 Счета на оплату</div>'+toPay.map(function(b){return billCard(b,true);}).join('');
-    if(mine.length) h+='<div class="h1" style="margin:'+(toPay.length?'14px':'6px')+' 0 8px">🧾 Мои счета</div>'+mine.map(function(b){return billCard(b,false);}).join('');
+    if(mine.length) h+='<div class="h1" style="margin:'+(toPay.length?'14px':'6px')+' 0 8px">🧾 Мои счета</div>'+mine.map(function(b){return billCard(b,false,true);}).join('');
     box.innerHTML=h;
     Array.prototype.forEach.call(box.querySelectorAll('[data-billpay]'),function(b){ b.onclick=function(){
       if(!confirm('Подтвердить оплату? Закуп ляжет в снабжение и на склад, сумма спишется с твоего отдела котла.')) return;
       b.disabled=true; API.billPay(b.getAttribute('data-billpay')).then(function(){ return renderBills(); }).then(refresh).catch(function(e){ b.disabled=false; fail(e); }); }; });
     Array.prototype.forEach.call(box.querySelectorAll('[data-billcancel]'),function(b){ b.onclick=function(){
       if(!confirm('Отменить этот счёт?')) return; API.billCancel(b.getAttribute('data-billcancel')).then(function(){ return renderBills(); }).catch(fail); }; });
+    // галочка «убрать завершённый»: плашка исчезает сразу (оптимистично), на сервере помечается archived
+    Array.prototype.forEach.call(box.querySelectorAll('[data-billarchive]'),function(b){ b.onclick=function(){
+      var id=b.getAttribute('data-billarchive'), card=b.closest('[data-billid]');
+      if(card){ card.style.transition='opacity .18s, height .18s'; card.style.opacity='0'; }
+      API.billArchive(id).then(function(){ var it=billsCache.filter(function(x){return x.id===id;})[0]; if(it)it.archived=true; renderBills(); })
+        .catch(function(e){ if(card)card.style.opacity='1'; fail(e); }); }; });
   }
 
   function doBuy(){
@@ -714,7 +722,7 @@
       $('mgr-sklad').innerHTML = it.length ?
         '<table class="sk"><thead><tr><th>Позиция</th><th style="text-align:right">Всего</th><th style="text-align:right">Сумма</th></tr></thead><tbody>'+
         it.map(function(a){ var pill=a.cat==='Сырьё'?'<span class="pill pill-syr">Сырьё</span>':'<span class="pill pill-gen">Операционка</span>';
-          return '<tr><td>'+a.name+' '+pill+'</td><td style="text-align:right;font-weight:600">'+(Math.round(a.qty*100)/100)+' '+a.unit+'</td><td style="text-align:right" class="muted">'+money(a.sum)+'</td></tr>';
+          return '<tr><td>'+esc(a.name)+' '+pill+'</td><td style="text-align:right;font-weight:600">'+(Math.round(a.qty*100)/100)+' '+esc(a.unit)+'</td><td style="text-align:right" class="muted">'+money(a.sum)+'</td></tr>';
         }).join('')+'</tbody></table>' :
         '<div class="empty">Склад пуст. Позиции появятся после закупок снабженца.</div>';
     }).catch(function(){});

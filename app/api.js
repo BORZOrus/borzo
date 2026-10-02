@@ -7,13 +7,23 @@ window.API = (function(){
   // токен протух → на вход, но с памятью, куда возвращаться
   function expired(){ clearAuth(); var here=location.pathname.replace(/^\//,'')||'index.html'; location.replace('login.html?next='+encodeURIComponent(here)); }
   function req(method, path, body){
+    // таймаут: если сервер/шлюз WhatsApp завис — не держим запрос вечно, а отдаём понятную ошибку
+    var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+    var timedOut=false;
+    var timer = ctrl ? setTimeout(function(){ timedOut=true; ctrl.abort(); }, 30000) : null;
     return fetch('/api'+path, {
       method: method,
       headers: Object.assign({'Content-Type':'application/json'}, token?{'Authorization':'Bearer '+token}:{}),
-      body: body?JSON.stringify(body):undefined
+      body: body?JSON.stringify(body):undefined,
+      signal: ctrl?ctrl.signal:undefined
     }).then(function(r){
+      if(timer) clearTimeout(timer);
       if(r.status===401){ expired(); throw new Error('401'); }
       return r.json().then(function(d){ if(!r.ok){ var er=new Error(d.error||'Ошибка'); er.status=r.status; er.body=d; throw er; } return d; });
+    }, function(e){
+      if(timer) clearTimeout(timer);
+      if(timedOut || (e&&e.name==='AbortError')){ var te=new Error('Долго нет ответа — проверь интернет и попробуй ещё раз'); te.status=0; te.timeout=true; throw te; }
+      var ne=new Error('Нет связи с сервером'); ne.status=0; ne.network=true; throw ne;
     });
   }
   var self;
@@ -40,6 +50,9 @@ window.API = (function(){
     unpropose:   function(id){ return req('POST','/kassa/'+id+'/unpropose'); },
     pushKey:       function(){ return req('GET','/push/pubkey'); },
     pushSubscribe: function(sub){ return req('POST','/push/subscribe',{sub:sub}); },
+    pushUnsub:     function(ep){ return req('POST','/push/unsubscribe',{endpoint:ep}); },
+    pushStatus:    function(){ return req('GET','/push/status'); },
+    pushTest:      function(){ return req('POST','/push/test',{}); },
     approve:     function(id){ return req('POST','/kassa/'+id+'/approve'); },
     reject:      function(id){ return req('POST','/kassa/'+id+'/reject'); },
     finGet:      function(){ return req('GET','/fin'); },
@@ -48,6 +61,7 @@ window.API = (function(){
     billCreate:  function(b){ return req('POST','/bills', b); },
     billPay:     function(id){ return req('POST','/bills/'+id+'/pay'); },
     billCancel:  function(id){ return req('POST','/bills/'+id+'/cancel'); },
+    billArchive: function(id){ return req('POST','/bills/'+id+'/archive'); },
     crm: function(method,path,body){ return req(method,'/crm'+path,body); },
     // WhatsApp (360dialog): статус канала, лента чата, отправка, сброс непрочитанных
     waStatus:   function(){ return req('GET','/wa/status'); },
@@ -56,6 +70,8 @@ window.API = (function(){
     waSendVoice:function(b){ return req('POST','/wa/send-voice', b); },
     waRead:     function(dealId){ return req('POST','/wa/read/'+dealId); },
     waMedia:    function(msgId){ return req('GET','/wa/media/'+msgId); },
+    waTranscribe: function(msgId){ return req('POST','/wa/transcribe/'+msgId); },
+    waReact: function(dealId,wamid,emoji){ return req('POST','/wa/react',{deal_id:dealId,wamid:wamid,emoji:emoji}); },
     logout: logout
   };
   return self;
