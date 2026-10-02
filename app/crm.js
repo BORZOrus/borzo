@@ -530,6 +530,7 @@
     if(ch.length){
       if(confirm('Есть несохранённые изменения текста ('+ch.length+' шт.). Сохранить перед выходом?')){
         ch.forEach(function(c){ setMText(scriptsCache.blocks[c.block].messages[c.mi], c.ta.value); });
+        if(scrLang==='ru') await autoTranslateKz(ch.map(function(c){ return scriptsCache.blocks[c.block].messages[c.mi]; }));   // правили русский → обновляем казахский
         if(!(await saveScripts())){ toast('Не удалось сохранить — проверьте связь'); return; }  // остаёмся, не теряем
         toast('Сохранено');
       }
@@ -545,6 +546,17 @@
     if(last){ last.classList.add('scr-att-new'); setTimeout(function(){ last.classList.remove('scr-att-new'); },1600); }
   }
   function scrInsert(text){ var ta=$('ch-text'); if(ta){ ta.value=(ta.value?ta.value+'\n':'')+text; ta.focus(); try{ ta.dispatchEvent(new Event('input')); }catch(e){} } scrClose(); }
+  // авто-перевод RU→KZ: правим русский текст скрипта → казахская версия (text_kz) сама обновляется.
+  // батч одним запросом; бренды защищены на сервере (Kaspi не станет Caspian). Перевод не критичен: если упал — RU всё равно сохранится.
+  async function autoTranslateKz(msgs){
+    var list=(msgs||[]).filter(function(m){ return m && String(m.text||'').trim(); });
+    if(!list.length) return;
+    try{
+      var r=await api('POST','/translate',{texts:list.map(function(m){return m.text;}),to:'kz'});
+      var tr=(r&&r.translations)||[];
+      list.forEach(function(m,i){ if(tr[i]!=null && String(tr[i]).trim()) m.text_kz=String(tr[i]); });
+    }catch(e){ /* молча: KZ догонит при следующей правке, RU не теряем */ }
+  }
   // сохранить всю базу скриптов (compare-and-swap); при конфликте перечитать
   async function saveScripts(){
     try{ var r=await api('PUT','/scripts',{reqId:uid(),data:scriptsCache,baseRev:scriptsRev}); scriptsRev=r.rev; return true; }
@@ -695,7 +707,9 @@
     else if(act==='send-att'){ var a=msg.attachments[ai]; var at=aTitle(a); scrBtnSend(btn, a.type==='link' ? scrSend((at?at+'\n':'')+a.value) : scrSendMedia(a.value, at)); }
     else if(act==='del-att'){ if(!confirm('Убрать вложение?'))return; msg.attachments.splice(ai,1); if(await saveScripts())scrReopen(block); }
     else if(act==='edit-msg'){ scrInlineText(block,mi); }
-    else if(act==='save-text'){ var wrp=$('scr-body').querySelector('[data-msgwrap="'+cssq(block+'|'+mi)+'"]'); var ta=wrp&&wrp.querySelector('.scr-ta'); if(!ta)return; var nv=ta.value; var prev=mEditText(msg); setMText(msg,nv); btn.disabled=true; if(await saveScripts()){ toast('Сохранено'); btn.disabled=false; } else { setMText(msg,prev); btn.disabled=false; } }
+    else if(act==='save-text'){ var wrp=$('scr-body').querySelector('[data-msgwrap="'+cssq(block+'|'+mi)+'"]'); var ta=wrp&&wrp.querySelector('.scr-ta'); if(!ta)return; var nv=ta.value; var prev=mEditText(msg), prevKz=msg.text_kz; setMText(msg,nv); btn.disabled=true;
+      if(scrLang==='ru'){ btn.textContent='⏳ Перевод…'; await autoTranslateKz([msg]); }   // правка на русском → казахский сам обновляется
+      if(await saveScripts()){ toast(scrLang==='ru'?'Сохранено · казахский обновлён':'Сохранено'); btn.disabled=false; } else { setMText(msg,prev); msg.text_kz=prevKz; btn.disabled=false; btn.textContent='💾 Сохранить'; } }
     else if(act==='cancel-edit'){ scrReopen(block); }
     else if(act==='edit-label'){ var nl=prompt('Ярлык сообщения:',msg.label||''); if(nl!==null){ var p=msg.label; msg.label=nl.trim(); if(await saveScripts())scrReopen(block); else msg.label=p; } }
     else if(act==='del-msg'){ if(!confirm('Удалить это сообщение?'))return; scriptsCache.blocks[block].messages.splice(mi,1); if(await saveScripts())scrReopen(block); }
