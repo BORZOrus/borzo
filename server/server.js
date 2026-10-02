@@ -791,19 +791,25 @@ app.post('/api/scan', auth, requireAny(['sup','mgr']), async (req,res)=>{
     if(gkey){
       const mm = String(image).match(/^data:(image\/\w+);base64,(.+)$/);
       const mime = mm?mm[1]:'image/jpeg', b64 = mm?mm[2]:'';
-      try{
-        const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+(process.env.GEMINI_SCAN_MODEL||'gemini-2.0-flash')+':generateContent?key='+encodeURIComponent(gkey),{
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ contents:[{ parts:[ {text:SCAN_PROMPT}, {inline_data:{mime_type:mime, data:b64}} ] }], generationConfig:{ temperature:0, response_mime_type:'application/json' } })
-        });
-        if(gr.ok){
-          const gj = await gr.json();
-          const gtxt = (((((gj.candidates||[])[0]||{}).content||{}).parts||[])[0]||{}).text || '';
-          const out = parseScan(gtxt);
-          if(out.items.length || out.number || out.date){ console.log('[scan/google] items='+out.items.length+' num='+(out.number||'-')); return res.json(out); }
-          console.warn('[scan] google пустой результат, пробую OpenRouter');
-        } else { console.warn('[scan] google http '+gr.status); }
-      }catch(e){ console.warn('[scan] google err '+e.message); }
+      // каскад моделей: сначала точнее, при 503/перегрузе — lite (стабильнее и дешевле). GEMINI_SCAN_MODEL из env, если задан, идёт первым.
+      const models = [process.env.GEMINI_SCAN_MODEL, 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.1-flash-lite'].filter(Boolean);
+      for(const model of models){
+        try{
+          const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(gkey),{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ contents:[{ parts:[ {text:SCAN_PROMPT}, {inline_data:{mime_type:mime, data:b64}} ] }], generationConfig:{ temperature:0, response_mime_type:'application/json' } })
+          });
+          if(gr.ok){
+            const gj = await gr.json();
+            const gtxt = (((((gj.candidates||[])[0]||{}).content||{}).parts||[])[0]||{}).text || '';
+            const out = parseScan(gtxt);
+            console.log('[scan/google] '+model+' items='+out.items.length+' num='+(out.number||'-'));
+            return res.json(out);
+          }
+          console.warn('[scan] google '+model+' http '+gr.status);
+          if(gr.status!==503 && gr.status!==404 && gr.status!==429) break;   // не перегрузка/отсутствие модели — дальше по моделям смысла нет
+        }catch(e){ console.warn('[scan] google '+model+' err '+e.message); }
+      }
     }
     // 2) OpenRouter (запасной) — та же модель Gemini через него
     const key = process.env.OPENROUTER_API_KEY;
