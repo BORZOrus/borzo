@@ -71,6 +71,10 @@
         }
       }); }
   function cloudPush(){ if(!CLOUD)return; clearTimeout(pushT); pushT=setTimeout(doPush,800); }
+  // досыл немедленно при уходе со страницы (закрытие/сворачивание/переключение вкладки) — чтобы отложенная на 800мс запись не потерялась
+  function flush(){ if(!CLOUD||!synced)return; clearTimeout(pushT); doPush(); }
+  document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden') flush(); });
+  window.addEventListener('pagehide', flush);
   function save(){ localStorage.setItem(KEY,JSON.stringify(DB)); cloudPush(); }
   if(/[?&]reset=1/.test(location.search)){ try{localStorage.removeItem(KEY);}catch(e){} try{history.replaceState({},'',location.pathname);}catch(e){} }
   var DB=load();
@@ -168,6 +172,9 @@
     });
     return b;
   }
+  // Реальный остаток котла BORZO = СУММА его частей (отдел Ульяны + отдел Руслана + Снабжение), привязанных к точке отсчёта 24.09.
+  // ВАЖНО: balance('BORZO') складывает всю историю движений БЕЗ стартового капитала → уходит в большой минус и НЕ равен сумме отделов. Для «котла» используем это.
+  function potBorzo(){ return safeBal('ulyana')+safeBal('ruslan')+potSnab; }
   // сортировка всей истории — дорогая; кэшируем на время одной перерисовки (сбрасывается в начале render), чтобы не сортировать 6+ раз подряд
   var _opsSortedCache=null;
   function opsSorted(){ if(!_opsSortedCache) _opsSortedCache=DB.ops.slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);}); return _opsSortedCache; }
@@ -228,6 +235,7 @@
     var nBurn=burningEmps().length;
     open('<h3>💰 Зарплаты</h3>'+
       '<button class="btn" id="sal-add" style="background:var(--green);color:#04140b;margin-bottom:10px">+ Начислить зарплату / аванс</button>'+
+      (role()!=='ulyana'?'<button class="btn btn-ghost" id="sal-bill" style="margin-bottom:10px">💸 Поручить Ульяне выплатить</button>':'')+
       '<button class="btn btn-ghost" id="adv-open" style="margin-bottom:14px'+(nBurn?';color:var(--red)':'')+'">🔴 Открытые авансы'+(nBurn?' ('+nBurn+')':' — нет')+'</button>'+
       '<div style="font-weight:700;font-size:13px;color:var(--mut);margin:2px 0 8px;text-transform:uppercase">Сотрудники</div>'+
       '<div class="card" style="padding:2px 14px">'+rows+'</div>'+
@@ -235,6 +243,7 @@
       '<button class="btn btn-ghost" id="f-cancel" style="margin-top:8px">Закрыть</button>');
     $('f-cancel').onclick=close;
     $('sal-add').onclick=function(){ formSalary(cfg); };
+    if($('sal-bill'))$('sal-bill').onclick=function(){ formSalaryBill(); };
     $('adv-open').onclick=function(){ formAdvances(cfg); };
     $('emp-add').onclick=function(){ var v=(prompt('Имя сотрудника:')||'').trim(); if(!v)return; if(DB.employees.indexOf(v)<0)DB.employees.push(v); if(!DB.empMeta[v])DB.empMeta[v]={proj:(cfg.fixedProj||'')}; save(); formSalaryHub(cfg); };
     Array.prototype.forEach.call(document.querySelectorAll('[data-emp]'),function(b){b.onclick=function(){formEmployee(b.getAttribute('data-emp'),cfg);};});
@@ -283,7 +292,7 @@
 
   // квадраты проектов с балансом (выбор)
   function squares(id,projects){ return '<div class="fld"><label>Проект — с какого счёта</label><div class="sqs" id="'+id+'">'+
-    projects.map(function(p,i){return '<div class="sq'+(i===0?' on':'')+'" data-v="'+p+'"><div class="n">'+p+'</div><div class="b">'+money(balance(p))+'</div></div>';}).join('')+'</div></div>'; }
+    projects.map(function(p,i){return '<div class="sq'+(i===0?' on':'')+'" data-v="'+p+'"><div class="n">'+p+'</div><div class="b">'+money(p==='BORZO'?potBorzo():balance(p))+'</div></div>';}).join('')+'</div></div>'; }
   function wireSquares(id,onchange){ var box=$(id),val=projects0(box); Array.prototype.forEach.call(box.querySelectorAll('.sq'),function(s){ s.onclick=function(){ Array.prototype.forEach.call(box.querySelectorAll('.sq'),function(x){x.className='sq';}); s.className='sq on'; val=s.getAttribute('data-v'); if(onchange)onchange(val); }; }); return function(){return val;}; }
   function projects0(box){ var f=box.querySelector('.sq.on'); return f?f.getAttribute('data-v'):''; }
 
@@ -402,7 +411,7 @@
     renderSaleList();
   }
   function renderSaleList(){ var el=$('s-list'); if(!el)return; var tot=saleItems.reduce(function(s,i){return s+i.sum;},0);
-    el.innerHTML=(saleItems.length?saleItems.map(function(i,idx){return '<div class="op" style="padding:8px 0"><div style="flex:1"><div class="main-t" style="font-size:13px">'+i.name+'</div><div class="sub-t">'+i.qty+' × '+money(i.price)+'</div></div><div class="amt amt-in">'+money(i.sum)+'</div><button data-del="'+idx+'" style="margin-left:8px;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:6px 9px;cursor:pointer">✕</button></div>';}).join('')+'<div class="anrow" style="border:none;margin-top:4px"><span><b>Итого чек</b></span><b>'+money(tot)+'</b></div>':'<div class="empty" style="padding:12px 0">Добавьте позиции в чек</div>');
+    el.innerHTML=(saleItems.length?saleItems.map(function(i,idx){return '<div class="op" style="padding:8px 0"><div style="flex:1"><div class="main-t" style="font-size:13px">'+esc(i.name)+'</div><div class="sub-t">'+esc(i.qty)+' × '+money(i.price)+'</div></div><div class="amt amt-in">'+money(i.sum)+'</div><button data-del="'+idx+'" style="margin-left:8px;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:6px 9px;cursor:pointer">✕</button></div>';}).join('')+'<div class="anrow" style="border:none;margin-top:4px"><span><b>Итого чек</b></span><b>'+money(tot)+'</b></div>':'<div class="empty" style="padding:12px 0">Добавьте позиции в чек</div>');
     Array.prototype.forEach.call(el.querySelectorAll('[data-del]'),function(b){b.onclick=function(){saleItems.splice(+b.getAttribute('data-del'),1);renderSaleList();};});
   }
   function submitSale(who){
@@ -461,6 +470,29 @@
       if(acct){ op.kind='transfer'; op.from=getProj(); op.to=acct; op.project=getProj(); } else { op.kind='out'; op.acc=getProj(); op.project=getProj(); }
       commit([op]);}); }
 
+  // Руслан поручает Ульяне выплатить зарплату сотруднику (деньги с её отдела котла, через Руслана не гоняем). По одному сотруднику.
+  function formSalaryBill(){
+    open('<h3>💸 Поручить Ульяне выплатить</h3>'+
+      '<div style="font-size:12px;color:var(--mut);margin-bottom:12px">Ульяне придёт на выплату. Она переведёт сотруднику сама и нажмёт «Выплатил» — зарплата ляжет в историю как обычная (спишется с её отдела котла). Через тебя деньги не проходят — ты просто разрешаешь выплату с её котла.</div>'+
+      '<div id="f-empwrap"></div>'+
+      '<div class="fld"><label>Тип</label><div class="chips" id="f-type"><button data-v="salary" class="on">Зарплата</button><button data-v="advance">Аванс</button></div></div>'+
+      '<div id="f-monwrap">'+monthSelect('f-mon',0)+'</div>'+
+      amtField()+
+      '<div class="fld"><label>Куда перечислять (номер карты / получатель)</label><input id="f-note" placeholder="напр. Kaspi 4400 •••• 5678, Айгуль"></div>'+
+      acts('Отправить Ульяне на выплату'));
+    var tp=wireChips('f-type');
+    var list=empsForProject('BORZO');
+    $('f-empwrap').innerHTML='<div class="fld"><label>Сотрудник</label><select id="f-emp">'+(list.length?'':'<option value="">— нет сотрудников —</option>')+list.map(function(e){return '<option>'+esc(e)+'</option>';}).join('')+'<option value="__add">+ добавить сотрудника…</option></select></div>';
+    var s=$('f-emp'); var getEmp=function(){return s.value;};
+    s.onchange=function(){ if(s.value==='__add'){ var v=(prompt('Имя сотрудника:')||'').trim(); if(v){ if(DB.employees.indexOf(v)<0)DB.employees.push(v); if(DB.empMeta&&!DB.empMeta[v])DB.empMeta[v]={proj:'BORZO'}; save(); formSalaryBill(); } else s.selectedIndex=0; } };
+    Array.prototype.forEach.call(document.querySelectorAll('#f-type button'),function(b){var o=b.onclick;b.onclick=function(){o&&o();$('f-monwrap').style.display=(tp()==='advance')?'none':'';};});
+    wireActs(function(){ var a=getAmt(); if(!a)return; var emp=getEmp(); if(!emp||emp==='__add'){alert('Выберите сотрудника');return;}
+      var t=tp(), off=parseInt($('f-mon').value)||0, per=monthPer('f-mon'), monthName=(t==='advance'?'':monthRange(off).name);
+      var note=($('f-note')&&$('f-note').value||'').trim();
+      if(!(window.API&&window.API.billCreate)){ alert('Нет связи с сервером'); return; }
+      window.API.billCreate({kind:'salary',to:'ulyana',emp:emp,salType:t,amount:a,per:per,monthName:monthName,note:note}).then(function(){ close(); alert('Отправлено Ульяне на выплату: '+emp+' · '+money(a)); loadBillsF(); }).catch(function(e){ alert((e&&e.message)||'Ошибка'); });
+    });
+  }
   function formTransfer(){ var accs=PROJECTS.concat(['Зарплата Руслана']);
     open('<h3>⇄ Перевод</h3>'+chips('Откуда',accs,'f-from')+chips('Куда',accs,'f-to')+amtField()+acts('Перевести'));
     var fr=wireChips('f-from'),to=wireChips('f-to');
@@ -807,7 +839,7 @@
     $('op-close').onclick=close;
     if($('op-appr'))$('op-appr').onclick=function(){approveChange(id);close();render();};
     if($('op-rej'))$('op-rej').onclick=function(){rejectChange(id);close();render();};
-    if($('op-edit'))$('op-edit').onclick=function(){ if(o.sale) formEditSale(o); else formEdit(o); };
+    if($('op-edit'))$('op-edit').onclick=function(){ if(o.sale) formEditSale(o); else if(o.credit) formEditCredit(o); else formEdit(o); };
     if($('op-del'))$('op-del').onclick=function(){ if(confirm('Удалить эту операцию? Отменить нельзя. Балансы и зарплаты пересчитаются автоматически.')){ deleteOp(id); close(); render(); } };
     if($('op-delreq'))$('op-delreq').onclick=function(){ proposeDelete(id); close(); render(); alert('Запрос на удаление отправлен Руслану на согласование.'); };
     if($('op-return'))$('op-return').onclick=function(){ formReturn(o); };
@@ -887,6 +919,27 @@
     wireActs(function(){ var a=parseInt($('f-amt').value)||0; if(a<=0){alert('Укажите сумму');return;} var next={amount:a}; if(ctx)next.category=ct(); if(showMonth)next.per=monthPer('f-mon');
       if(needsApproval(o)){ proposeChange(o.id,next); close(); render(); alert('Изменение отправлено Руслану на согласование.'); }
       else { if(o.sale && ('amount' in next)) rescaleSaleItems(o, next.amount); for(var k in next)o[k]=next[k]; touch(o); save(); close(); render(); } });
+  }
+
+  // правка КАРТОЧКИ кредита: название, общий остаток, платёж/мес, дата (а не только сумма, как в общей форме)
+  function formEditCredit(o){
+    if(!o||!o.credit)return; var c=o.credit, paid=creditPaid(o.id);
+    open('<h3>✏️ Изменить кредит</h3>'+
+      '<div class="fld"><label>Название (банк / кому должен)</label><input id="ec-name" value="'+esc(c.name||'')+'"></div>'+
+      '<div class="fld"><label>Общая сумма к выплате (как заводил), ₸</label><input type="number" inputmode="numeric" id="ec-total" value="'+Math.round(creditTotal(o))+'"></div>'+
+      '<div class="fld"><label>Платёж в месяц, ₸</label><input type="number" inputmode="numeric" id="ec-monthly" value="'+(c.monthly||'')+'"></div>'+
+      '<div class="fld"><label>Дата ближайшего погашения</label><input type="date" id="ec-date" value="'+dstr(c.nextDate||addMonthTs(Date.now()))+'"></div>'+
+      '<div style="font-size:12px;color:var(--mut);margin-bottom:10px">Уже погашено: <b>'+money(paid)+'</b> (не трогаю). Осталось = общая сумма − погашено.</div>'+
+      acts('Сохранить'));
+    wireActs(function(){
+      var nm=($('ec-name').value||'').trim()||'Кредит', total=parseInt($('ec-total').value)||0, monthly=parseInt($('ec-monthly').value)||0, nd=dparse($('ec-date').value);
+      if(total<=0){ alert('Укажите общую сумму к выплате'); return; }
+      if(total<paid && !confirm('Общая сумма ('+money(total)+') меньше уже погашенного ('+money(paid)+') — кредит станет закрытым. Продолжить?')) return;
+      c.name=nm; c.total=total; c.monthly=monthly; c.nextDate=nd;
+      if(c.opening) o.amount=total;              // существующий кредит: amount синхронен с общей суммой (плашка читает credit.total)
+      touch(o); save(); close(); render();
+      formCredits(o.who==='ulyana'?{who:'ulyana',fixedProj:'BORZO'}:{who:'ruslan',projects:PROJECTS});   // вернуться к списку кредитов
+    });
   }
 
   // ---------- операции (рендер строк) ----------
@@ -986,7 +1039,7 @@
   var billsCacheF=[];
   function loadBillsF(){ if(!(window.API&&window.API.token&&window.API.bills))return; window.API.bills().then(function(d){ billsCacheF=d.bills||[]; drawBillsF(); }).catch(function(){}); }
   // после оплаты счёта серверная supplyExpense появляется в котле — подтягиваем свежий fin_state, чтобы отдел/котёл сразу пересчитались
-  function pullFin(){ if(!CLOUD)return; window.API.finGet().then(function(res){ var sd=res&&res.data; if(sd&&Array.isArray(sd.ops)){ curRev=(res&&res.rev!=null)?res.rev:curRev; DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); render(); } }).catch(function(){}); }
+  function pullFin(){ if(!CLOUD)return; window.API.finGet().then(function(res){ var sd=res&&res.data; if(sd&&Array.isArray(sd.ops)){ curRev=(res&&res.rev!=null)?res.rev:curRev; var n=sd.ops.length; DB=mergeDB(sd,DB); localStorage.setItem(KEY,JSON.stringify(DB)); render(); if(DB.ops.length>n) doPush(); } }).catch(function(){}); }
   function billStatusPillF(b){ return b.status==='paid'?'<span class="pill" style="background:rgba(40,192,122,.15);color:var(--green)">оплачен</span>':(b.status==='cancelled'?'<span class="pill" style="background:rgba(240,85,92,.15);color:var(--red)">отменён</span>':'<span class="pill" style="background:rgba(240,166,33,.15);color:var(--amber)">ждёт оплаты</span>'); }
   function billItemsStr(b){ return (b.items||[]).map(function(i){return i.name+' ×'+i.qty;}).join(', '); }
   function drawBillsF(){
@@ -995,13 +1048,14 @@
     var h='';
     if(toMe.length){
       h+='<div class="h1" style="color:var(--amber)">🧾 Счёт на оплату ('+toMe.length+')</div>';
-      h+=toMe.map(function(b){ var who=b.by_role==='sup'?'снабженец':'Руслан';
+      h+=toMe.map(function(b){ var who=b.by_role==='sup'?'снабженец':'Руслан'; var isSal=b.category==='Зарплата';
         return '<div class="card" style="border-color:rgba(240,166,33,.5);background:rgba(240,166,33,.06);margin-bottom:10px;padding:12px 14px">'+
-          '<div style="font-weight:700">🧾 '+money(b.amount)+' · '+esc(billItemsStr(b)||b.category)+'</div>'+
-          '<div class="sub-t" style="margin:3px 0 2px">от: '+who+' · '+fdate(b.ts)+' · '+esc(b.category)+(b.note?' · '+esc(b.note):'')+'</div>'+
+          '<div style="font-weight:700">'+(isSal?'💰 ':'🧾 ')+money(b.amount)+' · '+esc(billItemsStr(b)||b.category)+'</div>'+
+          '<div class="sub-t" style="margin:3px 0 2px">от: '+who+' · '+fdate(b.ts)+' · '+esc(b.category)+'</div>'+
+          (b.note?'<div style="margin:4px 0 2px;font-size:13px"><b>'+(isSal?'Куда перечислить: ':'')+'</b>'+esc(b.note)+'</div>':'')+
           (b.invoice?'<a href="'+esc(b.invoice)+'" target="_blank" style="color:var(--blue);font-size:12px">📎 накладная</a>':'')+
-          '<button class="btn" data-bpay="'+b.id+'" style="background:var(--green);color:#04140b;margin-top:10px">✓ Оплатил — провести закуп</button>'+
-          '<button class="btn btn-ghost" data-bcancel="'+b.id+'" style="margin-top:8px;font-size:13px">Отклонить счёт</button>'+
+          '<button class="btn" data-bpay="'+b.id+'" style="background:var(--green);color:#04140b;margin-top:10px">'+(isSal?'✓ Выплатил':'✓ Оплатил — провести закуп')+'</button>'+
+          '<button class="btn btn-ghost" data-bcancel="'+b.id+'" style="margin-top:8px;font-size:13px">'+(isSal?'Отклонить':'Отклонить счёт')+'</button>'+
         '</div>';
       }).join('');
     }
@@ -1015,8 +1069,9 @@
     }
     box.innerHTML=h;
     Array.prototype.forEach.call(box.querySelectorAll('[data-bpay]'),function(b){ b.onclick=function(){
-      if(!confirm('Подтвердить оплату? Закуп ляжет в снабжение и на склад, сумма спишется с твоего отдела котла.'))return;
-      b.disabled=true; window.API.billPay(b.getAttribute('data-bpay')).then(function(){ loadPot(); pullFin(); loadBillsF(); alert('Оплата проведена. Закуп в снабжении, склад пополнен.'); }).catch(function(e){ b.disabled=false; alert((e&&e.message)||'Ошибка'); }); }; });
+      var bid=b.getAttribute('data-bpay'); var bl=billsCacheF.filter(function(x){return x.id===bid;})[0]||{}; var isSal=bl.category==='Зарплата';
+      if(!confirm(isSal?'Подтвердить? Ты уже перевела сотруднику. Зарплата ляжет в историю и спишется с твоего отдела котла.':'Подтвердить оплату? Закуп ляжет в снабжение и на склад, сумма спишется с твоего отдела котла.'))return;
+      b.disabled=true; window.API.billPay(bid).then(function(){ loadPot(); pullFin(); loadBillsF(); alert(isSal?'Зарплата проведена. Записана в историю, списана с твоего отдела.':'Оплата проведена. Закуп в снабжении, склад пополнен.'); }).catch(function(e){ b.disabled=false; alert((e&&e.message)||'Ошибка'); }); }; });
     Array.prototype.forEach.call(box.querySelectorAll('[data-bcancel]'),function(b){ b.onclick=function(){
       if(!confirm('Отменить этот счёт?'))return; window.API.billCancel(b.getAttribute('data-bcancel')).then(loadBillsF).catch(function(e){ alert((e&&e.message)||'Ошибка'); }); }; });
   }
@@ -1106,7 +1161,7 @@
       Array.prototype.forEach.call(rb.querySelectorAll('[data-req]'),function(x){x.onclick=function(){showOp(x.getAttribute('data-req'));};}); }
     $('r-balances').innerHTML=PROJECTS.map(function(p){
       var sub=(p==='BORZO')?'<div style="font-size:10px;color:var(--mut);margin-top:4px">🧑‍💼 Ульяна '+money(safeBal('ulyana'))+' · 👤 я '+money(safeBal('ruslan'))+' · 📦 снаб '+money(potSnab)+'</div>':'';
-      return '<div class="bal"><div class="l">'+p+'</div><div class="v">'+money(balance(p))+'</div>'+sub+'</div>';
+      return '<div class="bal"><div class="l">'+p+'</div><div class="v">'+money(p==='BORZO'?potBorzo():balance(p))+'</div>'+sub+'</div>';
     }).join('');
     wireSearch('s-work',$('r-work-list'),opsSorted().filter(function(o){return PROJECTS.indexOf(o.project)>=0&&!o.family&&!o.supplyExpense;}),'Операций пока нет.');
 
@@ -1116,7 +1171,7 @@
     $('p-balance').textContent=money(balance('zpRuslan'));
     wireSearch('s-pers',$('r-pers-list'),opsSorted().filter(function(o){return (o.kind==='out'&&o.acc==='zpRuslan')||(o.kind==='in'&&o.acc==='zpRuslan')||(o.kind==='transfer'&&o.to==='zpRuslan')||o.family;}),'Личных операций пока нет.');
 
-    $('u-borzo-bal').innerHTML='<div class="bal" style="flex-basis:100%"><div class="l">Общий котёл BORZO</div><div class="v">'+money(balance('BORZO'))+'</div></div>'+
+    $('u-borzo-bal').innerHTML='<div class="bal" style="flex-basis:100%"><div class="l">Общий котёл BORZO</div><div class="v">'+money(potBorzo())+'</div></div>'+
       '<div class="bal" style="border-color:rgba(167,139,250,.4)"><div class="l">🧑‍💼 Мой отдел</div><div class="v" style="color:var(--violet)">'+money(safeBal('ulyana'))+'</div></div>'+
       '<div class="bal" style="border-color:rgba(59,130,246,.4)"><div class="l">👤 Отдел Руслана</div><div class="v" style="color:var(--blue)">'+money(safeBal('ruslan'))+'</div></div>'+
       '<div class="bal" style="border-color:rgba(240,166,33,.4)"><div class="l">📦 Снабжение</div><div class="v" style="color:var(--amber)">'+money(potSnab)+'</div></div>';
@@ -1201,10 +1256,12 @@
       (owner?'<button id="fin-pult" title="Домой" style="'+BTN+'">🏠</button>':'')+
       (owner?'<button id="fin-supply" title="Касса снабжения" style="'+BTN+'">🛒</button>':'')+
       (owner?'<button id="fin-eye" title="Подглядеть кабинет Ульяны" style="'+BTN+'">👁</button>':'')+
+      '<button id="fin-crm" title="CRM · заявки и чаты" style="'+BTN+'">◈</button>'+
       '<button id="fin-gear" title="Настройки" style="'+BTN+'">⚙️</button>'+
       '</div>'; }
     var sup=document.getElementById('fin-supply'); if(sup)sup.onclick=function(){ location.href='kassa.html'; };
     var plt=document.getElementById('fin-pult'); if(plt)plt.onclick=function(){ location.href='home.html'; };
+    var fcrm=document.getElementById('fin-crm'); if(fcrm)fcrm.onclick=function(){ location.href='crm.html'; };
     var rsw=document.querySelector('.roleswitch'); if(rsw)rsw.classList.remove('show');   // сегментный переключатель убран — вместо него глазок
     if(!owner && impBtn&&impBtn.parentNode) impBtn.parentNode.style.display='none';
     var eye=document.getElementById('fin-eye');
@@ -1253,11 +1310,24 @@
       var lc=(DB&&Array.isArray(DB.ops))?DB.ops.length:0;
       curRev = (res&&res.rev!=null) ? res.rev : 0;
       synced = true;                                                              // загрузка завершена — теперь запись на сервер разрешена
-      if(sc>0){ DB=sd; localStorage.setItem(KEY,JSON.stringify(DB)); render(); }  // сервер — источник правды (удаления/связка/правки с других устройств доходят)
+      // раньше: DB=sd слепо затирал локальное → операция, проведённая перед закрытием вкладки и не успевшая уйти (дебаунс 800мс), ПРОПАДАЛА.
+      // теперь сливаем: серверная правда + наши несинхронные операции (mergeDB уважает удаления и берёт свежее по _t); если влили локальные — досылаем.
+      if(sc>0){ DB=mergeDB(sd,DB); localStorage.setItem(KEY,JSON.stringify(DB)); render(); if(DB.ops.length>sc) doPush(); }
       else if(lc>0){ doPush(); }                                                  // сервер пуст, локально есть — первичная миграция вверх
     }).catch(function(){ /* сеть недоступна: synced остаётся false — НЕ затираем сервер вслепую */ });
   } else {
     // без логина песочницы больше нет — только вход (реальные данные, демо отключено)
     location.replace('login.html?next=fin.html');
   }
+  // авто-обновление: если выложена новая версия fin.js — страница сама перезагрузится (при открытии и раз в 90с)
+  (function(){
+    var sc=document.querySelector('script[src*="fin.js"]'); var mine=((sc&&sc.src||'').match(/[?&]v=([\w-]+)/)||[])[1]||'';
+    function check(){ if(!mine)return; fetch('fin.html?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(h){
+      var m=h.match(/fin\.js\?v=([\w-]+)/); var srv=m&&m[1];
+      if(srv&&srv!==mine){ var ae=document.activeElement; if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName))return; if(typeof sheet!=='undefined'&&sheet&&sheet.classList&&sheet.classList.contains('on'))return; location.reload(); }
+    }).catch(function(){}); }
+    setInterval(check,90000);
+    document.addEventListener('visibilitychange',function(){ if(!document.hidden)check(); });
+    window.addEventListener('focus',check);
+  })();
 })();
