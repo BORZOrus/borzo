@@ -33,7 +33,7 @@
   .tile .t .n{font-weight:700;font-size:16px}
   .tile .t .d{font-size:12.5px;color:var(--mut);margin-top:2px}
   .tile .arr{color:var(--mut);font-size:20px}
-  .ic-fin{background:rgba(59,130,246,.15)}.ic-kassa{background:rgba(40,192,122,.15)}.ic-pult{background:rgba(167,139,250,.15)}
+  .ic-fin{background:rgba(59,130,246,.15)}.ic-kassa{background:rgba(40,192,122,.15)}.ic-pult{background:rgba(167,139,250,.15)}.ic-lichnye{background:rgba(240,166,33,.15)}
   .loading{text-align:center;color:var(--mut);padding:40px 0}
 </style>
 </head>
@@ -68,7 +68,8 @@
     $('tiles').innerHTML =
       tile('ic-fin','💳','Финансы','Деньги, продажи, кредиты, аналитика','fin.html')+
       tile('ic-pult','◈','CRM','Заявки, клиенты, продажи','crm.html')+
-      (u.role==='mgr'?tile('ic-kassa','🛒','Касса снабжения','Выдачи, закупы, склад','kassa.html'):'');
+      (u.role==='mgr'?tile('ic-kassa','🛒','Касса снабжения','Выдачи, закупы, склад','kassa.html'):'')+
+      (u.role==='mgr'?tile('ic-lichnye','👛','Мои траты','Быстрый личный расход','quick.html'):'');
   }).catch(function(){ location.replace('login.html'); });
   $('logout').onclick=function(){ API.logout(); };
   $('passbtn').onclick=function(){
@@ -79,5 +80,6 @@
   };
 })();
 </script>
+<script src="install.js?v=1"></script>
 </body>
 </html>
