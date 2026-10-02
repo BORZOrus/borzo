@@ -1,13 +1,13 @@
 {
-  "name": "BORZO Касса",
+  "name": "BORZO",
   "short_name": "BORZO",
-  "start_url": "/login.html",
+  "start_url": "/home.html",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f1115",
-  "theme_color": "#0f1115",
+  "background_color": "#eef1f4",
+  "theme_color": "#008069",
   "icons": [
-    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/icon-home.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-home.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
   ]
 }

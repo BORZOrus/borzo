@@ -1,0 +1,10 @@
+{
+  "name": "BORZO Финансы",
+  "short_name": "Финансы",
+  "start_url": "/fin.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef1f4",
+  "theme_color": "#008069",
+  "icons": [ { "src": "/icon-fin.png", "sizes": "512x512", "type": "image/png" }, { "src": "/icon-fin.png", "sizes": "1024x1024", "type": "image/png" } ]
+}

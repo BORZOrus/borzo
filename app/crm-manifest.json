@@ -1,0 +1,10 @@
+{
+  "name": "BORZO CRM",
+  "short_name": "CRM",
+  "start_url": "/crm.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef1f4",
+  "theme_color": "#008069",
+  "icons": [ { "src": "/icon-crm.png", "sizes": "512x512", "type": "image/png" }, { "src": "/icon-crm.png", "sizes": "1024x1024", "type": "image/png" } ]
+}
