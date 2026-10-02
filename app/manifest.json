@@ -1,13 +1,24 @@
 {
   "name": "BORZO",
   "short_name": "BORZO",
+  "id": "/home.html",
   "start_url": "/home.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#eef1f4",
   "theme_color": "#008069",
   "icons": [
-    { "src": "/icon-home.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-home.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+    {
+      "src": "/icon-home.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-home.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
   ]
 }

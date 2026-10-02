@@ -1,10 +1,22 @@
 {
   "name": "BORZO Снабжение",
   "short_name": "Снабжение",
+  "id": "/kassa.html",
   "start_url": "/kassa.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f1115",
   "theme_color": "#0f1115",
-  "icons": [ { "src": "/icon-snab.png", "sizes": "512x512", "type": "image/png" }, { "src": "/icon-snab.png", "sizes": "1024x1024", "type": "image/png" } ]
+  "icons": [
+    {
+      "src": "/icon-snab.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-snab.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
 }

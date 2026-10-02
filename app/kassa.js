@@ -566,11 +566,13 @@
   function renderBills(){ return API.bills().then(function(d){ billsCache=d.bills||[]; drawBills(); }).catch(function(){}); }
   function drawBills(){
     var R=viewRole||STATE.role, box=$(R==='sup'?'sup-bills':'mgr-bills'); if(!box) return;
+    // ЗАРПЛАТНЫЕ счета в снабжении не показываем — зарплатами занимается Руслан из Финансов, здесь им не место
+    var notSalary=function(b){ return b.category!=='Зарплата'; };
     // счета, адресованные Руслану и ещё не оплаченные — Руслан может оплатить прямо здесь
-    var toPay = (R==='mgr') ? billsCache.filter(function(b){return b.to_whom==='ruslan'&&b.status==='wait';}) : [];
+    var toPay = (R==='mgr') ? billsCache.filter(function(b){return b.to_whom==='ruslan'&&b.status==='wait'&&notSalary(b);}) : [];
     // мои выставленные (ждут/оплачены за 30 дней), чтобы видеть статус
     var lim=Date.now()-30*86400000;
-    var mine = billsCache.filter(function(b){ return b.created_by===(STATE.user&&STATE.user.id) && !b.archived && (b.status==='wait' || (+b.ts)>lim); });
+    var mine = billsCache.filter(function(b){ return b.created_by===(STATE.user&&STATE.user.id) && notSalary(b) && !b.archived && (b.status==='wait' || (+b.ts)>lim); });
     var h='';
     if(toPay.length) h+='<div class="h1" style="margin:6px 0 8px">🧾 Счета на оплату</div>'+toPay.map(function(b){return billCard(b,true);}).join('');
     if(mine.length) h+='<div class="h1" style="margin:'+(toPay.length?'14px':'6px')+' 0 8px">🧾 Мои счета</div>'+mine.map(function(b){return billCard(b,false,true);}).join('');
