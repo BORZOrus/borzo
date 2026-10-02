@@ -277,10 +277,14 @@
   }
 
   // ---------- sheet ----------
-  var sheetBg=$('sheet-bg'),sheet=$('sheet'),body=$('sheet-body');
-  function open(html){ body.innerHTML=html; sheetBg.classList.add('on'); sheet.classList.add('on'); }
-  function close(){ sheetBg.classList.remove('on'); sheet.classList.remove('on'); }
+  var sheetBg=$('sheet-bg'),sheet=$('sheet'),body=$('sheet-body'),finBackPushed=false;
+  function open(html){ var wasOpen=sheet.classList.contains('on'); body.innerHTML=html; sheetBg.classList.add('on'); sheet.classList.add('on');
+    // системная кнопка «назад» (Android) / свайп (iPhone) закрывает окно, а не уводит в прихожую
+    if(!wasOpen && !finBackPushed){ try{ history.pushState({finSheet:1},''); finBackPushed=true; }catch(e){} } }
+  function close(fromPop){ sheetBg.classList.remove('on'); sheet.classList.remove('on');
+    if(fromPop!==true && finBackPushed){ try{ history.back(); }catch(e){} } finBackPushed=false; }
   sheetBg.onclick=close;
+  window.addEventListener('popstate',function(){ if(sheet.classList.contains('on')){ close(true); } });
 
   function amtField(){ return '<div class="fld"><label>Сумма, ₸</label><input type="number" inputmode="numeric" id="f-amt" placeholder="0"></div>'; }
   // выбор «за какой месяц» (для зарплаты/закрытия аванса). value = смещение месяца (0=текущий).

@@ -49,10 +49,14 @@
   }
 
   // ---------- модалка ----------
-  var sheetBg=$('sheet-bg'), sheet=$('sheet'), sheetBody=$('sheet-body'), sheetOpen=false;
-  function openSheet(html){ sheetBody.innerHTML=html; sheetBg.classList.add('on'); sheet.classList.add('on'); sheetOpen=true; }
-  function closeSheet(){ sheetBg.classList.remove('on'); sheet.classList.remove('on'); sheetOpen=false; }
-  sheetBg.addEventListener('click',closeSheet);
+  var sheetBg=$('sheet-bg'), sheet=$('sheet'), sheetBody=$('sheet-body'), sheetOpen=false, kassaBackPushed=false;
+  function openSheet(html){ var wasOpen=sheetOpen; sheetBody.innerHTML=html; sheetBg.classList.add('on'); sheet.classList.add('on'); sheetOpen=true;
+    // «назад» (Android) / свайп (iPhone) закрывает окно, а не уводит в прихожую
+    if(!wasOpen && !kassaBackPushed){ try{ history.pushState({kassaSheet:1},''); kassaBackPushed=true; }catch(e){} } }
+  function closeSheet(fromPop){ sheetBg.classList.remove('on'); sheet.classList.remove('on'); sheetOpen=false;
+    if(fromPop!==true && kassaBackPushed){ try{ history.back(); }catch(e){} } kassaBackPushed=false; }
+  sheetBg.addEventListener('click',function(){ closeSheet(); });
+  window.addEventListener('popstate',function(){ if(sheetOpen){ closeSheet(true); } });
   // клавиатура не должна перекрывать поле — подскроллить активное поле в видимую зону
   sheet.addEventListener('focusin',function(e){ var t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA')){ setTimeout(function(){ try{ t.scrollIntoView({block:'center',behavior:'smooth'}); }catch(_){} },250); } });
 
