@@ -4,7 +4,9 @@
 (function(){
   // уже открыто как приложение (установлено) — ничего не предлагаем
   var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
-  if(standalone) return;
+  if(standalone) return;                       // уже открыто как приложение — молчим
+  var dkey = 'inst_x_' + (location.pathname||'');   // «скрыл» запоминаем для КАЖДОЙ двери отдельно
+  try{ if(localStorage.getItem(dkey)) return; }catch(e){}
   var ua = navigator.userAgent||'';
   var isIOS = /iphone|ipad|ipod/i.test(ua);
   var isAndroid = /android/i.test(ua);
@@ -32,7 +34,7 @@
     bar.innerHTML='<button id="inst-go" style="flex:1;background:#fff;color:#00604e;border:0;border-radius:10px;padding:12px;font-size:15px;font-weight:700;min-height:46px">📲 Установить «'+appName+'» на телефон</button>'+
                   '<button id="inst-x" aria-label="Скрыть" style="flex:0 0 auto;background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:10px;width:46px;height:46px;font-size:18px">✕</button>';
     document.body.appendChild(bar);
-    document.getElementById('inst-x').onclick=remove;
+    document.getElementById('inst-x').onclick=function(){ try{ localStorage.setItem(dkey,'1'); }catch(e){} remove(); };
     document.getElementById('inst-go').onclick=function(){
       if(deferred){ deferred.prompt(); deferred.userChoice.then(function(c){ if(c&&c.outcome==='accepted') remove(); deferred=null; }); }
       else if(isIOS){ iosSteps(); }

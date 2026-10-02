@@ -767,9 +767,47 @@ app.post('/api/scan', auth, requireAny(['sup','mgr']), async (req,res)=>{
   const sk = req.user.id, se = scanHits.get(sk);
   if(se && Date.now()-se.t<600000 && se.n>=30) return res.status(429).json({error:'слишком много распознаваний, подождите'});
   if(!se || Date.now()-se.t>=600000) scanHits.set(sk,{n:1,t:Date.now()}); else se.n++;
-  const key = process.env.OPENROUTER_API_KEY;
-  if(!key) return res.status(500).json({error:'сканер не настроен'});
+  // разбор ответа модели в структуру {items, number, date} — общий для Google и OpenRouter
+  function parseScan(txt){
+    txt = String(txt||'').replace(/```json/gi,'').replace(/```/g,'').trim();
+    let parsed=null;
+    try{ parsed=JSON.parse(txt); }
+    catch(e){ const m=txt.match(/\{[\s\S]*\}/)||txt.match(/\[[\s\S]*\]/); if(m){ try{ parsed=JSON.parse(m[0]); }catch(e2){} } }
+    let items = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.items) ? parsed.items : []);
+    let number = (parsed && !Array.isArray(parsed) && parsed.number!=null) ? String(parsed.number).trim().slice(0,40) : '';
+    let docDate = (parsed && !Array.isArray(parsed) && parsed.date!=null) ? String(parsed.date).trim().slice(0,10) : '';
+    docDate = docDateClean(docDate) || '';
+    items = items.filter(function(i){return i && (i.name||'').toString().trim();}).map(function(i){
+      var unit = ['шт','м','л','кг'].indexOf(i.unit)>=0 ? i.unit : 'шт';
+      var qty = String(i.qty==null?'':i.qty).replace(/\s/g,'').replace(/,/g,'.').replace(/[^\d.]/g,'');
+      var price = String(i.price==null?'':i.price).replace(/\s/g,'').replace(/,/g,'.').replace(/[^\d.]/g,'');
+      return { name:String(i.name).slice(0,120), qty:qty, unit:unit, price:price };
+    });
+    return { items:items, number:number, date:docDate };
+  }
   try{
+    // 1) Google Gemini НАПРЯМУЮ (как перевод): ключ GOOGLE_API_KEY из электроящика. Дёшево/бесплатный лимит, не зависит от OpenRouter.
+    const gkey = (await crm.getSecret(pool,'GOOGLE_API_KEY')) || process.env.GOOGLE_API_KEY;
+    if(gkey){
+      const mm = String(image).match(/^data:(image\/\w+);base64,(.+)$/);
+      const mime = mm?mm[1]:'image/jpeg', b64 = mm?mm[2]:'';
+      try{
+        const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+(process.env.GEMINI_SCAN_MODEL||'gemini-2.0-flash')+':generateContent?key='+encodeURIComponent(gkey),{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ contents:[{ parts:[ {text:SCAN_PROMPT}, {inline_data:{mime_type:mime, data:b64}} ] }], generationConfig:{ temperature:0, response_mime_type:'application/json' } })
+        });
+        if(gr.ok){
+          const gj = await gr.json();
+          const gtxt = (((((gj.candidates||[])[0]||{}).content||{}).parts||[])[0]||{}).text || '';
+          const out = parseScan(gtxt);
+          if(out.items.length || out.number || out.date){ console.log('[scan/google] items='+out.items.length+' num='+(out.number||'-')); return res.json(out); }
+          console.warn('[scan] google пустой результат, пробую OpenRouter');
+        } else { console.warn('[scan] google http '+gr.status); }
+      }catch(e){ console.warn('[scan] google err '+e.message); }
+    }
+    // 2) OpenRouter (запасной) — та же модель Gemini через него
+    const key = process.env.OPENROUTER_API_KEY;
+    if(!key) return res.status(500).json({error:'распознавание не настроено — добавь ключ Google (Gemini) в электроящик (розетка «Google · Gemini»)'});
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions',{
       method:'POST',
       headers:{ 'Authorization':'Bearer '+key, 'Content-Type':'application/json' },
@@ -783,25 +821,10 @@ app.post('/api/scan', auth, requireAny(['sup','mgr']), async (req,res)=>{
       })
     });
     const d = await r.json();
-    let txt = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
-    txt = String(txt).replace(/```json/gi,'').replace(/```/g,'').trim();
-    let parsed = null;
-    try { parsed = JSON.parse(txt); }
-    catch(e){ const m = txt.match(/\{[\s\S]*\}/) || txt.match(/\[[\s\S]*\]/); if(m){ try{ parsed = JSON.parse(m[0]); }catch(e2){} } }
-    let items = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.items) ? parsed.items : []);
-    let number = (parsed && !Array.isArray(parsed) && parsed.number!=null) ? String(parsed.number).trim().slice(0,40) : '';
-    let docDate = (parsed && !Array.isArray(parsed) && parsed.date!=null) ? String(parsed.date).trim().slice(0,10) : '';
-    docDate = docDateClean(docDate) || '';   // будущая/кривая дата с бумаги не подставляется
-    items = items.filter(function(i){return i && (i.name||'').toString().trim();}).map(function(i){
-      var unit = ['шт','м','л','кг'].indexOf(i.unit)>=0 ? i.unit : 'шт';
-      // числа с бумаги приходят и с запятой («1,500» «1334,00») — приводим к точке до чистки
-      var qty = String(i.qty==null?'':i.qty).replace(/\s/g,'').replace(/,/g,'.').replace(/[^\d.]/g,'');
-      var price = String(i.price==null?'':i.price).replace(/\s/g,'').replace(/,/g,'.').replace(/[^\d.]/g,'');
-      return { name:String(i.name).slice(0,120), qty:qty, unit:unit, price:price };
-    });
-    const usage = d.usage || {};
-    console.log('[scan] items='+items.length+' num='+(number||'-')+' date='+(docDate||'-')+' tokens='+(usage.total_tokens||'?'));
-    res.json({ items: items, number: number, date: docDate });
+    if(!r.ok){ console.error('[scan] openrouter http '+r.status, (d&&d.error&&d.error.message)||''); return res.status(502).json({error: r.status===402||r.status===403 ? 'OpenRouter исчерпан — добавь ключ Google (Gemini) в электроящик' : 'не удалось распознать, введите вручную'}); }
+    const out = parseScan((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '');
+    console.log('[scan/openrouter] items='+out.items.length+' num='+(out.number||'-')+' tokens='+((d.usage||{}).total_tokens||'?'));
+    res.json(out);
   }catch(e){ console.error('scan error', e.message); res.status(502).json({error:'не удалось распознать, введите вручную'}); }
 });
 
