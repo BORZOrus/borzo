@@ -737,7 +737,9 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
   }));
   // перевод сообщений чата: при наличии кредита OpenRouter — ИИ (качество как Google), иначе бесплатный MyMemory. Переводим только НЕ-целевой язык.
   let _orCooldown=0;   // если OpenRouter без денег (402/403/429) — временно не дёргаем
-  const trClean=s=>String(s||'').replace(/&quot;/g,'"').replace(/&#3[49];/g,"'").replace(/&apos;/g,"'").replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/^\s*&\s+/,'').trim();
+  // бренды НЕ переводим: Google путает Kaspi → «Caspian/Каспий». Любое искажение возвращаем к фирменному написанию «Kaspi».
+  const fixBrands=s=>String(s||'').replace(/Caspi[a-z]*/gi,'Kaspi').replace(/Каспи[а-яё]*/gi,'Kaspi');
+  const trClean=s=>fixBrands(String(s||'').replace(/&quot;/g,'"').replace(/&#3[49];/g,"'").replace(/&apos;/g,"'").replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/^\s*&\s+/,'').trim());
   router.post('/translate',route(async(req,res)=>{
     const texts=Array.isArray(req.body.texts)?req.body.texts.slice(0,120).map(t=>String(t||'').slice(0,480)):[];
     const toKz=(req.body.to==='kz');
@@ -751,7 +753,7 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
         // экономим лимит: переводим только НЕ на целевом языке, остальные отдаём как есть
         const idx=[], q=[];
         texts.forEach((t,i)=>{ const isKz=kzRe.test(t); if(t.trim() && (toKz?!isKz:isKz)){ idx.push(i); q.push(t); } });
-        if(!q.length) return res.json({translations:texts.map(String)});
+        if(!q.length) return res.json({translations:texts.map(t=>fixBrands(String(t)))});
         const r=await fetch('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(GKEY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,target,format:'text'})});
         if(r.ok){
           const j=await r.json(); const tr=(j.data&&j.data.translations)||[];
@@ -765,7 +767,7 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
       try{
         const to=toKz?'казахский':'русский';
         const payload={model:process.env.TR_MODEL||'openai/gpt-4o-mini',temperature:0.1,messages:[
-          {role:'system',content:'Ты профессиональный переводчик чата (мебель BORZO). Переводи каждый элемент на '+to+' язык грамотно и естественно, сохраняй эмодзи. Если элемент уже на '+to+' языке — верни без изменений. НЕ добавляй символов и пояснений. Ответ — СТРОГО JSON-массив строк той же длины и порядка.'},
+          {role:'system',content:'Ты профессиональный переводчик чата (мебель BORZO). Переводи каждый элемент на '+to+' язык грамотно и естественно, сохраняй эмодзи. Названия брендов НЕ переводи и НЕ транслитерируй — пиши как есть: Kaspi (НЕ «Caspian/Каспий»), BORZO, Halyk, Kaspi Red. Если элемент уже на '+to+' языке — верни без изменений. НЕ добавляй символов и пояснений. Ответ — СТРОГО JSON-массив строк той же длины и порядка.'},
           {role:'user',content:JSON.stringify(texts)}]};
         const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify(payload)});
         if([402,403,429].includes(r.status)){ _orCooldown=Date.now()+10*60*1000; }
@@ -788,7 +790,7 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
       }catch(e){ return q; }
     }
     const out=await Promise.all(texts.map(tr));
-    res.json({translations: out.map(String)});
+    res.json({translations: out.map(x=>fixBrands(String(x)))});
   }));
   router.put('/scripts',mutate(async(req,db)=>{
     const data=req.body.data;
