@@ -471,8 +471,9 @@
       commit([op]);}); }
 
   // Руслан поручает Ульяне выплатить зарплату сотруднику (деньги с её отдела котла, через Руслана не гоняем). По одному сотруднику.
-  function formSalaryBill(){
-    open('<h3>💸 Поручить Ульяне выплатить</h3>'+
+  function formSalaryBill(pre, replaceId){
+    pre=pre||{};
+    open('<h3>'+(replaceId?'✏️ Изменить поручение':'💸 Поручить Ульяне выплатить')+'</h3>'+
       '<div style="font-size:12px;color:var(--mut);margin-bottom:12px">Ульяне придёт на выплату. Она переведёт сотруднику сама и нажмёт «Выплатил» — зарплата ляжет в историю как обычная (спишется с её отдела котла). Через тебя деньги не проходят — ты просто разрешаешь выплату с её котла.</div>'+
       '<div id="f-empwrap"></div>'+
       '<div class="fld"><label>Тип</label><div class="chips" id="f-type"><button data-v="salary" class="on">Зарплата</button><button data-v="advance">Аванс</button></div></div>'+
@@ -486,11 +487,21 @@
     var s=$('f-emp'); var getEmp=function(){return s.value;};
     s.onchange=function(){ if(s.value==='__add'){ var v=(prompt('Имя сотрудника:')||'').trim(); if(v){ if(DB.employees.indexOf(v)<0)DB.employees.push(v); if(DB.empMeta&&!DB.empMeta[v])DB.empMeta[v]={proj:'BORZO'}; save(); formSalaryBill(); } else s.selectedIndex=0; } };
     Array.prototype.forEach.call(document.querySelectorAll('#f-type button'),function(b){var o=b.onclick;b.onclick=function(){o&&o();$('f-monwrap').style.display=(tp()==='advance')?'none':'';};});
+    // префилл при «Изменить»: подставляем сотрудника, тип, месяц, сумму, реквизиты из старого счёта
+    if(pre.emp){ Array.prototype.forEach.call(s.options,function(o){ if(o.value===pre.emp||o.text===pre.emp)s.value=o.value; }); }
+    if(pre.salType){ Array.prototype.forEach.call(document.querySelectorAll('#f-type button'),function(b){ b.classList.toggle('on',b.getAttribute('data-v')===pre.salType); }); $('f-monwrap').style.display=(pre.salType==='advance')?'none':''; }
+    if(typeof pre.off==='number' && $('f-mon')){ $('f-mon').value=pre.off; }
+    if(pre.amount){ $('f-amt').value=pre.amount; }
+    if(pre.note && $('f-note')){ $('f-note').value=pre.note; }
     wireActs(function(){ var a=getAmt(); if(!a)return; var emp=getEmp(); if(!emp||emp==='__add'){alert('Выберите сотрудника');return;}
       var t=tp(), off=parseInt($('f-mon').value)||0, per=monthPer('f-mon'), monthName=(t==='advance'?'':monthRange(off).name);
       var note=($('f-note')&&$('f-note').value||'').trim();
       if(!(window.API&&window.API.billCreate)){ alert('Нет связи с сервером'); return; }
-      window.API.billCreate({kind:'salary',to:'ulyana',emp:emp,salType:t,amount:a,per:per,monthName:monthName,note:note}).then(function(){ close(); alert('Отправлено Ульяне на выплату: '+emp+' · '+money(a)); loadBillsF(); }).catch(function(e){ alert((e&&e.message)||'Ошибка'); });
+      window.API.billCreate({kind:'salary',to:'ulyana',emp:emp,salType:t,amount:a,per:per,monthName:monthName,note:note}).then(function(){
+        var fin=function(){ close(); alert((replaceId?'Изменено и отправлено Ульяне: ':'Отправлено Ульяне на выплату: ')+emp+' · '+money(a)); loadBillsF(); };
+        // при «Изменить» старый счёт отменяем ТОЛЬКО после успешного создания нового (чтобы не потерять, если что-то сорвётся)
+        if(replaceId && window.API.billCancel){ window.API.billCancel(replaceId).then(fin).catch(fin); } else fin();
+      }).catch(function(e){ alert((e&&e.message)||'Ошибка'); });
     });
   }
   function formTransfer(){ var accs=PROJECTS.concat(['Зарплата Руслана']);
@@ -1061,10 +1072,12 @@
     }
     if(me==='ruslan'){
       var lim=Date.now()-30*86400000;
-      var mine=billsCacheF.filter(function(b){ return b.by_role==='mgr' && b.to_whom!=='ruslan' && (b.status==='wait'||b.ts>lim); });
+      // отменённые и убранные НЕ показываем (исчезают сразу); оплаченные видны 30 дней как история
+      var mine=billsCacheF.filter(function(b){ return b.by_role==='mgr' && b.to_whom!=='ruslan' && !b.archived && b.status!=='cancelled' && (b.status==='wait'||b.ts>lim); });
       if(mine.length){ h+='<div class="h1" style="margin-top:'+(toMe.length?'12px':'2px')+'">🧾 Мои выставленные счета</div>'+mine.map(function(b){
+        var edit=(b.status==='wait' && b.category==='Зарплата')?'<button class="btn btn-ghost" data-bedit="'+b.id+'" style="margin-top:8px;margin-right:6px;font-size:13px">✏️ Изменить</button>':'';
         return '<div class="card" style="margin-bottom:8px;padding:10px 14px"><div class="anrow" style="border:none;padding:0"><span>'+esc(billItemsStr(b)||b.category)+' · Ульяне</span><b>'+money(b.amount)+' '+billStatusPillF(b)+'</b></div>'+
-          (b.status==='wait'?'<button class="btn btn-ghost" data-bcancel="'+b.id+'" style="margin-top:8px;font-size:13px">Отменить</button>':'')+'</div>';
+          (b.status==='wait'?edit+'<button class="btn btn-ghost" data-bcancel="'+b.id+'" style="margin-top:8px;font-size:13px">Отменить</button>':'')+'</div>';
       }).join(''); }
     }
     box.innerHTML=h;
@@ -1074,6 +1087,12 @@
       b.disabled=true; window.API.billPay(bid).then(function(){ loadPot(); pullFin(); loadBillsF(); alert(isSal?'Зарплата проведена. Записана в историю, списана с твоего отдела.':'Оплата проведена. Закуп в снабжении, склад пополнен.'); }).catch(function(e){ b.disabled=false; alert((e&&e.message)||'Ошибка'); }); }; });
     Array.prototype.forEach.call(box.querySelectorAll('[data-bcancel]'),function(b){ b.onclick=function(){
       if(!confirm('Отменить этот счёт?'))return; window.API.billCancel(b.getAttribute('data-bcancel')).then(loadBillsF).catch(function(e){ alert((e&&e.message)||'Ошибка'); }); }; });
+    // «Изменить» зарплатное поручение: открываем форму с подставленными данными; на сохранении старый счёт заменяется новым
+    Array.prototype.forEach.call(box.querySelectorAll('[data-bedit]'),function(b){ b.onclick=function(){
+      var id=b.getAttribute('data-bedit'), bl=billsCacheF.filter(function(x){return x.id===id;})[0]; if(!bl)return;
+      var it=(bl.items&&bl.items[0])||{}, off=0; for(var k=0;k>-12;k--){ if(monthRange(k).s===it.per){ off=k; break; } }
+      formSalaryBill({emp:it.emp||'', salType:it.salType||'salary', amount:bl.amount, note:bl.note||'', off:off}, id);
+    }; });
   }
   // фото/скан накладной → сжатый dataURL (PDF/файл — как есть)
   function readPhotoF(file, cb){
