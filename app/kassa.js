@@ -361,7 +361,7 @@
     if(data){
       var prev = isPdf(data)?'<div style="margin-top:6px;font-size:12px">📄 документ</div>':'<img src="'+data+'" style="max-height:44px;margin-top:6px">';
       // значок распознавания — одинаково на накладной и чеке (не PDF), аккуратно внутри слота
-      var ai = !isPdf(data) ? '<button type="button" class="ph-ai" data-scan="'+kind+'" title="Распознать позиции, № и дату" style="position:absolute;top:6px;left:6px;background:var(--k-blue);color:#fff;border:none;border-radius:8px;width:26px;height:26px;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">🪄</button>' : '';
+      var ai = '<button type="button" class="ph-ai" data-scan="'+kind+'" title="Распознать позиции, № и дату (работает и с фото, и с PDF)" style="position:absolute;top:6px;left:6px;background:var(--k-blue);color:#fff;border:none;border-radius:8px;width:26px;height:26px;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">🪄</button>';
       return '<div class="photo has" style="'+base+'">'+ai+'✓ '+label+prev+
         '<button type="button" class="ph-x" data-clr="'+kind+'" style="position:absolute;top:6px;right:6px;background:var(--k-red);color:#fff;border:none;border-radius:8px;width:26px;height:26px;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button></div>';
     }

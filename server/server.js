@@ -762,7 +762,7 @@ const SCAN_PROMPT = 'Ты распознаёшь фото товарной на�
 const scanHits = new Map();
 app.post('/api/scan', auth, requireAny(['sup','mgr']), async (req,res)=>{
   const image = req.body.image;
-  if(!image || !/^data:image\/(jpeg|png|webp)/.test(String(image))) return res.status(400).json({error:'нужно фото (JPEG/PNG/WebP)'});
+  if(!image || !/^data:(image\/(jpeg|png|webp)|application\/pdf)/.test(String(image))) return res.status(400).json({error:'нужно фото (JPEG/PNG/WebP) или PDF'});
   if(String(image).length > 8*1024*1024) return res.status(413).json({error:'фото слишком большое — до 5 МБ'});
   const sk = req.user.id, se = scanHits.get(sk);
   if(se && Date.now()-se.t<600000 && se.n>=30) return res.status(429).json({error:'слишком много распознаваний, подождите'});
@@ -789,7 +789,7 @@ app.post('/api/scan', auth, requireAny(['sup','mgr']), async (req,res)=>{
     // 1) Google Gemini НАПРЯМУЮ: ОТДЕЛЬНЫЙ ключ распознавания GOOGLE_OCR_API_KEY (электроящик снабжения) — независим от CRM/перевода, не зависит от OpenRouter.
     const gkey = (await crm.getSecret(pool,'GOOGLE_OCR_API_KEY')) || process.env.GOOGLE_OCR_API_KEY;
     if(gkey){
-      const mm = String(image).match(/^data:(image\/\w+);base64,(.+)$/);
+      const mm = String(image).match(/^data:([^;]+);base64,(.+)$/);   // image/jpeg|png|webp ИЛИ application/pdf — Gemini читает и PDF
       const mime = mm?mm[1]:'image/jpeg', b64 = mm?mm[2]:'';
       // каскад моделей: сначала точнее, при 503/перегрузе — lite (стабильнее и дешевле). GEMINI_SCAN_MODEL из env, если задан, идёт первым.
       const models = [process.env.GEMINI_SCAN_MODEL, 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.1-flash-lite'].filter(Boolean);
