@@ -805,6 +805,7 @@
       '<button class="btn btn-ghost" id="set-push" style="margin-bottom:8px">🔔 Включить уведомления</button>'+
       '<button class="btn btn-ghost" id="set-theme" style="margin-bottom:8px">🎨 Тема приложения</button>'+
       '<button class="btn btn-ghost" id="set-pass" style="margin-bottom:8px">🔑 Сменить пароль</button>'+
+      ((STATE.user&&STATE.user.login==='ruslan')?'<button class="btn btn-ghost" id="set-ocr" style="margin-bottom:8px">🔌 Ключ распознавания накладных</button>':'')+
       '<button class="btn btn-ghost" id="set-logout" style="margin-bottom:8px;color:var(--k-red)">Выйти из аккаунта</button>'+
       '<button class="btn btn-ghost" id="set-close">Закрыть</button>');
     $('set-close').onclick=closeSheet;
@@ -812,7 +813,31 @@
     $('set-theme').onclick=function(){ openSheet(BorzoTheme.editorHtml()+'<button class="btn btn-ghost" id="th-close" style="margin-top:10px">Закрыть</button>'); BorzoTheme.wireEditor(sheetBody); $('th-close').onclick=closeSheet; };
     $('set-logout').onclick=function(){ API.logout(); };
     $('set-pass').onclick=doPass;
+    if($('set-ocr')) $('set-ocr').onclick=ocrKeyPanel;
   };
+  // электроящик снабжения: ОТДЕЛЬНЫЙ ключ Google (Gemini) только для распознавания накладных/чеков (не CRM, не перевод). Доступ — только Руслан.
+  function ocrKeyPanel(){
+    openSheet('<h3>🔌 Ключ распознавания накладных</h3>'+
+      '<div class="muted fz12" style="margin-bottom:10px">Отдельный независимый ключ Google (Gemini) — только для распознавания накладных и чеков. Не связан с CRM и переводом.<br>Где взять: <b>aistudio.google.com</b> → «Get API key» (получить ключ API).</div>'+
+      '<div id="ocr-stat" class="muted fz12" style="margin-bottom:10px">Проверяю…</div>'+
+      '<div class="fld"><label>Ключ Google (Gemini)</label><input type="password" id="ocr-key" placeholder="вставь ключ" autocomplete="off"></div>'+
+      '<button class="btn btn-give" id="ocr-save">Сохранить и проверить</button>'+
+      '<button class="btn btn-ghost" id="ocr-check" style="margin-top:8px">Проверить ещё раз</button>'+
+      '<button class="btn btn-ghost" id="ocr-del" style="margin-top:8px;color:var(--k-red)">Убрать ключ</button>'+
+      '<button class="btn btn-ghost" id="ocr-close" style="margin-top:8px">Назад</button>');
+    $('ocr-close').onclick=closeSheet;
+    function rq(){ return 'rq_'+Date.now()+'_'+Math.random().toString(36).slice(2,8); }
+    function stat(){ API.crm('GET','/secrets').then(function(r){ var s=((r.status||[]).filter(function(x){return x.name==='GOOGLE_OCR_API_KEY';})[0])||{}; var el=$('ocr-stat'); if(!el)return;
+      el.innerHTML = s.set ? (s.checked ? (s.ok?'<span style="color:#28c07a">● ключ рабочий</span>':'<span style="color:var(--k-red)">● ключ не отвечает или неверный</span>') : '<span style="color:#e0a21a">● сохранён, нажми «Проверить»</span>') : '<span style="color:var(--k-mut)">● ключ не задан — распознавание не работает</span>';
+    }).catch(function(){ var el=$('ocr-stat'); if(el)el.textContent='не удалось получить статус'; }); }
+    stat();
+    $('ocr-save').onclick=function(){ var v=$('ocr-key').value.trim(); if(!v){ alert('Вставь ключ'); return; } var b=this; b.disabled=true; b.textContent='Сохраняю…';
+      API.crm('POST','/secrets',{reqId:rq(),name:'GOOGLE_OCR_API_KEY',value:v}).then(function(){ $('ocr-key').value=''; return API.crm('POST','/secrets/check',{reqId:rq(),name:'GOOGLE_OCR_API_KEY'}); })
+        .then(function(r){ alert(r&&r.ok?'✓ Ключ рабочий — распознавание включено':('✗ '+((r&&r.detail)||'ключ не прошёл проверку'))); b.disabled=false; b.textContent='Сохранить и проверить'; stat(); })
+        .catch(function(e){ b.disabled=false; b.textContent='Сохранить и проверить'; fail(e); }); };
+    $('ocr-check').onclick=function(){ var b=this; b.disabled=true; b.textContent='Проверяю…'; API.crm('POST','/secrets/check',{reqId:rq(),name:'GOOGLE_OCR_API_KEY'}).then(function(r){ alert(r&&r.ok?'✓ Ключ рабочий':('✗ '+((r&&r.detail)||'ошибка'))); b.disabled=false; b.textContent='Проверить ещё раз'; stat(); }).catch(function(e){ b.disabled=false; b.textContent='Проверить ещё раз'; fail(e); }); };
+    $('ocr-del').onclick=function(){ if(!confirm('Убрать ключ распознавания?'))return; API.crm('POST','/secrets',{reqId:rq(),name:'GOOGLE_OCR_API_KEY',value:''}).then(function(){ alert('Ключ убран'); stat(); }).catch(fail); };
+  }
   function doPass(){
     openSheet('<h3>🔑 Смена пароля</h3>'+
       '<div class="fld"><label>Текущий пароль</label><input type="password" id="p-old" autocomplete="current-password"></div>'+

@@ -1321,7 +1321,7 @@
   var AG_ROZETKI=[
     {n:'Anthropic',key:'ANTHROPIC_API_KEY',ru:'мозг агента (Claude: Opus / Sonnet / Haiku / Fable)',where:'console.anthropic.com → API Keys (ключи API) → Create Key (создать ключ)'},
     {n:'OpenAI',key:'OPENAI_API_KEY',ru:'резервный мозг (GPT) для автопереключения',where:'platform.openai.com → API keys (ключи) → Create new secret key (создать секретный ключ)'},
-    {n:'Google · Gemini',key:'GOOGLE_API_KEY',ru:'распознавание накладных/чеков (OCR) + резервный мозг (Gemini). Бесплатный лимит, вместо OpenRouter',where:'aistudio.google.com → Get API key (получить ключ API)'},
+    {n:'Google · Gemini',key:'GOOGLE_API_KEY',ru:'резервный мозг (Gemini)',where:'aistudio.google.com → Get API key (получить ключ API)'},
     {n:'Google Переводчик (Cloud Translation)',key:'GOOGLE_TRANSLATE_API_KEY',ru:'перевод чата и скриптов рус⇄каз (качество Google, 500 000 символов/мес бесплатно)',where:'console.cloud.google.com → New project (новый проект) → включить Cloud Translation API (библиотека) → APIs & Services → Credentials (учётные данные) → Create credentials → API key (ключ)'},
     {n:'OpenRouter',key:'OPENROUTER_API_KEY',ru:'единый доступ к моделям по токенам (не подписка) — для тестов',where:'openrouter.ai → Keys (ключи) → Create Key'},
     {n:'Deepgram',key:'DEEPGRAM_API_KEY',ru:'агент ПОНИМАЕТ голосовые клиента (речь → текст)',where:'console.deepgram.com → API Keys (ключи) → Create a Key (создать ключ)'},

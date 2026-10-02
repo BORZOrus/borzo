@@ -786,8 +786,8 @@ app.post('/api/scan', auth, requireAny(['sup','mgr']), async (req,res)=>{
     return { items:items, number:number, date:docDate };
   }
   try{
-    // 1) Google Gemini НАПРЯМУЮ (как перевод): ключ GOOGLE_API_KEY из электроящика. Дёшево/бесплатный лимит, не зависит от OpenRouter.
-    const gkey = (await crm.getSecret(pool,'GOOGLE_API_KEY')) || process.env.GOOGLE_API_KEY;
+    // 1) Google Gemini НАПРЯМУЮ: ОТДЕЛЬНЫЙ ключ распознавания GOOGLE_OCR_API_KEY (электроящик снабжения) — независим от CRM/перевода, не зависит от OpenRouter.
+    const gkey = (await crm.getSecret(pool,'GOOGLE_OCR_API_KEY')) || process.env.GOOGLE_OCR_API_KEY;
     if(gkey){
       const mm = String(image).match(/^data:(image\/\w+);base64,(.+)$/);
       const mime = mm?mm[1]:'image/jpeg', b64 = mm?mm[2]:'';

@@ -6,7 +6,7 @@ const express = require('express');
 const GATE = 7381, REQUEST = 7382, PHONE = 7383;
 
 // ---- Сейф ключей агента: AES-256-GCM, ключ шифрования выводится из серверного секрета (в БД лежит только шифртекст) ----
-const SECRET_NAMES = ['ANTHROPIC_API_KEY','OPENAI_API_KEY','GOOGLE_API_KEY','GOOGLE_TRANSLATE_API_KEY','DEEPGRAM_API_KEY','ELEVENLABS_API_KEY','OPENROUTER_API_KEY','D360_API_KEY'];
+const SECRET_NAMES = ['ANTHROPIC_API_KEY','OPENAI_API_KEY','GOOGLE_API_KEY','GOOGLE_OCR_API_KEY','GOOGLE_TRANSLATE_API_KEY','DEEPGRAM_API_KEY','ELEVENLABS_API_KEY','OPENROUTER_API_KEY','D360_API_KEY'];
 const SECRETS_KEY = crypto.createHash('sha256').update(process.env.SECRETS_KEY || process.env.JWT_SECRET || 'borzo-secrets-fallback').digest();
 function encSecret(plain){
   const iv = crypto.randomBytes(12);
@@ -29,7 +29,7 @@ async function checkProvider(name, key){
     let r;
     if(name==='ANTHROPIC_API_KEY') r=await fetch('https://api.anthropic.com/v1/models', opt({'x-api-key':key,'anthropic-version':'2023-06-01'}));
     else if(name==='OPENAI_API_KEY') r=await fetch('https://api.openai.com/v1/models', opt({'Authorization':'Bearer '+key}));
-    else if(name==='GOOGLE_API_KEY') r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(key), opt({}));
+    else if(name==='GOOGLE_API_KEY'||name==='GOOGLE_OCR_API_KEY') r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(key), opt({}));
     else if(name==='GOOGLE_TRANSLATE_API_KEY'){
       // реальный тест-перевод: 200 = ключ рабочий; 400/403 = ключ неверный / Translate API не включён; 429 = лимит/нет средств
       r=await fetch('https://translation.googleapis.com/language/translate/v2?key='+encodeURIComponent(key), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:'тест',target:'en',format:'text'}),signal:AbortSignal.timeout(7000)});
