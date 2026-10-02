@@ -748,15 +748,15 @@ app.post('/api/demo/token', async (req,res)=>{
 });
 
 // ---------- реальный сканер накладной (vision через OpenRouter) ----------
-const SCAN_PROMPT = 'Ты распознаёшь фото товарной накладной или чека (может быть на русском/казахском, печатной или от руки). '+
+const SCAN_PROMPT = 'Ты распознаёшь фото или PDF товарной накладной либо чека (Kaspi, Webkassa и т.п.), на русском/казахском, печатной или рукописной. Извлеки ВСЕ данные полностью. '+
   'Верни СТРОГО валидный JSON-объект без пояснений и без markdown: '+
-  '{"number":"номер документа (№ накладной или № чека/фискальный номер), строкой; если номера нет — пустая строка", '+
-  '"date":"дата документа строго в формате ГГГГ-ММ-ДД; возьми дату, напечатанную на накладной/чеке; если даты нет — пустая строка", '+
-  '"items":[{"name":"наименование","qty":"количество числом","unit":"одно из: шт, м, л, кг","price":"цена за ЕДИНИЦУ числом без пробелов и валюты"}]}. '+
-  'Если в накладной дана сумма по строке, а не цена за единицу — раздели сумму на количество. '+
-  'Единицу приведи к шт, м, л или кг (штуки/листы/рулоны/комплекты → шт; метры/погонные метры/метраж плёнки → м; литры → л; килограммы → кг). '+
-  'Фискальный чек (Webkassa и т.п., узкая лента): позиции идут нумерованным списком (1., 2., 3.) и название может переноситься на несколько строк — собери его целиком; строки «Скидка», «НДС», «Стоимость», «Итого», «Сдача», «Наценка», «Мобильные» — это НЕ позиции, пропусти их. '+
-  'Количество бывает дробным («1,500 м» значит 1.5 метра). Все числа возвращай с десятичной ТОЧКОЙ и без пробелов. '+
+  '{"number":"номер документа (№ накладной или фискальный/№ чека) строкой; если нет — пустая строка", '+
+  '"date":"дата документа строго в формате ГГГГ-ММ-ДД. Ищи дату В ЛЮБОМ месте документа (шапка, подвал, рядом с номером или временем). Понимай форматы 09.01.2026, 2026-01-09, «9 января 2026», 09/01/26. Если год не указан — подставь текущий. Если даты реально нет — пустая строка", '+
+  '"items":[{"name":"наименование","qty":"количество числом","unit":"одно из: шт, м, л, кг","price":"ЦЕНА ЗА ЕДИНИЦУ числом","sum":"СУММА по строке числом"}]}. '+
+  'ПРАВИЛО ЦЕН — для КАЖДОЙ позиции заполни ОБА поля price и sum: если дана цена за единицу → price=она, sum=price×qty; если дана только сумма по строке → sum=она, price=sum/qty; если qty не указано → считай qty=1 и price=sum. НИКОГДА не оставляй price или sum пустыми, если рядом с товаром есть хоть одно число. '+
+  'Единицу приведи к шт, м, л или кг (штуки/листы/рулоны/комплекты → шт; метры/погонные/метраж плёнки → м; литры → л; килограммы → кг). '+
+  'Фискальный чек (узкая лента): позиции нумерованы (1., 2., 3.), название может переноситься на несколько строк — собери целиком; строки «Скидка», «НДС», «Стоимость», «Итого», «Сумма к оплате», «Сдача», «Наценка», «Мобильный перевод», «Безналичные», «Наличные» — это НЕ позиции, пропусти их. '+
+  'Количество бывает дробным («1,500 м» = 1.5). Все числа — с десятичной ТОЧКОЙ, без пробелов и без валюты. '+
   'Если позиций нет — items пустой массив.';
 // троттлинг сканера: платный vision-API, не больше 30 распознаваний за 10 минут на пользователя
 const scanHits = new Map();
@@ -777,10 +777,14 @@ app.post('/api/scan', auth, requireAny(['sup','mgr']), async (req,res)=>{
     let number = (parsed && !Array.isArray(parsed) && parsed.number!=null) ? String(parsed.number).trim().slice(0,40) : '';
     let docDate = (parsed && !Array.isArray(parsed) && parsed.date!=null) ? String(parsed.date).trim().slice(0,10) : '';
     docDate = docDateClean(docDate) || '';
+    var num = function(x){ return String(x==null?'':x).replace(/\s/g,'').replace(/,/g,'.').replace(/[^\d.]/g,''); };
     items = items.filter(function(i){return i && (i.name||'').toString().trim();}).map(function(i){
       var unit = ['шт','м','л','кг'].indexOf(i.unit)>=0 ? i.unit : 'шт';
-      var qty = String(i.qty==null?'':i.qty).replace(/\s/g,'').replace(/,/g,'.').replace(/[^\d.]/g,'');
-      var price = String(i.price==null?'':i.price).replace(/\s/g,'').replace(/,/g,'.').replace(/[^\d.]/g,'');
+      var qty = num(i.qty), price = num(i.price), sum = num(i.sum);
+      var nq=parseFloat(qty)||0, np=parseFloat(price)||0, ns=parseFloat(sum)||0;
+      // досчитываем цену, если модель вернула только сумму (частый случай на чеках)
+      if(!np && ns){ if(nq>0){ np = ns/nq; } else { np = ns; qty = qty||'1'; } price = String(Math.round(np*100)/100); }
+      if(!qty) qty = '1';
       return { name:String(i.name).slice(0,120), qty:qty, unit:unit, price:price };
     });
     return { items:items, number:number, date:docDate };
@@ -792,7 +796,7 @@ app.post('/api/scan', auth, requireAny(['sup','mgr']), async (req,res)=>{
       const mm = String(image).match(/^data:([^;]+);base64,(.+)$/);   // image/jpeg|png|webp ИЛИ application/pdf — Gemini читает и PDF
       const mime = mm?mm[1]:'image/jpeg', b64 = mm?mm[2]:'';
       // каскад моделей: сначала точнее, при 503/перегрузе — lite (стабильнее и дешевле). GEMINI_SCAN_MODEL из env, если задан, идёт первым.
-      const models = [process.env.GEMINI_SCAN_MODEL, 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.1-flash-lite'].filter(Boolean);
+      const models = [process.env.GEMINI_SCAN_MODEL, 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-flash-lite-latest', 'gemini-3.1-flash-lite'].filter(Boolean);
       for(const model of models){
         try{
           const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(gkey),{
