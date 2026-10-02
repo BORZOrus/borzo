@@ -133,7 +133,7 @@
   function uid(){ return 'o'+Date.now()+Math.floor(Math.random()*10000); }
   function pad(x){return x<10?'0'+x:''+x;}
   // время операций всегда по Астане (Asia/Almaty), независимо от часового пояса устройства
-  function almP(ts){ var p={}; try{ new Intl.DateTimeFormat('ru-RU',{timeZone:'Asia/Almaty',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(ts)).forEach(function(x){p[x.type]=x.value;}); if(p.hour==='24')p.hour='00'; }catch(e){ var d=new Date(ts); p={day:pad(d.getDate()),month:pad(d.getMonth()+1),year:''+d.getFullYear(),hour:pad(d.getHours()),minute:pad(d.getMinutes())}; } return p; }
+  function almP(ts){ if(typeof ts==='string' && /^\d+$/.test(ts)) ts=Number(ts); /* BIGINT из API приходит строкой → иначе дата = NaN */ var p={}; try{ new Intl.DateTimeFormat('ru-RU',{timeZone:'Asia/Almaty',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(ts)).forEach(function(x){p[x.type]=x.value;}); if(p.hour==='24')p.hour='00'; }catch(e){ var d=new Date(ts); p={day:pad(d.getDate()),month:pad(d.getMonth()+1),year:''+d.getFullYear(),hour:pad(d.getHours()),minute:pad(d.getMinutes())}; } return p; }
   function fdate(ts){ var p=almP(ts); return p.day+'.'+p.month+' '+p.hour+':'+p.minute; }
   function fdate2(ts){ var p=almP(ts); return p.day+'.'+p.month+'.'+p.year+' '+p.hour+':'+p.minute; }
   var MON=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
@@ -1074,8 +1074,8 @@
              '<div style="font-weight:700;font-size:15px">👤 '+empLine+'</div>'+
              '<div style="font-weight:800;font-size:22px;margin:6px 0 10px">'+money(b.amount)+'</div>';
           if(b.note){ c+='<div style="display:flex;gap:8px;align-items:center;margin:2px 0 6px">'+
-              '<div style="flex:1;font-size:18px;font-weight:700;letter-spacing:.5px;word-break:break-all">'+esc(b.note)+'</div>'+
-              '<button class="btn" data-copy="'+esc(b.note)+'" style="flex:0 0 auto;padding:8px 12px;min-height:40px;font-size:13px">📋 Копировать</button></div>'; }
+              '<div style="flex:1;min-width:0;font-size:18px;font-weight:700;letter-spacing:.5px;overflow-wrap:anywhere">'+esc(b.note)+'</div>'+
+              '<button data-copy="'+esc(b.note)+'" style="flex:0 0 auto;width:auto;padding:9px 12px;min-height:40px;font-size:13px;font-weight:700;background:var(--green);color:#04140b;border:0;border-radius:10px;white-space:nowrap">📋 Копировать</button></div>'; }
           if(it.payName){ c+='<div style="font-size:13px;color:var(--mut);margin-bottom:2px">Владелец карты: <b style="color:var(--ink)">'+esc(it.payName)+'</b></div>'; }
         } else {
           c+='<div style="font-weight:700">🧾 '+money(b.amount)+' · '+esc(billItemsStr(b)||b.category)+'</div>'+
