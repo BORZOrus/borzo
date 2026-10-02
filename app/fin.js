@@ -483,7 +483,8 @@
       '<div class="fld"><label>Тип</label><div class="chips" id="f-type"><button data-v="salary" class="on">Зарплата</button><button data-v="advance">Аванс</button></div></div>'+
       '<div id="f-monwrap">'+monthSelect('f-mon',0)+'</div>'+
       amtField()+
-      '<div class="fld"><label>Куда перечислять (номер карты / получатель)</label><input id="f-note" placeholder="напр. Kaspi 4400 •••• 5678, Айгуль"></div>'+
+      '<div class="fld"><label>Номер карты (или телефон для перевода)</label><input id="f-card" inputmode="numeric" placeholder="напр. 4400 4301 1234 5678"></div>'+
+      '<div class="fld"><label>Имя владельца карты</label><input id="f-name" placeholder="напр. Галия К."></div>'+
       acts('Отправить Ульяне на выплату'));
     var tp=wireChips('f-type');
     var list=empsForProject('BORZO');
@@ -496,12 +497,13 @@
     if(pre.salType){ Array.prototype.forEach.call(document.querySelectorAll('#f-type button'),function(b){ b.classList.toggle('on',b.getAttribute('data-v')===pre.salType); }); $('f-monwrap').style.display=(pre.salType==='advance')?'none':''; }
     if(typeof pre.off==='number' && $('f-mon')){ $('f-mon').value=pre.off; }
     if(pre.amount){ $('f-amt').value=pre.amount; }
-    if(pre.note && $('f-note')){ $('f-note').value=pre.note; }
+    if(pre.card && $('f-card')){ $('f-card').value=pre.card; }
+    if(pre.name && $('f-name')){ $('f-name').value=pre.name; }
     wireActs(function(){ var a=getAmt(); if(!a)return; var emp=getEmp(); if(!emp||emp==='__add'){alert('Выберите сотрудника');return;}
       var t=tp(), off=parseInt($('f-mon').value)||0, per=monthPer('f-mon'), monthName=(t==='advance'?'':monthRange(off).name);
-      var note=($('f-note')&&$('f-note').value||'').trim();
+      var card=($('f-card')&&$('f-card').value||'').trim(), payName=($('f-name')&&$('f-name').value||'').trim();
       if(!(window.API&&window.API.billCreate)){ alert('Нет связи с сервером'); return; }
-      window.API.billCreate({kind:'salary',to:'ulyana',emp:emp,salType:t,amount:a,per:per,monthName:monthName,note:note}).then(function(){
+      window.API.billCreate({kind:'salary',to:'ulyana',emp:emp,salType:t,amount:a,per:per,monthName:monthName,note:card,payName:payName}).then(function(){
         var fin=function(){ close(); alert((replaceId?'Изменено и отправлено Ульяне: ':'Отправлено Ульяне на выплату: ')+emp+' · '+money(a)); loadBillsF(); };
         // при «Изменить» старый счёт отменяем ТОЛЬКО после успешного создания нового (чтобы не потерять, если что-то сорвётся)
         if(replaceId && window.API.billCancel){ window.API.billCancel(replaceId).then(fin).catch(fin); } else fin();
@@ -1064,14 +1066,26 @@
     if(toMe.length){
       h+='<div class="h1" style="color:var(--amber)">🧾 Счёт на оплату ('+toMe.length+')</div>';
       h+=toMe.map(function(b){ var who=b.by_role==='sup'?'снабженец':'Руслан'; var isSal=b.category==='Зарплата';
-        return '<div class="card" style="border-color:rgba(240,166,33,.5);background:rgba(240,166,33,.06);margin-bottom:10px;padding:12px 14px">'+
-          '<div style="font-weight:700">'+(isSal?'💰 ':'🧾 ')+money(b.amount)+' · '+esc(billItemsStr(b)||b.category)+'</div>'+
-          '<div class="sub-t" style="margin:3px 0 2px">от: '+who+' · '+fdate(b.ts)+' · '+esc(b.category)+'</div>'+
-          (b.note?'<div style="margin:4px 0 2px;font-size:13px"><b>'+(isSal?'Куда перечислить: ':'')+'</b>'+esc(b.note)+'</div>':'')+
-          (b.invoice?'<a href="'+esc(b.invoice)+'" target="_blank" style="color:var(--blue);font-size:12px">📎 накладная</a>':'')+
-          '<button class="btn" data-bpay="'+b.id+'" style="background:var(--green);color:#04140b;margin-top:10px">'+(isSal?'✓ Выплатил':'✓ Оплатил — провести закуп')+'</button>'+
-          '<button class="btn btn-ghost" data-bcancel="'+b.id+'" style="margin-top:8px;font-size:13px">'+(isSal?'Отклонить':'Отклонить счёт')+'</button>'+
-        '</div>';
+        var c='<div class="card" style="border-color:rgba(240,166,33,.5);background:rgba(240,166,33,.06);margin-bottom:10px;padding:12px 14px">';
+        if(isSal){
+          var it=(b.items&&b.items[0])||{};
+          var empLine=esc(it.emp||'сотрудник')+(it.salType==='advance'?' · аванс':'')+(it.monthName?' · '+esc(it.monthName):'');
+          c+='<div class="sub-t" style="margin-bottom:3px">От Руслана · накладная на выплату зарплаты</div>'+
+             '<div style="font-weight:700;font-size:15px">👤 '+empLine+'</div>'+
+             '<div style="font-weight:800;font-size:22px;margin:6px 0 10px">'+money(b.amount)+'</div>';
+          if(b.note){ c+='<div style="display:flex;gap:8px;align-items:center;margin:2px 0 6px">'+
+              '<div style="flex:1;font-size:18px;font-weight:700;letter-spacing:.5px;word-break:break-all">'+esc(b.note)+'</div>'+
+              '<button class="btn" data-copy="'+esc(b.note)+'" style="flex:0 0 auto;padding:8px 12px;min-height:40px;font-size:13px">📋 Копировать</button></div>'; }
+          if(it.payName){ c+='<div style="font-size:13px;color:var(--mut);margin-bottom:2px">Владелец карты: <b style="color:var(--ink)">'+esc(it.payName)+'</b></div>'; }
+        } else {
+          c+='<div style="font-weight:700">🧾 '+money(b.amount)+' · '+esc(billItemsStr(b)||b.category)+'</div>'+
+             '<div class="sub-t" style="margin:3px 0 2px">от: '+who+' · '+fdate(b.ts)+' · '+esc(b.category)+'</div>'+
+             (b.note?'<div style="margin:4px 0 2px;font-size:13px">'+esc(b.note)+'</div>':'')+
+             (b.invoice?'<a href="'+esc(b.invoice)+'" target="_blank" style="color:var(--blue);font-size:12px">📎 накладная</a>':'');
+        }
+        c+='<button class="btn" data-bpay="'+b.id+'" style="background:var(--green);color:#04140b;margin-top:10px">'+(isSal?'✓ Выплатил':'✓ Оплатил — провести закуп')+'</button>'+
+           '<button class="btn btn-ghost" data-bcancel="'+b.id+'" style="margin-top:8px;font-size:13px">'+(isSal?'Отклонить':'Отклонить счёт')+'</button></div>';
+        return c;
       }).join('');
     }
     if(me==='ruslan'){
@@ -1095,9 +1109,16 @@
     Array.prototype.forEach.call(box.querySelectorAll('[data-bedit]'),function(b){ b.onclick=function(){
       var id=b.getAttribute('data-bedit'), bl=billsCacheF.filter(function(x){return x.id===id;})[0]; if(!bl)return;
       var it=(bl.items&&bl.items[0])||{}, off=0; for(var k=0;k>-12;k--){ if(monthRange(k).s===it.per){ off=k; break; } }
-      formSalaryBill({emp:it.emp||'', salType:it.salType||'salary', amount:bl.amount, note:bl.note||'', off:off}, id);
+      formSalaryBill({emp:it.emp||'', salType:it.salType||'salary', amount:bl.amount, card:bl.note||'', name:it.payName||'', off:off}, id);
+    }; });
+    // «Копировать» номер карты — Ульяна копирует и вставляет в банк
+    Array.prototype.forEach.call(box.querySelectorAll('[data-copy]'),function(b){ b.onclick=function(){
+      var v=b.getAttribute('data-copy')||'', ok=function(){ var t=b.textContent; b.textContent='✓ Скопировано'; setTimeout(function(){ b.textContent=t; },1500); };
+      if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(v).then(ok).catch(function(){ fallbackCopy(v); ok(); }); }
+      else { fallbackCopy(v); ok(); }
     }; });
   }
+  function fallbackCopy(v){ try{ var t=document.createElement('textarea'); t.value=v; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.focus(); t.select(); document.execCommand('copy'); document.body.removeChild(t); }catch(e){} }
   // фото/скан накладной → сжатый dataURL (PDF/файл — как есть)
   function readPhotoF(file, cb){
     var r=new FileReader();

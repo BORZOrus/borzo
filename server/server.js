@@ -618,8 +618,9 @@ app.post('/api/bills', auth, requireAny(['mgr','sup']), async (req,res)=>{
     const monthName = String(req.body.monthName||'').slice(0,40);
     const amount = money(req.body.amount);
     if(amount<=0) return res.status(400).json({error:'укажите сумму'});
-    const note = String(req.body.note||'').slice(0,300);   // куда перечислять (номер карты/получатель)
-    const items = [{ name:(salType==='advance'?'Аванс':'Зарплата')+' · '+emp+(monthName?' · '+monthName:''), emp, salType, per, qty:1, unit:'', price:amount, sum:amount, isSalary:true }];
+    const note = String(req.body.note||'').slice(0,300);       // номер карты/телефон для перевода (копируется Ульяной)
+    const payName = String(req.body.payName||'').trim().slice(0,80);   // имя владельца карты (Ульяна сверяет при переводе)
+    const items = [{ name:(salType==='advance'?'Аванс':'Зарплата')+' · '+emp+(monthName?' · '+monthName:''), emp, salType, per, monthName, payName, qty:1, unit:'', price:amount, sum:amount, isSalary:true }];
     const id = crypto.randomUUID();
     await pool.query(`INSERT INTO bills(id,ts,created_by,created_role,to_whom,amount,category,items,invoice,inv_no,doc_date,note,status)
       VALUES($1,$2,$3,$4,'ulyana',$5,'Зарплата',$6,NULL,'','',$7,'wait')`,
