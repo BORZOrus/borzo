@@ -957,8 +957,13 @@
         if(recording) return;
         if(!navigator.mediaDevices||!window.MediaRecorder){ toast('Запись не поддерживается этим браузером'); return; }
         if(!waConnected){ toast('WhatsApp подключится в день переезда — голосовое пока не уходит'); return; }
+        try{ recStream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+        catch(err){ var nm=(err&&err.name)||'';
+          if(nm==='NotAllowedError'||nm==='SecurityError') toast('Микрофон запрещён. Разреши доступ к микрофону — или открой чат в Safari/Chrome, а не с установленной иконки (на айфоне с иконки микрофон часто не пускает).');
+          else if(nm==='NotFoundError') toast('Микрофон не найден на устройстве');
+          else toast('Не удалось включить микрофон'+(nm?' ('+nm+')':''));
+          return; }
         try{
-          recStream=await navigator.mediaDevices.getUserMedia({audio:true});
           recCancelled=false;
           // iOS Safari умеет писать только mp4/aac (не webm) — подбираем поддерживаемый формат, иначе запись пустая
           var isIOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -971,7 +976,7 @@
             recording=false; stopRecViz(); showRecbar(false); $('ch-mic').classList.remove('rec');
             if(recCancelled){ chunks=[]; return; }
             var blob=new Blob(chunks,{type:(mediaRec&&mediaRec.mimeType)||'audio/webm'});
-            if(!blob.size){ toast('Запись не получилась — попробуй ещё раз'); return; }
+            if(!blob.size){ toast('Запись пустая. На айфоне открывай чат в Safari — с установленной иконки микрофон может не писать.'); return; }
             try{ var data=await fileData(blob); await API.waSendVoice({deal_id:d.id, audio:data, reqId:uid()}); await poll(); }
             catch(e){ if(e&&e.status===503) toast('WhatsApp ещё не подключён'); else toast(error(e)); }
           };
@@ -994,7 +999,7 @@
             (function draw(){ recRAF=requestAnimationFrame(draw); an.getByteFrequencyData(data);
               for(var i=0;i<N;i++){ var v=data[Math.floor(i/N*bins)]||0; if(bars[i])bars[i].style.height=Math.max(12,Math.round(v/255*100))+'%'; } })();
           }catch(e){}
-        }catch(e){ toast('Нет доступа к микрофону'); }
+        }catch(e){ toast('Не удалось начать запись'+(e&&e.name?' ('+e.name+')':'')); }
       };
       if($('ch-rec-send')) $('ch-rec-send').onclick=function(){ if(recording){ try{ mediaRec.stop(); }catch(e){} } };
       if($('ch-rec-cancel')) $('ch-rec-cancel').onclick=function(){ if(recording){ recCancelled=true; try{ mediaRec.stop(); }catch(e){} } };
