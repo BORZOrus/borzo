@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Тест-арена · BORZO</title>
+<style>
+:root{--blue:#008069;--ink:#111b21;--mut:#667781;--line:#e9edef;--bg:#eef1f4}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+.top{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;flex-wrap:wrap}
+.top h1{font-size:18px;margin:0}.badge{font-size:12px;background:#fff4d6;border:1px solid #eadfa8;color:#7a5d00;border-radius:8px;padding:3px 8px}
+button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:9px 13px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(17,27,33,.06)}
+button.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+button:disabled{opacity:.55}
+.board{display:flex;gap:12px;overflow-x:auto;padding:12px;align-items:flex-start}
+.col{flex:0 0 260px;background:#d9e0e6;border:1px solid #cfd8de;border-radius:14px;max-height:calc(100dvh - 140px);overflow-y:auto}
+.col h3{position:sticky;top:0;margin:0;padding:9px 12px;font-size:14px;background:#d9e0e6;border-bottom:1px solid #cfd8de;z-index:5}
+.col h3 .n{color:var(--mut);font-weight:600}
+.card{background:#fff;border-radius:11px;margin:8px;padding:10px;box-shadow:0 1px 3px rgba(17,27,33,.10);cursor:pointer}
+.card b{font-size:15px}.card .p{font-size:12px;color:#7a5d00;background:#fff4d6;border-radius:6px;padding:1px 6px;display:inline-block;margin-left:4px}
+.card .last{font-size:13px;color:var(--mut);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.sheet{position:fixed;inset:0;background:rgba(17,27,33,.45);display:none;z-index:50}
+.sheet.on{display:flex;align-items:stretch;justify-content:flex-end}
+.panel{background:#fff;width:min(640px,100%);display:flex;flex-direction:column}
+.ph{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.ph h2{font-size:16px;margin:0;flex:1}
+.chat{flex:1;overflow-y:auto;padding:12px;background:#efeae2}
+.msg{max-width:82%;padding:8px 11px;border-radius:10px;margin:5px 0;font-size:14.5px;white-space:pre-wrap;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+.in{background:#fff;margin-right:auto}.out{background:#d9fdd3;margin-left:auto}
+.meta{font-size:11px;color:var(--mut);margin-top:3px;text-align:right}
+.pa{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);flex-wrap:wrap;background:#fff}
+.note{font-size:12.5px;color:var(--mut);padding:8px 14px;white-space:pre-wrap;border-bottom:1px solid var(--line);max-height:120px;overflow-y:auto}
+.rev{background:#f6f8fa;border:1px solid var(--line);border-radius:10px;margin:10px;padding:10px;font-size:13px;white-space:pre-wrap}
+.sug{background:#fff;border:1px solid var(--line);border-radius:11px;margin:10px;padding:12px;font-size:14px}
+.sug .st{font-size:12px;color:var(--mut)}
+.spin{display:inline-block;animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#111b21;color:#fff;border-radius:10px;padding:10px 16px;font-size:14px;display:none;z-index:99;max-width:90%}
+select{border:1px solid var(--line);border-radius:10px;padding:8px;font-size:14px}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>🧪 Тест-арена</h1><span class="badge">песочница — на живых клиентов НЕ влияет</span>
+  <span style="flex:1"></span>
+  <button class="pri" id="b-new">+ Клиент</button>
+  <button id="b-auto">▶ Авто ×5</button>
+  <button id="b-sug">💡 Предложения Линды <span id="sug-n"></span></button>
+  <button id="b-reset" title="Стереть всю песочницу">🗑</button>
+  <button onclick="location.href='crm.html'">← CRM</button>
+</div>
+<div class="board" id="board"></div>
+
+<div class="sheet" id="sheet"><div class="panel">
+  <div class="ph"><h2 id="p-title"></h2>
+    <select id="p-stage"></select>
+    <button onclick="closeSheet()">✕</button></div>
+  <div class="note" id="p-note" style="display:none"></div>
+  <div class="chat" id="p-chat"></div>
+  <div id="p-revs"></div>
+  <div class="pa">
+    <button id="b-client">💬 Ход клиента</button>
+    <button class="pri" id="b-linda">🤖 Ответ Линды</button>
+    <button id="b-review">🧐 Разбор аудитора</button>
+  </div>
+</div></div>
+
+<div class="sheet" id="sug-sheet"><div class="panel">
+  <div class="ph"><h2>💡 Предложения Линды по скрипту</h2><button onclick="document.getElementById('sug-sheet').classList.remove('on')">✕</button></div>
+  <div style="flex:1;overflow-y:auto" id="sug-list"></div>
+</div></div>
+<div id="toast"></div>
+
+<script>
+(function(){
+  var token=localStorage.getItem('borzo_token');
+  if(!token){location.replace('login.html?next=arena.html');return;}
+  function api(method,path,body){
+    return fetch('/api/arena'+path,{method:method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:body?JSON.stringify(body):undefined})
+      .then(function(r){ if(r.status===401){location.replace('login.html?next=arena.html');throw new Error('401');}
+        return r.json().then(function(d){ if(!r.ok)throw new Error(d.error||'Ошибка'); return d; }); });
+  }
+  function $(id){return document.getElementById(id);}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  var toastT; function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toastT);toastT=setTimeout(function(){t.style.display='none';},3500);}
+  function busy(btn,on,label){ if(!btn)return; btn.disabled=on; if(on){btn.dataset.l=btn.innerHTML;btn.innerHTML='<span class="spin">⏳</span> '+(label||'');} else if(btn.dataset.l){btn.innerHTML=btn.dataset.l;} }
+
+  var PNAMES={rational:'рациональный',emotional:'эмоциональный',doubter:'сомневающийся',ready:'готовый',junk:'нецелевой',confused:'бестолковый',haggler:'торгаш',ghost:'пропадающий'};
+  var state={stages:[],deals:[],open:null};
+
+  function loadBoard(){
+    return api('GET','/board').then(function(d){
+      state.stages=d.stages;state.deals=d.deals;
+      $('sug-n').textContent=d.newSuggestions?('('+d.newSuggestions+')'):'';
+      var b=$('board');
+      b.innerHTML=d.stages.map(function(s){
+        var ds=d.deals.filter(function(x){return x.stage_code===s.code;});
+        return '<div class="col"><h3>'+esc(s.name)+' <span class="n">'+ds.length+'</span></h3>'+
+          ds.map(function(x){return '<div class="card" data-id="'+x.id+'"><b>'+esc(x.client_name)+'</b><span class="p">'+esc(PNAMES[x.persona]||x.persona)+'</span>'+
+            '<div class="last">'+(x.last_dir==='out'?'Линда: ':'')+esc(x.last_text||'')+'</div>'+
+            '<div class="meta">ходов Линды: '+x.turns+'</div></div>';}).join('')+'</div>';
+      }).join('');
+      b.querySelectorAll('.card').forEach(function(c){c.onclick=function(){openDeal(Number(c.dataset.id));};});
+    }).catch(function(e){toast(e.message);});
+  }
+
+  function renderChat(d){
+    $('p-title').textContent=d.deal.client_name+' · '+(PNAMES[d.deal.persona]||'');
+    var sel=$('p-stage');
+    sel.innerHTML=state.stages.map(function(s){return '<option value="'+s.code+'"'+(s.code===d.deal.stage_code?' selected':'')+'>'+esc(s.name)+'</option>';}).join('');
+    sel.onchange=function(){ api('POST','/deal/'+d.deal.id+'/stage',{code:sel.value}).then(loadBoard).catch(function(e){toast(e.message);}); };
+    var n=$('p-note'); if(d.deal.note){n.style.display='block';n.textContent=d.deal.note;}else n.style.display='none';
+    $('p-chat').innerHTML=d.msgs.map(function(m){
+      var t=new Date(Number(m.ts));var hh=('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2);
+      return '<div class="msg '+(m.direction==='in'?'in':'out')+'">'+esc(m.text)+'<div class="meta">'+(m.direction==='in'?'клиент':'Линда')+' · '+hh+'</div></div>';
+    }).join('');
+    $('p-revs').innerHTML=d.reviews.map(function(r){return '<div class="rev">🧐 '+esc(r.text)+'</div>';}).join('');
+    $('p-chat').scrollTop=$('p-chat').scrollHeight;
+  }
+  function openDeal(id){
+    api('GET','/deal/'+id).then(function(d){ state.open=id; renderChat(d); $('sheet').classList.add('on'); }).catch(function(e){toast(e.message);});
+  }
+  window.closeSheet=function(){ $('sheet').classList.remove('on'); state.open=null; loadBoard(); };
+
+  function act(path,btn,label){
+    if(!state.open)return;
+    busy(btn,true,label);
+    api('POST','/deal/'+state.open+'/'+path,{}).then(function(r){
+      if(r.silent)toast('Клиент промолчал (по типажу)');
+      if(r.suggestion)toast('💡 Линда предложила правку скрипта — смотри «Предложения»');
+      return api('GET','/deal/'+state.open).then(renderChat);
+    }).catch(function(e){toast(e.message);}).finally(function(){busy(btn,false);loadBoard();});
+  }
+  $('b-linda').onclick=function(){act('linda',this,'Линда думает…');};
+  $('b-client').onclick=function(){act('client',this,'клиент пишет…');};
+  $('b-review').onclick=function(){act('review',this,'аудитор смотрит…');};
+
+  $('b-new').onclick=function(){
+    var btn=this;busy(btn,true,'создаю…');
+    api('POST','/new-client',{}).then(function(r){ toast('Новый клиент ('+(PNAMES[r.persona]||r.persona)+')'); return loadBoard(); })
+      .catch(function(e){toast(e.message);}).finally(function(){busy(btn,false);});
+  };
+
+  $('b-auto').onclick=async function(){
+    var btn=this;busy(btn,true,'играем…');
+    try{
+      for(var i=0;i<5;i++){
+        await loadBoard();
+        var open=state.deals.filter(function(x){return ['new','working','selection','paused'].indexOf(x.stage_code)>=0;});
+        if(!open.length||(open.length<3&&Math.random()<0.5)){ await api('POST','/new-client',{}); continue; }
+        var d=open[Math.floor(Math.random()*open.length)];
+        if(d.last_dir==='in') await api('POST','/deal/'+d.id+'/linda',{});
+        else await api('POST','/deal/'+d.id+'/client',{});
+      }
+      toast('Авто-раунд сыгран (5 ходов)');
+    }catch(e){toast(e.message);}
+    busy(btn,false); loadBoard();
+  };
+
+  $('b-sug').onclick=function(){
+    api('GET','/suggestions').then(function(d){
+      $('sug-list').innerHTML=d.suggestions.length?d.suggestions.map(function(s){
+        return '<div class="sug"><div>'+esc(s.text)+'</div><div class="st">сделка: '+esc(s.deal_title||'—')+' · статус: '+esc(s.status)+'</div>'+
+          (s.status==='new'?'<div style="margin-top:8px;display:flex;gap:8px"><button data-sg="'+s.id+'" data-v="approved">✅ Принять</button><button data-sg="'+s.id+'" data-v="rejected">❌ Отклонить</button></div>':'')+'</div>';
+      }).join(''):'<div class="sug">Пока пусто. Линда предлагает правки, когда замечает слабое место скрипта в диалогах.</div>';
+      $('sug-sheet').classList.add('on');
+      $('sug-list').querySelectorAll('[data-sg]').forEach(function(b){b.onclick=function(){
+        api('POST','/suggestions/'+b.dataset.sg,{status:b.dataset.v}).then(function(){$('b-sug').click();loadBoard();}).catch(function(e){toast(e.message);});
+      };});
+    }).catch(function(e){toast(e.message);});
+  };
+
+  $('b-reset').onclick=function(){
+    if(!confirm('Стереть ВСЮ песочницу (клиентов, диалоги, разборы)? Боевую CRM это не трогает.'))return;
+    api('POST','/reset',{}).then(function(){toast('Арена очищена');loadBoard();}).catch(function(e){toast(e.message);});
+  };
+
+  loadBoard();
+})();
+</script>
+</body>
+</html>

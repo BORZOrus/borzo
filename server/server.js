@@ -9,6 +9,7 @@ const path = require('path');
 const webpush = require('web-push');
 const crm = require('./crm');
 const wa = require('./wa');
+const arena = require('./arena');
 if(process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE){
   webpush.setVapidDetails(process.env.VAPID_SUBJECT||'mailto:admin@borzopult.com', process.env.VAPID_PUBLIC, process.env.VAPID_PRIVATE);
 }
@@ -100,6 +101,7 @@ async function initSchema() {
   `);
   await crm.initSchema(pool);
   await wa.initSchema(pool);
+  await arena.initSchema(pool);
 }
 // подпись накладной (для защиты от дублей): позиции+сумма+категория, устойчива к перезаливке того же
 function sigOf(items, amount, category){
@@ -938,6 +940,8 @@ app.post('/api/push/test', auth, async (req,res)=>{
 crm.register(app, {pool, auth, requireAny, requireRole, withTx, savePhoto, uploadDir:UPLOAD_DIR, sendPushToRole});
 // WhatsApp (360dialog): вебхук приёма (публичный) + отправка/чат (авторизованные)
 wa.register(app, {pool, auth, requireAny, withTx, savePhoto, sendPushToRole, uploadDir:UPLOAD_DIR});
+// Тест-арена: песочница обучения Линды, изолирована от боевых таблиц
+arena.register(app, {pool, auth, requireRole});
 
 app.get('/api/health', (req,res)=> res.json({ ok:true }));
 
