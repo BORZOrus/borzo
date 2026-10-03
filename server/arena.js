@@ -57,6 +57,39 @@ async function catalogText(pool) {
   }).join('\n').slice(0, 12000);
 }
 
+// боевые скрипты CRM (магистраль + инструменты): тот же источник, что видит Ульяна во вкладке скриптов
+async function scriptsText(pool) {
+  try {
+    const r = await pool.query('SELECT data FROM crm_scripts WHERE id=1');
+    if (!r.rowCount) return '';
+    const data = r.rows[0].data || {};
+    const blocks = data.blocks || data;
+    let out = [];
+    for (const key of Object.keys(blocks)) {
+      const b = blocks[key];
+      if (!b || !Array.isArray(b.messages)) continue;
+      const msgs = b.messages.map(m => '  • ' + String(m.text || '').trim()).filter(s => s.length > 4);
+      if (msgs.length) out.push('### ' + (b.title || key) + '\n' + msgs.join('\n'));
+    }
+    return out.join('\n\n').slice(0, 9000);
+  } catch (_) { return ''; }
+}
+// вкладка «Агент» CRM: инструкция + уроки Ульяны/Руслана + материалы (фото/ссылки с пометкой «когда»)
+async function agentKbText(pool) {
+  try {
+    const r = await pool.query('SELECT data FROM crm_agent WHERE id=1');
+    if (!r.rowCount) return '';
+    const kb = r.rows[0].data || {};
+    let out = [];
+    if (kb.instruction) out.push('### ИНСТРУКЦИЯ ОТ РУКОВОДСТВА (главнее остального)\n' + String(kb.instruction).slice(0, 6000));
+    if (Array.isArray(kb.lessons) && kb.lessons.length)
+      out.push('### УРОКИ (коррекции от Ульяны/Руслана, обязательны)\n' + kb.lessons.map(l => '  • ' + String(l.text || '').trim()).join('\n').slice(0, 4000));
+    if (Array.isArray(kb.materials) && kb.materials.length)
+      out.push('### МАТЕРИАЛЫ ДЛЯ ОТПРАВКИ КЛИЕНТАМ (фото/ссылки; используй по назначению «когда»)\n' + kb.materials.map(m => '  • [' + (m.type || '') + '] ' + (m.title || '') + (m.when ? ' | когда: ' + m.when : '') + ' | ' + String(m.value || '').slice(0, 200)).join('\n').slice(0, 3000));
+    return out.join('\n\n');
+  } catch (_) { return ''; }
+}
+
 function parseJson(s) {
   try { return JSON.parse(s); } catch (_) {}
   const m = String(s).match(/\{[\s\S]*\}/);
@@ -190,8 +223,10 @@ function register(app, { pool, auth, requireRole }) {
   app.post('/api/arena/deal/:id/linda', auth, route(async (req, res) => {
     const deal = await getDeal(Number(req.params.id));
     const h = await history(deal.id);
-    const cat = await catalogText(pool);
+    const [cat, scr, akb] = await Promise.all([catalogText(pool), scriptsText(pool), agentKbText(pool)]);
     const sys = 'СИМУЛЯЦИЯ ДЛЯ ОБУЧЕНИЯ (клиент не настоящий, но ты об этом НЕ знаешь — работай как с живым).\n\n' + loadKb() +
+      (akb ? '\n\n=== ВКЛАДКА «АГЕНТ» (живые указания руководства) ===\n' + akb : '') +
+      (scr ? '\n\n=== БОЕВЫЕ СКРИПТЫ CRM (утверждённые формулировки, опирайся на них) ===\n' + scr : '') +
       '\n\n=== АКТУАЛЬНЫЙ КАТАЛОГ (единственный источник цен и ссылок) ===\n' + cat +
       '\n\n=== ТЕКУЩАЯ СДЕЛКА ===\nКлиент: ' + deal.client_name + '\nЭтап CRM: ' + deal.stage_code +
       '\n\nОтветь строго JSON-объектом:\n{"reply":"текст сообщения клиенту (можно 2-3 коротких сообщения через \\n\\n)","stage":"new|working|selection|paused|won|lost|junk или null если этап не меняется","note":"краткая пометка в карточку или null","suggestion":"если видишь слабое место скрипта/методологии — предложение правки, иначе null"}';
@@ -232,8 +267,10 @@ function register(app, { pool, auth, requireRole }) {
   app.post('/api/arena/deal/:id/review', auth, route(async (req, res) => {
     const deal = await getDeal(Number(req.params.id));
     const h = await history(deal.id, 80);
+    const scr = await scriptsText(pool);
     const raw = await llm([
       { role: 'system', content: 'Ты — аудитор отдела продаж BORZO. Методология:\n' + loadKb().slice(0, 15000) +
+        (scr ? '\n\nУтверждённые скрипты CRM (сверяй с ними):\n' + scr.slice(0, 6000) : '') +
         '\n\nРазбери диалог менеджера Линды с клиентом (типаж клиента: ' + PERSONAS[deal.persona] + ', текущий этап: ' + deal.stage_code + ').\nФормат ответа (обычный текст, коротко и по делу):\nОЦЕНКА: X/10\nЧТО ХОРОШО: 1-3 пункта\nОШИБКИ: конкретные места с цитатой\nКАК НАДО: правка формулировок\nВЕРДИКТ ПО ЭТАПУ: верно ли Линда определила этап' },
       { role: 'user', content: histText(h, deal) }
     ], { temp: 0.3 });
