@@ -90,6 +90,10 @@ async function agentKbText(pool) {
   } catch (_) { return ''; }
 }
 
+// вселенский закон Руслана: длинные тире в сообщениях клиентам запрещены навсегда.
+// Модели упорно их ставят, поэтому страховка кодом: " — " → " - ", остальные «—/–» → дефис.
+function noDash(s) { return String(s || '').replace(/\s*[—–]\s*/g, ' - ').replace(/^\s*-\s*/gm, m => m); }
+
 function parseJson(s) {
   try { return JSON.parse(s); } catch (_) {}
   const m = String(s).match(/\{[\s\S]*\}/);
@@ -236,6 +240,7 @@ function register(app, { pool, auth, requireRole }) {
     ], { temp: 0.4 });
     const j = parseJson(raw) || { reply: String(raw).slice(0, 1200), stage: null };
     if (!j.reply) throw err(502, 'Линда не ответила');
+    j.reply = noDash(j.reply);
     await pool.query(`INSERT INTO arena_msgs(deal_id, direction, text, ts) VALUES($1,'out',$2,$3)`, [deal.id, String(j.reply).trim().slice(0, 3000), Date.now()]);
     const valid = STAGES.map(s => s.code);
     let stage = deal.stage_code;
