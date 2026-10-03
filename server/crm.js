@@ -675,6 +675,7 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
     if('price' in b) v.price=(b.price==null||b.price==='')?null:number(b.price,'Цена');
     if('code' in b) v.code=str(b.code,'Код',120);
     if('ntin' in b) v.ntin=str(b.ntin,'NTIN',40);
+    if('link' in b){ v.link=str(b.link,'Ссылка',400); if(v.link&&!/^https?:\/\//i.test(v.link)) throw err(400,'Ссылка должна начинаться с http:// или https://'); }
     if('archived' in b) v.archived=b.archived===true;
     for(const k of ['corpus','legs','len','width']) if(k in b) v[k]=str(b[k],k,60);
     if('photo' in b){
@@ -685,7 +686,7 @@ function register(app, {pool,auth,requireAny,requireRole,withTx,savePhoto,upload
         const url=savePhoto(b.photo); if(!url) throw err(400,'Не удалось сохранить фото'); saved.push(url); v.photo=url;
       }
     }
-    const out=await db.query('UPDATE crm_cat_variants SET price=$1,code=$2,ntin=$3,archived=$4,photo=$5,corpus=$6,legs=$7,len=$8,width=$9 WHERE id=$10 RETURNING *',[v.price,v.code,v.ntin,v.archived,v.photo,v.corpus,v.legs,v.len,v.width,v.id]);
+    const out=await db.query('UPDATE crm_cat_variants SET price=$1,code=$2,ntin=$3,archived=$4,photo=$5,corpus=$6,legs=$7,len=$8,width=$9,link=$10 WHERE id=$11 RETURNING *',[v.price,v.code,v.ntin,v.archived,v.photo,v.corpus,v.legs,v.len,v.width,v.link||'',v.id]);
     return {variant:out.rows[0]};
   }));
   // сохранить порядок карточек/вариантов после перетаскивания (массив id в новом порядке)

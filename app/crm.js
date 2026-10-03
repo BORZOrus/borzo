@@ -1614,6 +1614,7 @@
             '<strong style="font-size:15.5px">'+esc(variantLabel(v,m))+'</strong>'+
             (dims?'<div class="muted" style="font-size:14px">'+esc(dims)+'</div>':'')+
             (v.code?'<div class="muted" style="font-size:13.5px">'+esc(v.code)+'</div>':'')+
+            (v.link?'<div style="font-size:13px;margin-top:1px">🔗 <a href="'+esc(v.link)+'" target="_blank" rel="noopener" style="color:var(--acc,#008069)">ссылка для клиента</a></div>':'')+
             '<div style="font-weight:700;margin-top:2px">'+(v.price!=null?esc(money(v.price)):'<span class="muted" style="font-weight:400">цена не задана</span>')+'</div>'+
           '</span>'+
           '<button class="ghost" data-editvar="'+v.id+'" style="padding:8px 10px;flex:0 0 auto">✏️</button>'+
@@ -1644,6 +1645,7 @@
       optSelect('Ширина','width',v.width)+
       field('Артикул','code',v.code||'','text','maxlength="120"')+
       field('Цена, ₸','price',v.price!=null?Math.round(v.price):'','number','min="0" step="1"')+
+      field('Ссылка для клиента (Kaspi/сайт)','link',v.link||'','text','maxlength="400" placeholder="https://…"')+
       submit(vid?'Сохранить':'Добавить вариант')+'</form>'+
       (vid?'<div style="text-align:center;margin-top:10px"><button class="ghost" id="ev-del" style="font-size:14px;color:var(--mut,#9aa0a8)">убрать вариант из каталога</button></div>':''));
     var f=$('ev-form');
@@ -1667,7 +1669,7 @@
       try{
         var photo=null; var pf=f.elements.namedItem('photo').files[0];
         if(pf){ if(pf.size>5*1024*1024) throw new Error('Фото — до 5 МБ'); photo=await fileData(pf); }
-        var payload={reqId:uid(),corpus:ov('corpus'),legs:ov('legs'),len:ov('len'),width:ov('width'),code:val(f,'code'),price:val(f,'price')};
+        var payload={reqId:uid(),corpus:ov('corpus'),legs:ov('legs'),len:ov('len'),width:ov('width'),code:val(f,'code'),price:val(f,'price'),link:val(f,'link')};
         if(photo)payload.photo=photo;
         if(vid) await api('PATCH','/catalog/variants/'+vid,payload);
         else { payload.model_id=m.id; await api('POST','/catalog/variants',payload); }
