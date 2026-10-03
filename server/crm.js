@@ -177,6 +177,8 @@ async function initSchema(db) {
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) SELECT 'paused','Пауза',4,false,false WHERE NOT EXISTS(SELECT 1 FROM crm_stages WHERE code='paused');
     -- «Нецелевой»: отдельная корзина (не валим в Отказ). Закрывающий этап (is_lost) → помесячный бакет + при новом сообщении история переписки цепляется к сделке (как в WhatsApp)
     INSERT INTO crm_stages(code,name,ord,is_won,is_lost) SELECT 'junk','Нецелевой',7,false,true WHERE NOT EXISTS(SELECT 1 FROM crm_stages WHERE code='junk');
+    -- ВРЕМЕННАЯ колонка слева от «Новых заказов»: тёплые лиды из старой CRM (Mindsales). Удалить этап, когда Ульяна переберёт всех
+    INSERT INTO crm_stages(code,name,ord,is_won,is_lost) SELECT 'oldcrm','Со старой CRM',0,false,false WHERE NOT EXISTS(SELECT 1 FROM crm_stages WHERE code='oldcrm');
     UPDATE crm_stages SET name='Продажа' WHERE code='won' AND name='Выполнено';
     UPDATE crm_stages SET name='Отказ / Игнор' WHERE code='lost' AND name='Отказ';
     DELETE FROM crm_stages WHERE code='agreed' AND NOT EXISTS(SELECT 1 FROM crm_deals WHERE stage_id=(SELECT id FROM crm_stages WHERE code='agreed'));
