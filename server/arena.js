@@ -141,10 +141,15 @@ function register(app, { pool, auth, requireRole }) {
     const models = [process.env.ARENA_MODEL, 'anthropic/claude-haiku-4.5', 'anthropic/claude-3.5-haiku', 'openai/gpt-4o-mini'].filter(Boolean);
     let last = '';
     for (const model of models) {
+      // для моделей Anthropic включаем кэш промпта: большой системный блок (знания+скрипты+каталог)
+      // при повторных ходах читается из кэша в ~10 раз дешевле
+      let msgs = messages;
+      if (/^anthropic\//.test(model)) msgs = messages.map(m => m.role === 'system'
+        ? { role: 'system', content: [{ type: 'text', text: m.content, cache_control: { type: 'ephemeral' } }] } : m);
       const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, temperature: (opts && opts.temp) != null ? opts.temp : 0.7, max_tokens: 700 }),
+        body: JSON.stringify({ model, messages: msgs, temperature: (opts && opts.temp) != null ? opts.temp : 0.7, max_tokens: 700 }),
         signal: AbortSignal.timeout(60000)
       });
       if (r.ok) {
