@@ -1410,6 +1410,7 @@
     var isOwner=state.user&&state.user.login==='ruslan';
     $('main').innerHTML='<div class="content">'+
       drawChat()+
+      '<div class="card"><h2>🎓 Скиллы Линды</h2><p class="hint">Навыки, вживлённые агенту. Пополняем постепенно. Тренировка — в 🧪 Арене.</p><div id="ag-skills" class="muted">Загрузка…</div></div>'+
       '<div class="card"><h2>🧠 Инструкция агента</h2><p class="hint">«Мозг»: кто он, как говорит, факты о товаре, отработка возражений. Правь и сохраняй.</p>'+
         '<textarea id="ag-instr" style="min-height:220px">'+esc(agentKb.instruction||'')+'</textarea>'+
         '<div class="actions"><button class="btn" id="ag-save-instr">Сохранить инструкцию</button>'+(agentKb.instruction?'':(state.user.role==='mgr'?'<button class="ghost" id="ag-seed">Загрузить базовую</button>':''))+'</div></div>'+
@@ -1439,6 +1440,18 @@
     if(state.user&&state.user.login==='ruslan'){ try{ var sr=await api('GET','/secrets'); (sr.status||[]).forEach(function(s){ agentSecrets[s.name]=s; }); }catch(e){} }
     if(state.tab!=='agent')return;
     drawAgent();
+    // скиллы Линды: файлы базы знаний с сервера арены
+    try{
+      var sk=await fetch('/api/arena/skills',{headers:{'Authorization':'Bearer '+API.token}}).then(function(r){return r.json();});
+      var el=$('ag-skills');
+      if(el&&sk.skills&&sk.skills.length){
+        el.classList.remove('muted');
+        el.innerHTML=sk.skills.map(function(s){
+          var d=new Date(s.updated);
+          return '<div style="display:flex;gap:8px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line,#e9edef)"><span style="flex:1;min-width:0"><b>'+esc(s.title)+'</b></span><span class="muted" style="font-size:12.5px;white-space:nowrap">'+Math.round(s.chars/1000)+'к · обн. '+('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'</span></div>';
+        }).join('');
+      } else if(el){ el.textContent='Скиллы ещё не вживлены'; }
+    }catch(e){ var el2=$('ag-skills'); if(el2)el2.textContent='Список скиллов недоступен'; }
   }
   // ---------- вкладка «Отгрузки»: проданные заказы по датам отгрузки (как доска Trello) ----------
   // одна позиция как мини-карточка товара: модель жирным + атрибуты (цвет/ножки/размер) отдельными ячейками

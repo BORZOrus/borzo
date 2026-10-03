@@ -139,6 +139,21 @@ function register(app, { pool, auth, requireRole }) {
     return rows.map(r => (r.direction === 'in' ? (deal.client_name || 'Клиент') : 'Линда') + ': ' + r.text).join('\n');
   }
 
+  // список вживлённых скиллов Линды (файлы базы знаний): показывается во вкладке «Агент» CRM
+  app.get('/api/arena/skills', auth, route(async (req, res) => {
+    const dir = path.join(__dirname, 'linda');
+    let files = [];
+    try { files = fs.readdirSync(dir).filter(f => f.endsWith('.md') && f !== 'source-methodology.txt').sort(); } catch (_) {}
+    const skills = files.map(f => {
+      const full = path.join(dir, f);
+      const txt = fs.readFileSync(full, 'utf8');
+      const title = (txt.split('\n').find(l => l.trim().startsWith('#')) || f).replace(/^#+\s*/, '').trim();
+      const st = fs.statSync(full);
+      return { file: f, title, chars: txt.length, updated: st.mtime };
+    });
+    res.json({ skills });
+  }));
+
   // доска
   app.get('/api/arena/board', auth, route(async (req, res) => {
     const deals = await pool.query(`SELECT d.id, d.stage_code, d.title, d.turns, d.note, d.created_at, c.name AS client_name, c.persona,
